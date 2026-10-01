@@ -1,4 +1,4 @@
-# CLAUDE.md — Project Conventions for new-api
+# CLAUDE.md — Project Conventions for Vantyr (New API deployment)
 
 ## MANDATORY: Read AGENTS.md with the Read tool
 

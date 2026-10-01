@@ -1,0 +1,90 @@
+# Vantyr API — local development / staging deployment.
+#
+# Pinned build: the gateway image is built from the pinned source in this
+# repository (upstream New API tag v1.0.0-rc.41, commit 2035a82a). Never use
+# the public `calciumion/new-api:latest` image.
+#
+# Secrets: keep real values in an untracked .env file next to this compose
+# file (see .env.example). Do not commit real secrets.
+
+name: vantyr
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: vantyr/new-api:pinned
+    container_name: vantyr-gateway
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - SQL_DSN=postgresql://${POSTGRES_USER:-vantyr}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/${POSTGRES_DB:-vantyr}
+      - REDIS_CONN_STRING=redis://:${REDIS_PASSWORD:?set in .env}@redis:6379
+      - NODE_NAME=vantyr-gateway-1
+      - ERROR_LOG_ENABLED=true
+      - BATCH_UPDATE_ENABLED=true
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./data/logs:/app/logs
+      - ./data/gateway:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vantyr
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?set in .env}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set in .env}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - vantyr
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-vantyr}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-vantyr}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - vantyr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vantyr} -d ${POSTGRES_DB:-vantyr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # sub2api (Claude OAuth accounts → Anthropic-compatible API) is added at
+  # Phase R2 once its image and credential handling are configured.
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  vantyr:
+    driver: bridge

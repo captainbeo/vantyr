@@ -1,3 +1,13 @@
+# Vantyr API — deployment fork of New API
+
+> **Fork notice (2026-10-01):** This repository is the deployment source for
+> Vantyr API, a configured deployment of [New API](https://github.com/QuantumNous/new-api)
+> pinned at tag `v1.0.0-rc.41` (commit `2035a82aeb5414253a728bd937d4b8f97aa99b9b`).
+> Vantyr-specific changes are configuration, deployment files, and
+> documentation; upstream code is kept as close to the pinned source as
+> practical. The Corresponding Source for the running Vantyr service is
+> offered from this repository at the deployed revision. See `VANTYR.md`.
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)
