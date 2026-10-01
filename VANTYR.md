@@ -142,6 +142,37 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   paste was corrupted in transit between chat and shell; the
   server-side copy is the authoritative valid one.)
 
+## R4 progress (2026-10-01, customer-facing setup)
+
+- **The full self-service customer flow is proven, no admin intervention:**
+  register (`POST /api/user/register`, password-only while email
+  verification is off) → zero quota blocks relay before any upstream call
+  (`insufficient_user_quota` even when the token itself has headroom) →
+  Stripe test-mode top-up (checkout session → real signed webhook event
+  → wallet credited exactly, 2 units = 1,000,000 quota) → customer
+  creates their own token (`POST /api/token/`) → **real Codex CLI turn
+  completes with the customer's key** (13.6k tokens, exact reply) →
+  wallet, token remain-quota, and usage log all reconcile to the unit
+  (6,903 charged).
+- Settings in force: `SystemName=Vantyr API`, `RegisterEnabled=true`,
+  `PasswordRegisterEnabled=true`, `EmailVerificationEnabled=false`
+  (SMTP not yet available), `QuotaForNewUser=0`,
+  `TurnstileCheckEnabled=false` (keys not yet available), footer with
+  AGPL attribution placeholder. Registration gating (email
+  verification, Turnstile) turns on at R5 when credentials exist —
+  each is a single option toggle plus the keys.
+- **Native rate limiting enabled and verified:**
+  `ModelRequestRateLimitEnabled=true`, 1-minute window, count 30
+  (successes count too via `ModelRequestRateLimitSuccessCount=1000`).
+  Burst test: 30 requests in the window all 200, request 31 → 429.
+- Registering while `EmailVerificationEnabled=false` requires no email;
+  the register endpoint enforces password validation (min 8) and
+  username uniqueness. New users land in group `default`, role 1,
+  status enabled, quota 0 — first action must be a top-up.
+- Note: the admin login JWT expires quickly (~minutes); re-login
+  (`POST /api/user/login`) rather than debugging 401s from option
+  updates.
+
 ## R2 progress (2026-10-01, Codex CLI proof)
 
 - **Customer-side Codex CLI path proven end-to-end** through the Selora
