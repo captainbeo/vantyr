@@ -70,6 +70,33 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
 - Redis: AOF persistence on; losing it is acceptable (cache + quota cache),
   quota truth lives in PostgreSQL.
 
+## R2 progress (2026-10-01)
+
+- First reseller channel live: `selora-reseller` (type 60 "New API",
+  base URL `https://api.selora.lol`, group `default`). Channel test
+  passes; chat/completions (JSON + SSE), `/v1/messages` (Anthropic
+  format), and `/v1/responses` all verified end-to-end with real
+  upstream responses. Usage logs, user quota, and channel accounting
+  reconcile exactly; a failed upstream request (502) refunds the
+  pre-consumed quota.
+- Model ratios set via the model-pricing admin API
+  (`PATCH /api/option/model_pricing`) for models without upstream
+  defaults. Current values are placeholders pending real pricing
+  review: claude-fable-5/5-1 5.0, claude-opus-5 5.0, claude-opus-5-5
+  7.5, claude-sonnet-5 1.5, claude-haiku-4-5 0.5, glm-5.3 0.6,
+  glm-5.3-flash 0.1, kimi-k3 0.6, gpt-6-astra 2.5, gpt-5-6-sol 2.5,
+  gpt-5-6-luna 0.5. Selora's `kimi-k3` returned upstream 502 at test
+  time (seller-side issue, not ours).
+- **Lesson:** initial admin must be created via `POST /api/setup`, not
+  `/api/user/register` — the register endpoint creates a role-1 user and
+  skips the setup/option seeding path, which later breaks the pricing
+  transaction with a literal `<nil>` options row.
+- **Billing quirk to watch:** an Anthropic-format `/v1/messages` request
+  relayed through an OpenAI-format seller channel billed only ~36 quota
+  for ~3,000 tokens — input tokens appear not to be billed on this
+  path. Sell Claude via chat/completions or /v1/responses, or verify
+  /v1/messages billing before offering it.
+
 ## Known-weak spots (accepted at launch)
 
 - Subscription recurring renewal is manual (native webhook activates
