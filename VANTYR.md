@@ -97,6 +97,39 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   path. Sell Claude via chat/completions or /v1/responses, or verify
   /v1/messages billing before offering it.
 
+## R2 progress (2026-10-01, Codex CLI proof)
+
+- **Customer-side Codex CLI path proven end-to-end** through the Selora
+  channel: plain turn (exit 0, exact reply), multi-request tool loop
+  (model issues shell tool call → exec runs → model consumes result and
+  completes), billing reconciles to the unit on every request including
+  retries-refunded failures. Codex 0.144.6 with env-key config:
+  `base_url = http://<gateway>/v1`, `wire_api = "responses"`,
+  `env_key` for the Vantyr platform token.
+- **Selora quirk (seller-side):** their `/v1/responses` rejects input items
+  with `"role": "developer"` — returns `response.failed` /
+  `provider_unavailable` after ~3s with zero usage. Codex CLI always sends
+  its first input item as `developer`. Root cause was proven by bisection
+  through a logging reverse proxy: any request containing a
+  developer-role input item fails on Selora; user/system roles pass.
+- **Fix (config-only, on the Selora channel):** `param_override`
+  `{"operations":[{"path":"input.#(role==\"developer\")#.role","mode":"set","value":"user"}]}`
+  rewrites developer roles to user on the wire. Do not use the wildcard
+  form `input.*.role` with mode `replace`: wildcard paths expand to items
+  that have no `role` at all (Codex follow-up turns contain
+  `function_call` / `function_call_output` items), and `replace` hard-fails
+  on the missing value (500 to the customer). The gjson query-path form
+  matches only items whose role is `developer` and no-ops when none match.
+  Any other seller that 400s/500s on developer roles gets the same
+  override; sellers that accept them (OpenAI itself) need none.
+- **Channel update API lesson:** `PUT /api/channel/` rejects any body that
+  contains `status` ("Invalid parameters"). A GET→PUT round-trip includes
+  it, so strip `status` before PUT. A "successful-looking" update that did
+  nothing was this, not a cache issue.
+- Failed turns bill zero and refund the pre-deducted quota (verified for
+  both seller-side failures and the one gateway-side override error while
+  debugging).
+
 ## Known-weak spots (accepted at launch)
 
 - Subscription recurring renewal is manual (native webhook activates
