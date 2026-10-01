@@ -97,6 +97,51 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   path. Sell Claude via chat/completions or /v1/responses, or verify
   /v1/messages billing before offering it.
 
+## R3 progress (2026-10-01, Stripe test-mode money loop)
+
+- **The full money loop is proven in Stripe test mode.** Top-up request
+  (`POST /api/user/stripe/pay`) → Checkout session created with `ref_` order
+  reference and a pending `top_ups` row → signed
+  `checkout.session.completed` webhook at `POST /api/stripe/webhook` →
+  order flips to `success` and wallet credits `amount × QuotaPerUnit`
+  (500,000 quota per unit, $1/unit price) → relay request debits the
+  wallet with a matching usage-log row. Both orders (5 and 3 units)
+  credited exactly; the wallet then spent 1,536 quota on a real
+  Claude Haiku request via Selora, log row matched to the token.
+- **Webhook delivery for local dev:** Stripe CLI
+  `stripe listen --forward-to localhost:3000/api/stripe/webhook` prints
+  the `whsec_` signing secret and forwards real events. For production,
+  register the endpoint in the Stripe dashboard instead.
+- **Idempotency and security verified:** a replayed webhook event is
+  rejected (order already `success` → `充值订单状态错误`), and fulfillment
+  credits from the gateway's own order row, not the event's amount field
+  — a crafted event cannot over-credit. Unrelated sessions without a
+  matching `ref_` are ignored.
+- **Setup path (config-only):** Stripe test product + $1 one-time price
+  via Stripe API; `StripeApiSecret`, `StripeWebhookSecret`,
+  `StripePriceId`, `StripeUnitPrice=1`, `StripeMinTopUp=1` via
+  `PUT /api/option/`; one-time payment compliance confirmation via
+  `POST /api/option/payment_compliance` (requires a dashboard login
+  session, not an access token — root's `session` JWT from
+  `POST /api/user/login`). Stripe then auto-appears in
+  `GET /api/user/topup/info` pay methods.
+- **Dev-password bootstrap:** for local dev, root's bcrypt hash can be
+  set directly in the `users` table (`common.Password2Hash` format) to
+  get a dashboard session. Do not ship this practice to production.
+- **Gotchas hit:** (1) The generic `POST /api/user/pay` endpoint rejects
+  `stripe` — use the dedicated `POST /api/user/stripe/pay`. (2) Stripe
+  blocks raw card numbers via the API (402) and hosted sessions can't
+  be paid server-side; for test-mode E2E use `stripe trigger
+  checkout.session.completed --override
+  "checkout_session:client_reference_id=<ref>"` (real signed event) —
+  on Git Bash also set `MSYS_NO_PATHCONV=1` or fixture URLs get
+  mangled. (3) `stripe --api-key` in Git Bash had an unrelated
+  intermittent key-auth quirk; the same key worked via Python.
+- The valid Stripe API secret lives only in the `options` table
+  (`StripeApiSecret`) — never in files or chat. (During setup one key
+  paste was corrupted in transit between chat and shell; the
+  server-side copy is the authoritative valid one.)
+
 ## R2 progress (2026-10-01, Codex CLI proof)
 
 - **Customer-side Codex CLI path proven end-to-end** through the Selora
