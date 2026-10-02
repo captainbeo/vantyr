@@ -133,6 +133,7 @@ const (
 	MsgQuotaNegative        = "quota.negative"
 	MsgQuotaExceedMax       = "quota.exceed_max"
 	MsgQuotaInsufficient    = "quota.insufficient"
+	MsgQuotaRemaining       = "quota.remaining"
 	MsgQuotaWarningInvalid  = "quota.warning_invalid"
 	MsgQuotaThresholdGtZero = "quota.threshold_gt_zero"
 )

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -232,7 +233,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 				userQuota = 0
 			}
 			return types.NewErrorWithStatusCode(
-				fmt.Errorf("用户额度不足, 剩余额度: %s", logger.FormatQuota(userQuota)),
+				fmt.Errorf("%s (%s: %s)", i18n.T(c, i18n.MsgQuotaInsufficient), i18n.T(c, i18n.MsgQuotaRemaining), logger.FormatQuota(userQuota)),
 				types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
@@ -391,7 +392,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		}
 		if userQuota <= 0 {
 			return nil, types.NewErrorWithStatusCode(
-				fmt.Errorf("用户额度不足, 剩余额度: %s", logger.FormatQuota(userQuota)),
+				fmt.Errorf("%s (%s: %s)", i18n.T(c, i18n.MsgQuotaInsufficient), i18n.T(c, i18n.MsgQuotaRemaining), logger.FormatQuota(userQuota)),
 				types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}

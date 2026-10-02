@@ -121,6 +121,7 @@ user.quota_change_zero: "額度變更量不能為0"
 quota.negative: "額度不能為負數！"
 quota.exceed_max: "額度值超出有效範圍"
 quota.insufficient: "額度不足"
+quota.remaining: "剩餘額度"
 quota.warning_invalid: "無效的預警類型"
 quota.threshold_gt_zero: "預警閾值必須大於0"
 

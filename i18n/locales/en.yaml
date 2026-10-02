@@ -120,6 +120,7 @@ user.quota_change_zero: "Quota change amount cannot be zero"
 quota.negative: "Quota cannot be negative!"
 quota.exceed_max: "Quota value exceeds valid range"
 quota.insufficient: "Insufficient quota"
+quota.remaining: "remaining balance"
 quota.warning_invalid: "Invalid warning type"
 quota.threshold_gt_zero: "Warning threshold must be greater than 0"
 

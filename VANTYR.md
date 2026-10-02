@@ -228,6 +228,26 @@ crackdowns); watch response quality, and prefer
 analysis was off by exactly 100× because of this; corrected by metered
 delta fitting and cross-check against marketplace listing prices.
 
+Free trial credit (2026-10-02): `QuotaForNewUser=500000` ($1) —
+new registrations start with a spendable balance (overrides the
+restart plan's original `QuotaForNewUser=0`; owner decision). The
+trial behaves exactly like a wallet: requests bill against it, zero
+balance hard-blocks with `insufficient_user_quota` before any
+upstream call, top-up continues seamlessly. Verified with a fresh
+registration: $1 granted at signup, first request billed from it,
+exhaustion blocks cleanly. With PAYG prices at 0.25×/0.13×/budget
+tiers, $1 covers a few thousand small requests — enough for a real
+evaluation. Homepage updated to advertise it. Note: this is a
+genuine cost at our wholesale rates if trial keys are abused at
+scale; for the private cohort the exposure is bounded (~$1/user ×
+registrations), revisit with Turnstile/email verification at R5
+(registration is currently password-only).
+Localization follow-up in the same commit: the
+`insufficient_user_quota` error was hardcoded Chinese in two
+billing-session sites; now uses the existing (previously unwired)
+`quota.insufficient` key plus a new `quota.remaining` key
+(EN/ZH-CN/ZH-TW) — English by default, honors user language.
+
 Error-message polish + failover (2026-10-02): (1) The model
 rate-limit 429 was hardcoded Chinese; switched to upstream's own i18n
 keys (`rate_limit.reached` / `rate_limit.total_reached`, which exist

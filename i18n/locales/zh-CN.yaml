@@ -121,6 +121,7 @@ user.quota_change_zero: "额度变更量不能为0"
 quota.negative: "额度不能为负数！"
 quota.exceed_max: "额度值超出有效范围"
 quota.insufficient: "额度不足"
+quota.remaining: "剩余额度"
 quota.warning_invalid: "无效的预警类型"
 quota.threshold_gt_zero: "预警阈值必须大于0"
 
