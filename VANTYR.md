@@ -228,6 +228,35 @@ crackdowns); watch response quality, and prefer
 analysis was off by exactly 100× because of this; corrected by metered
 delta fitting and cross-check against marketplace listing prices.
 
+Latency (2026-10-02, measured): streaming first-token latency —
+Selora median ~1.15s, A6 ~2.4s (auto-routed merchant lottery; one
+44s outlier observed). Actions taken: channel weights Selora=3 /
+A6=1 (75/25 split — faster channel serves most traffic, A6 stays
+warm as failover), `RetryTimes=1` already fails over on upstream
+errors, and SSE relaying verified unbuffered (`Cache-Control:
+no-cache`, `X-Accel-Buffering: no`, chunked — the reverse proxy at
+R5 must not buffer; Caddy/nginx default respects
+`X-Accel-Buffering: no`, but explicitly disable proxy buffering for
+`/v1/*`). Channel `response_time` telemetry: Selora 2.1s, A6 3.6s
+(channel test button). No latency-aware routing exists in New API —
+priority tiers + weights are the levers; re-measure via
+`other->>'frt'` in `logs` (streaming requests only; -1000/-1 are
+sentinels for non-stream) and re-weight when the mix changes. A6's
+merchant auto-routing is the latency variance source; pinning
+specific fast merchants (per-supplier tokens) is the lever if it
+matters later. Session affinity (built-in codex/claude trace rules)
+already pins per-conversation traffic for cache locality.
+
+Telegram verification for trial (2026-10-02, design): native
+Telegram OAuth exists (`oauth.telegram.org` Login-Widget flow;
+needs a Telegram bot: `system_setting telegram.client_id` = bot
+username, `client_secret` = bot token, `TelegramOAuthEnabled=true`,
+and `ServerAddress` set). Users bind Telegram in Security settings
+after registering. Gating the $1 trial on binding = Go change
+(grant on `BindTelegramForSessionWithTx` instead of at registration)
+— implement at R5 together with the bot setup, since the bot must
+be created first to test the OAuth flow end-to-end.
+
 Free trial credit (2026-10-02): `QuotaForNewUser=500000` ($1) —
 new registrations start with a spendable balance (overrides the
 restart plan's original `QuotaForNewUser=0`; owner decision). The
