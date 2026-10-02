@@ -173,7 +173,45 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   (`POST /api/user/login`) rather than debugging 401s from option
   updates.
 
-## R2 progress (2026-10-01, Codex CLI proof)
+## Pricing (2026-10-02, owner decision)
+
+PAYG per-token prices, set via the four ratio maps
+(`ModelRatio`/`CompletionRatio`/`CacheRatio`; New API bills input at
+$2×ratio/MTok, output at input×completion, cache read at input×cache):
+
+| Model | Input $/MTok | Output $/MTok | Cache read |
+|---|---|---|---|
+| claude-fable-5 / 5-1 | 2.50 | 12.50 | 0.25 / 0.0625 |
+| claude-opus-5 | 0.65 | 3.25 | 0.065 |
+| claude-opus-5-5 | 0.52 | 2.60 | 0.026 |
+| claude-sonnet-5 | 0.26 | 1.30 | 0.026 |
+| gpt-6-astra | 0.08 | 0.16 | 0.04 |
+| gpt-6-sol | 0.02 | 0.10 | 0.02 |
+| gpt-5-6-luna | 0.02 | 0.12 | 0.002 |
+
+Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
+quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
+1.0; channel serves `default,unlimited`). One-time Stripe price
+(`price_1ULtvo...`); renewal is manual — the customer re-purchases. No
+`invoice.paid` handler exists, so Stripe auto-renewal would NOT extend
+access; one-time price + manual renewal is the intended and correct
+shape. Note: `gpt-6-sol` requires `ModelRatio` present to override the
+built-in tiered billing expr (long-context rates); ours does.
+
+Verified after application: billed quota matches the new prices exactly
+on sonnet-5 (603), opus-5-5 (5,939), gpt-6-astra (2, `/v1/responses`),
+and — with the explicit `CompletionRatio` set — the `/v1/messages`
+Anthropic-native path now bills output at the completion multiplier
+(954 on the probe). The R2-era "under-billed /v1/messages" note is
+resolved: it was missing completion ratios. Cache read/write still
+cannot be metered through Selora (they report no cache token usage —
+probed both Anthropic and OpenAI formats, twice each); cache prices
+apply once own-account upstreams arrive. Unsold models (haiku, GLM,
+kimi, gpt-5-6-sol) removed from channel + ratios: relay returns
+"no available channel". `claude-sonnet-5-5` is not in Selora's catalog;
+add pricing when a source exists.
+
+## R4 progress (2026-10-01, customer-facing setup)
 
 - **Customer-side Codex CLI path proven end-to-end** through the Selora
   channel: plain turn (exit 0, exact reply), multi-request tool loop
