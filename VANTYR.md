@@ -198,6 +198,36 @@ access; one-time price + manual renewal is the intended and correct
 shape. Note: `gpt-6-sol` requires `ModelRatio` present to override the
 built-in tiered billing expr (long-context rates); ours does.
 
+A6 marketplace channel (2026-10-02): `a6-marketplace` (id 3, type 60,
+base URL `https://api.a6api.com`, groups `default,unlimited`, priority 0
+— load-shares with Selora). A6 is itself a New API aggregator with
+1,686 merchants; our key is in their `default` group, whose
+auto-routing already selects the cheap merchant tier (metered: fable-5
+served at $0.096/$0.48 per MTok — exactly ch-331's listing price;
+opus-5-5 at ~$0.05/$0.21). Serves claude-fable-5/5-1, opus-5/5, sonnet-5
+**and sonnet-5-5** (new in catalog, priced $0.26/$1.30), gpt-6-astra.
+The GPT .luna/.sol models are blocked by this A6 token's model
+permissions (owner can widen them on A6's side; then add to the channel
+with model_mapping for the dot-vs-dash naming, e.g.
+gpt-5-6-luna → gpt-5.6-luna). Same developer-role param_override as
+Selora (no-op for non-Codex traffic). **Cache billing works through
+A6** (they report read/write cache tokens; Selora does not) — verified:
+astra request billed 103 quota with 3,687 tokens at the 0.5× cache
+ratio, matching the formula exactly. End-to-end proof: four models +
+a Codex CLI turn; billing reconciled per model; A6-side cost for the
+four requests was $0.000054 vs $0.000284 billed (≈5× margin even on
+tiny test requests; at the cheap-merchant tier the effective margin on
+Claude PAYG is ~10-26×). Marketplace listing prices are public at
+`GET /api/marketplace/public/channels/search?model=<name>` (channel_id
+= merchant ID). Merchant quality is the standing risk (A6 runs fraud
+crackdowns); watch response quality, and prefer
+`authenticity_guaranteed` listings when pinning specific merchants.
+
+**Measurement gotcha:** New API's `/v1/dashboard/billing/usage` returns
+`total_usage` in **cents** (amount×100), not dollars. An early price
+analysis was off by exactly 100× because of this; corrected by metered
+delta fitting and cross-check against marketplace listing prices.
+
 Rate limits (2026-10-02): `default` group 30 req/min (global
 `ModelRequestRateLimitCount`), `unlimited` group 60 req/min via
 `ModelRequestRateLimitGroup {"unlimited":[60,60]}`. Limits are per
