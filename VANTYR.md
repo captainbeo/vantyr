@@ -247,15 +247,31 @@ specific fast merchants (per-supplier tokens) is the lever if it
 matters later. Session affinity (built-in codex/claude trace rules)
 already pins per-conversation traffic for cache locality.
 
-Telegram verification for trial (2026-10-02, design): native
-Telegram OAuth exists (`oauth.telegram.org` Login-Widget flow;
-needs a Telegram bot: `system_setting telegram.client_id` = bot
-username, `client_secret` = bot token, `TelegramOAuthEnabled=true`,
-and `ServerAddress` set). Users bind Telegram in Security settings
-after registering. Gating the $1 trial on binding = Go change
-(grant on `BindTelegramForSessionWithTx` instead of at registration)
-— implement at R5 together with the bot setup, since the bot must
-be created first to test the OAuth flow end-to-end.
+Telegram verification for trial (2026-10-02, implemented): bot
+`@VantyrVerificationBot` configured (`telegram.client_id` = bot
+username, `telegram.client_secret` = bot token, in the options
+table — treat like a secret; `TelegramOAuthEnabled=true`,
+`TelegramBotName` set, `ServerAddress=https://vantyr.xyz`).
+`QuotaForNewUser` now means "trial credit granted on Telegram
+bind": registration grants nothing; binding Telegram in Security
+settings grants the $1 once (fork change in
+`model/external_identity_claim.go` — grant sits inside the bind
+transaction after single-ownership checks, bounded by
+MaxWalletQuota, cache-synced post-commit; one grant per Telegram
+account enforced by the claim table). Remaining user actions for
+live OAuth: BotFather `/setdomain` → `vantyr.xyz`, DNS A record →
+server, HTTPS via reverse proxy. Until then the bind flow can't be
+exercised end-to-end locally (OAuth redirect requires the public
+domain); the grant logic itself is unit-testable via the model API.
+
+Channel routing (2026-10-02, owner decision): PAYG (`default`
+group) splits 50/50 between Selora and A6 (equal weights,
+verified 23/17 over 40 requests + retry failover between them);
+Unlimited-plan users (`unlimited` group) route **exclusively to
+Selora** (A6's group list is `default` only; verified 8/8 requests
+on Selora). Rationale: the flat $180 plan rides the unlimited
+upstream account; A6's merchant lottery stays away from
+flat-rate customers.
 
 Free trial credit (2026-10-02): `QuotaForNewUser=500000` ($1) —
 new registrations start with a spendable balance (overrides the

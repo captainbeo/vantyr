@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -84,12 +87,14 @@ func GetUserByTelegramID(telegramID string) (*User, error) {
 
 // BindTelegramForSessionWithTx preserves single ownership and the session that
 // started the binding. The caller consumes its OAuth flow in this transaction.
+// Vantyr: binding a Telegram account grants the trial credit exactly once
+// (single ownership above guarantees one grant per Telegram account).
 func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, telegramID string) error {
 	if err := ValidateAuthSessionWithTx(tx, identity); err != nil {
 		return err
 	}
 	var user User
-	if err := tx.Select("id", "telegram_id").First(&user, identity.UserID).Error; err != nil {
+	if err := tx.Select("id", "quota", "telegram_id").First(&user, identity.UserID).Error; err != nil {
 		return err
 	}
 	if user.TelegramId != "" {
@@ -104,6 +109,16 @@ func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, tel
 	}
 	if result.RowsAffected != 1 {
 		return ErrExternalIdentityAlreadyClaimed
+	}
+	// Trial credit granted on Telegram verification instead of at registration.
+	// Bounded like the wallet: refuses to push the user over MaxWalletQuota.
+	credit := common.QuotaForNewUser
+	if credit > 0 && user.Quota <= common.MaxWalletQuota-credit {
+		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
+			return err
+		}
+		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
+		syncCreditUserQuotaCache(user.Id, credit, "telegram verification")
 	}
 	return nil
 }
