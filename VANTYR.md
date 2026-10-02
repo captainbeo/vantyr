@@ -254,7 +254,7 @@ table — treat like a secret; `TelegramOAuthEnabled=true`,
 `TelegramBotName` set, `ServerAddress=https://vantyr.xyz`).
 `QuotaForNewUser` now means "trial credit granted on Telegram
 bind": registration grants nothing; binding Telegram in Security
-settings grants the $1 once (fork change in
+settings grants the trial once (fork change in
 `model/external_identity_claim.go` — grant sits inside the bind
 transaction after single-ownership checks, bounded by
 MaxWalletQuota, cache-synced post-commit; one grant per Telegram
@@ -273,20 +273,19 @@ on Selora). Rationale: the flat $180 plan rides the unlimited
 upstream account; A6's merchant lottery stays away from
 flat-rate customers.
 
-Free trial credit (2026-10-02): `QuotaForNewUser=500000` ($1) —
-new registrations start with a spendable balance (overrides the
-restart plan's original `QuotaForNewUser=0`; owner decision). The
-trial behaves exactly like a wallet: requests bill against it, zero
-balance hard-blocks with `insufficient_user_quota` before any
-upstream call, top-up continues seamlessly. Verified with a fresh
-registration: $1 granted at signup, first request billed from it,
-exhaustion blocks cleanly. With PAYG prices at 0.25×/0.13×/budget
-tiers, $1 covers a few thousand small requests — enough for a real
-evaluation. Homepage updated to advertise it. Note: this is a
-genuine cost at our wholesale rates if trial keys are abused at
-scale; for the private cohort the exposure is bounded (~$1/user ×
-registrations), revisit with Turnstile/email verification at R5
-(registration is currently password-only).
+Free trial credit (2026-10-02, raised 2026-10-02):
+`QuotaForNewUser=2500000` ($5, raised from $1 — $1 read as stingy;
+owner decision; real credit, no display trick — billing must match
+the published prices or the usage log exposes the lie) — granted on
+Telegram bind (see above). The trial behaves exactly like a wallet:
+requests bill against it, zero balance hard-blocks with
+`insufficient_user_quota` before any upstream call, top-up
+continues seamlessly. $5 at sell prices ≈ 100-1100 full agent
+turns depending on model — a proper evaluation of every tier.
+Cost exposure: worst case ~$0.50/user if fully spent via A6;
+realistic ~$0.25 (half of PAYG traffic rides the unlimited Selora
+account). Abuse bound: one grant per Telegram account (phone-number
+backed); farming N grants needs N SIMs. Homepage advertises $5.
 Localization follow-up in the same commit: the
 `insufficient_user_quota` error was hardcoded Chinese in two
 billing-session sites; now uses the existing (previously unwired)
