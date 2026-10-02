@@ -228,6 +228,28 @@ crackdowns); watch response quality, and prefer
 analysis was off by exactly 100× because of this; corrected by metered
 delta fitting and cross-check against marketplace listing prices.
 
+Error-message polish + failover (2026-10-02): (1) The model
+rate-limit 429 was hardcoded Chinese; switched to upstream's own i18n
+keys (`rate_limit.reached` / `rate_limit.total_reached`, which exist
+with EN/ZH translations but were never wired) — our first fork Go
+change, in `middleware/model-rate-limit.go`. English by default,
+honors the per-user language setting. (2) `RetryTimes` was 0 (no
+retries at all) — set to 1: a Selora 402/5xx now fails over to A6
+transparently. Verified live: English 429 message; burst requests
+showed "attempt 2 on channel 3" after channel-2 failures. Residual:
+when BOTH upstreams throttle simultaneously (extreme bursts), the
+final error still passes through the upstream text — masking that
+needs a Go change in `service/error.go` (recorded as hardening;
+only surfaces in degraded mode).
+
+Customer onboarding docs (2026-10-02): the homepage renders the
+`HomePageContent` option as Markdown — set to the customer guide
+(register → top up → create key → Codex config.toml snippet with
+Astra flagship → curl example → $180 Unlimited Monthly → FAQ for
+quota/429 errors). Domain in the docs is `vantyr.example.com` —
+replace with the real domain at R5. Codex snippet uses env-key
+auth and `wire_api = "responses"` per the verified contract.
+
 Rate limits (2026-10-02): `default` group 30 req/min (global
 `ModelRequestRateLimitCount`), `unlimited` group 60 req/min via
 `ModelRequestRateLimitGroup {"unlimited":[60,60]}`. Limits are per
