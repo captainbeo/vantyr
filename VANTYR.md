@@ -198,7 +198,25 @@ access; one-time price + manual renewal is the intended and correct
 shape. Note: `gpt-6-sol` requires `ModelRatio` present to override the
 built-in tiered billing expr (long-context rates); ours does.
 
-Verified after application: billed quota matches the new prices exactly
+Rate limits (2026-10-02): `default` group 30 req/min (global
+`ModelRequestRateLimitCount`), `unlimited` group 60 req/min via
+`ModelRequestRateLimitGroup {"unlimited":[60,60]}`. Limits are per
+**user** (all their tokens share one window), 1-minute rolling, total
+count includes failures. Verified: Redis success window fills to
+exactly 60 for an `unlimited` user; sustained 60/min passes, and
+Selora's own upstream caps (~30 req/min per key, plus a payment
+throttle returning 402 on tight parallel bursts) bind first under
+burst traffic — with a single seller key, sellers are the effective
+ceiling, not our limiter.
+
+**Subscription + token interplay (important operator knowledge):** a
+token's `remain_quota` is a per-key spending cap independent of the
+funding source. Subscription-billed requests still decrement it; when
+it reaches 0 the token 401s even with an active unlimited subscription
+paying. Subscription customers must create keys with **unlimited
+quota** checked (or large remain quota). Document this in the customer
+flow at R5; the token page's quota field is about the key, not the
+wallet.
 on sonnet-5 (603), opus-5-5 (5,939), gpt-6-astra (2, `/v1/responses`),
 and — with the explicit `CompletionRatio` set — the `/v1/messages`
 Anthropic-native path now bills output at the completion multiplier
