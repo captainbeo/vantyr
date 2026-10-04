@@ -489,3 +489,21 @@ registration/token/login/Telegram focused controller set (all PASS,
 233s). Inherited upstream characteristic, not a fork regression —
 hardening candidate: split or parallelize the controller suite, or run
 it on a faster host.
+
+## Telegram OAuth configuration correction (2026-10-04)
+
+Per Telegram's current Login Widget/OIDC docs, `client_id` must be the
+**numeric bot ID** (the `aud` claim matches the bot ID), not the bot
+username. Fixed on production: `telegram.client_id` = `8655936058`
+(@VantyrVerificationBot's numeric ID); `client_secret` remains the bot
+token. Domain registration moved from the legacy `/setdomain` command
+to the **BotFather mini app**: choose the bot → **Login Widget** →
+enter **Allowed URLs** (covers both the site origin
+`https://vantyr.xyz` and the OIDC redirect URI
+`https://vantyr.xyz/oauth/telegram`); the mini app also displays the
+official Client ID/Client Secret there. Bind start
+(`/api/oauth/state` intent=bind) correctly requires the dashboard
+step-up security proof (password/2FA) via the UI — raw API calls get
+403 SECURITY_PROOF_REQUIRED by design. After the owner registers the
+allowed URLs, the full flow (login page → oauth.telegram.org →
+callback → $5 grant) needs an end-to-end browser test.
