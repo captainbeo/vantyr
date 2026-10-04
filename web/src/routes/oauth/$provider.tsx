@@ -113,14 +113,27 @@ function OAuthCallback() {
           })
         : null
     if (telegramCallback) {
-      const opener = window.opener
-      if (
-        !postTelegramBindResult(
+      // The widget opens its result in a popup whose direct opener is the
+      // telegram.org widget iframe; the bind dialog listens on the top window
+      // behind it. Post up the whole chain (opener, its parent, and our own
+      // parent for in-iframe deliveries) — the dialog ignores messages it did
+      // not ask for, and targetOrigin confines delivery to this origin.
+      const targets = [
+        window.opener,
+        window.opener?.parent ?? undefined,
+        window.parent,
+      ].filter(
+        (candidate): candidate is Window =>
+          Boolean(candidate) && candidate !== window
+      )
+      const delivered = targets.some((target) =>
+        postTelegramBindResult(
           telegramCallback,
-          opener,
+          target,
           window.location.origin
         )
-      ) {
+      )
+      if (!delivered) {
         toast.error(i18next.t('Telegram binding failed. Please try again.'))
         const closeTimeout = window.setTimeout(() => window.close(), 1500)
         return () => window.clearTimeout(closeTimeout)

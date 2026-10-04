@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TELEGRAM_BIND_RESULT_MESSAGE } from '@/features/auth/constants'
 import { startTelegramBind } from '@/features/profile/api'
+import { api } from '@/lib/api'
 import {
   createServerError,
   getServerErrorMessageKey,
@@ -118,7 +119,26 @@ export function TelegramBindDialog({
     }
 
     window.addEventListener('message', handleBindResult)
-    return () => window.removeEventListener('message', handleBindResult)
+    // Safety net: the widget popup posts its result through an opener chain that
+    // browsers can sever (cross-origin iframe in the middle). Poll the profile for
+    // the bound telegram_id so the dialog still closes when the bind succeeded.
+    const pollInterval = window.setInterval(async () => {
+      try {
+        const response = await api.get('/api/user/self')
+        if (response.data?.success && response.data.data?.telegram_id) {
+          window.clearInterval(pollInterval)
+          toast.success(t('Binding successful!'))
+          onSuccess()
+          onOpenChange(false)
+        }
+      } catch {
+        // polling is best-effort; the message path remains primary
+      }
+    }, 3000)
+    return () => {
+      window.removeEventListener('message', handleBindResult)
+      window.clearInterval(pollInterval)
+    }
   }, [flowToken, onOpenChange, onSuccess, open, t])
 
   useEffect(() => {
