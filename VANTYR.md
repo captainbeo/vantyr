@@ -467,3 +467,11 @@ before any upstream call), requests 31–35 → 429 (per-user rolling window
 counts errors too; default group cap 30/min works). Test users deleted.
 Focused controller suite (register/login/token/telegram/setup, -v):
 all PASS (233s).
+
+**SSH hardening completed for real (2026-10-04):** an earlier "key-only"
+pass missed that `/etc/ssh/sshd_config.d/50-cloud-init.conf` (included
+first, first-match wins) still said `PasswordAuthentication yes`, so
+password auth remained enabled. Fixed in the cloud-init drop-in and
+reloaded; `sshd -T` now reports `passwordauthentication no` and key
+login verified after reload. Server headroom: 13G/193G disk,
+6.6G free RAM. ufw 22/80/443 only.
