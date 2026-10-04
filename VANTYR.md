@@ -536,3 +536,25 @@ bundle. Decision tree for the owner's live test: (1) if Telegram
 redirects to `/oauth/telegram` — done; (2) if it redirects to `/` —
 now also handled; (3) if Telegram refuses to redirect at all — the
 mini-app Allowed URLs list is the remaining registration step.
+
+**Telegram widget protocol restored (2026-10-04, commit 2cb526aff):**
+the OIDC code flow cannot complete without the exact redirect URI in
+BotFather's Allowed URLs (single bare-domain /setdomain registration
+only; the operator's BotFather won't accept a second URL). The widget
+protocol needs only the domain registration — proven live via a
+diagnostic page served by Caddy (the official widget rendered and
+returned a signed authorization for the owner's account). Restored
+the upstream widget endpoints (TelegramBindStart/TelegramBind/
+TelegramLogin) with Vantyr changes: bot token reads
+`telegram.client_secret`, and the bind runs through
+BindTelegramForSessionWithTx (the $5 trial grant rides the bind
+transaction). Frontend: Security page opens the widget bind dialog;
+sign-in opens the widget login dialog (both restored from the
+tree's own code). One more root cause found while self-testing:
+`telegram.client_secret` had been stored **truncated to 15 chars**
+(regex over the JSONL transcript captured a short variant when the
+option was first set) — fixed to the full token; the signature
+pipeline then verified a freshly self-signed assertion AND the
+owner's actual widget hash offline. Image `pinned-next4`
+(9df5d83b95ba) deployed; widget code confirmed served in async
+chunks 94983/14172. NOTE: the token remains on the rotation list.
