@@ -678,7 +678,9 @@ func (user *User) Insert(inviterId int) error {
 			if err := user.prepareForInsert(tx); err != nil {
 				return err
 			}
-			user.Quota = common.QuotaForNewUser
+			// Vantyr: registration grants nothing; the trial credit lands on
+			// Telegram verification (BindTelegramForSessionWithTx).
+			user.Quota = 0
 			user.AffCode = common.GetRandomString(4)
 
 			// 初始化用户设置，包括默认的边栏配置
@@ -714,9 +716,8 @@ func (user *User) finishInsert(inviterId int) {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
-	}
+	// Vantyr: registration grants no quota; the trial credit lands on Telegram
+	// verification, so the registration grant log is gone too.
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
 			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
@@ -742,7 +743,9 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		if err := user.prepareForInsert(tx); err != nil {
 			return err
 		}
-		user.Quota = common.QuotaForNewUser
+		// Vantyr: registration grants nothing; the trial credit lands on
+		// Telegram verification (BindTelegramForSessionWithTx).
+		user.Quota = 0
 		user.AffCode = common.GetRandomString(4)
 
 		// 初始化用户设置
@@ -771,9 +774,8 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
-	}
+	// Vantyr: registration grants no quota; the trial credit lands on Telegram
+	// verification, so the registration grant log is gone too.
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
 			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
