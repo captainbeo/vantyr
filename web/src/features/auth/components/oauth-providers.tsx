@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useCallback } from 'react'
+import { toast } from 'sonner'
 
 import {
   IconDiscord,
@@ -27,9 +28,13 @@ import {
   IconWeChat,
 } from '@/assets/brand-icons'
 import { Button } from '@/components/ui/button'
+import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
 
+import { telegramLogin } from '../api'
+import { pickTelegramAuthorization } from '../lib/telegram-login'
 import { useOAuthLogin } from '../hooks/use-oauth-login'
+import { TelegramLoginDialog } from './telegram-login-dialog'
 import type { SystemStatus } from '../types'
 
 type OAuthProvidersProps = {
@@ -60,6 +65,8 @@ export function OAuthProviders({
   const { t } = useTranslation()
   const {
     isLoading,
+    telegramDialogOpen,
+    setTelegramDialogOpen,
     githubButtonText,
     githubButtonDisabled,
     handleGitHubLogin,
@@ -69,6 +76,27 @@ export function OAuthProviders({
     handleTelegramLogin,
     handleCustomOAuthLogin,
   } = useOAuthLogin(status, redirectTo)
+
+  const handleTelegramWidgetAuthorization = useCallback(
+    async (authorization: unknown) => {
+      const picked = pickTelegramAuthorization(authorization)
+      if (!picked) {
+        toast.error(t('Telegram authorization failed. Please try again.'))
+        return
+      }
+      try {
+        const response = await telegramLogin(picked)
+        if (response.success) {
+          window.location.href = redirectTo || '/'
+        } else {
+          toast.error(response.message || t('Login failed'))
+        }
+      } catch (error) {
+        handleServerError(error)
+      }
+    },
+    [t, redirectTo]
+  )
 
   const providerButtons: ProviderButton[] = []
 
@@ -174,6 +202,16 @@ export function OAuthProviders({
           )
         )}
       </div>
+
+      {status?.telegram_oauth && (
+        <TelegramLoginDialog
+          open={telegramDialogOpen}
+          onOpenChange={setTelegramDialogOpen}
+          botName={typeof status.telegram_bot_name === 'string' ? status.telegram_bot_name : ''}
+          pending={false}
+          onAuthorization={handleTelegramWidgetAuthorization}
+        />
+      )}
     </div>
   )
 }

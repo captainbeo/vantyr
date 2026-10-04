@@ -55,6 +55,7 @@ import {
 
 import { useAccountSecurity } from '../hooks/use-account-security'
 import { EmailBindDialog } from './dialogs/email-bind-dialog'
+import { TelegramBindDialog } from './dialogs/telegram-bind-dialog'
 import { WeChatBindDialog } from './dialogs/wechat-bind-dialog'
 
 // ============================================================================
@@ -66,7 +67,7 @@ interface AccountBindingsProps {
   onUpdate: () => void
 }
 
-type DialogKey = 'email' | 'wechat'
+type DialogKey = 'email' | 'wechat' | 'telegram'
 
 type PreparedOAuthBinding = AccountSecurityResult & {
   provider: string
@@ -294,7 +295,7 @@ export function AccountBindings({ profile, onUpdate }: AccountBindingsProps) {
         (profile as unknown as Record<string, unknown>).telegram_id
       ),
       isEnabled: status?.telegram_oauth || false,
-      onBind: () => void startOAuthBinding('telegram'),
+      onBind: () => dialogs.open('telegram'),
     },
     {
       id: 'linuxdo',
@@ -482,6 +483,17 @@ export function AccountBindings({ profile, onUpdate }: AccountBindingsProps) {
         onOpenChange={(open) =>
           open ? dialogs.open('wechat') : dialogs.close('wechat')
         }
+        onSuccess={onUpdate}
+      />
+
+      {/* Telegram Bind Dialog — widget protocol; a plain BotFather domain
+          registration is sufficient for it. */}
+      <TelegramBindDialog
+        open={dialogs.isOpen('telegram')}
+        onOpenChange={(open) =>
+          open ? dialogs.open('telegram') : dialogs.close('telegram')
+        }
+        botName={typeof status?.telegram_bot_name === 'string' ? status.telegram_bot_name : ''}
         onSuccess={onUpdate}
       />
     </>

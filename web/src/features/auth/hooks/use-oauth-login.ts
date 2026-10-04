@@ -44,6 +44,7 @@ export function useOAuthLogin(
 ) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
+  const [telegramDialogOpen, setTelegramDialogOpen] = useState(false)
   const [githubButtonText, setGithubButtonText] = useState('')
   const [githubButtonDisabled, setGithubButtonDisabled] = useState(false)
   const githubTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -170,7 +171,11 @@ export function useOAuthLogin(
     }
   }
 
-  const handleTelegramLogin = async () => {
+  const handleTelegramLogin = () => {
+    // Widget protocol: the sign-in page opens the telegram-login dialog, which
+    // loads the official widget. A plain BotFather domain registration is
+    // sufficient for it (the OIDC code flow would need the exact redirect URI
+    // in the Allowed URLs list).
     if (!status?.telegram_oauth_configured) {
       toast.error(
         t(
@@ -179,20 +184,7 @@ export function useOAuthLogin(
       )
       return
     }
-    setIsLoading(true)
-    try {
-      const authorization = await createOAuthAuthorization('telegram', 'login')
-      if (!authorization.authorizationUrl) {
-        throw new AuthOperationError('Failed to initialize OAuth')
-      }
-      await resetSession()
-      rememberOAuthLoginRedirect(authorization.state, redirectTo)
-      window.open(authorization.authorizationUrl, '_self')
-    } catch (error) {
-      handleServerError(AuthOperationError.from(error))
-    } finally {
-      setIsLoading(false)
-    }
+    setTelegramDialogOpen(true)
   }
 
   const handleCustomOAuthLogin = async (provider: CustomOAuthProviderInfo) => {
@@ -229,6 +221,8 @@ export function useOAuthLogin(
 
   return {
     isLoading,
+    telegramDialogOpen,
+    setTelegramDialogOpen,
     githubButtonText,
     githubButtonDisabled,
     handleGitHubLogin,

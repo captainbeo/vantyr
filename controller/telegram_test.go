@@ -418,16 +418,21 @@ func TestTelegramOAuthConfigurationAndLegacyEndpoints(t *testing.T) {
 			oauth.UnregisterCustomProvider("telegram")
 		})
 	}
+	// The widget-protocol endpoints are live again (Vantyr: the OIDC code flow
+	// requires the exact redirect URI in BotFather's Allowed URLs, which the
+	// operator cannot register; the widget protocol works with the domain
+	// registration alone). They reject requests without a valid signature
+	// rather than 410.
 	for _, endpoint := range []struct{ method, path string }{
 		{"GET", "/api/oauth/telegram/login"},
-		{"POST", "/api/oauth/telegram/bind/start"},
 		{"GET", "/api/oauth/telegram/bind/old-flow"},
 	} {
-		response := securityEnrollmentRequest(endpoint.method, endpoint.path, "", "", fixture.identity, TelegramLegacyAuth)
-		assert.Equal(t, http.StatusGone, response.Code)
-		assert.Contains(t, response.Body.String(), "TELEGRAM_LEGACY_AUTH_REMOVED")
+		response := securityEnrollmentRequest(endpoint.method, endpoint.path, "", "", fixture.identity, TelegramLogin)
+		assert.Equal(t, http.StatusOK, response.Code)
+		assert.Contains(t, response.Body.String(), `"success":false`)
 	}
 }
+
 
 func TestTelegramOAuthConcurrentBindingHasSingleOwner(t *testing.T) {
 	fixture := setupTelegramOAuthTest(t)
