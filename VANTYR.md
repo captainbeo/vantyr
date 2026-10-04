@@ -459,3 +459,11 @@ $180 one-time price + live top-up price via admin UI (never chat);
 delete `vantyr-bootstrap` user; rotate the Selora key to the unlimited
 account; deploy the d80b6056e image; AGPL source-offer link in footer;
 SMTP/Turnstile registration gating optional later.
+
+**Additional live gates (2026-10-04, post-fix):** rate-limit burst on
+a zero-balance throwaway: first 30 requests → 403 `insufficient_user_quota`
+in English with remaining balance (fork i18n live; fail-closed admission
+before any upstream call), requests 31–35 → 429 (per-user rolling window
+counts errors too; default group cap 30/min works). Test users deleted.
+Focused controller suite (register/login/token/telegram/setup, -v):
+all PASS (233s).
