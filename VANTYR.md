@@ -569,3 +569,15 @@ bundle. Chunk names are content-hashed, so long caching is safe for
 unchanged files, but same-hash index.js across a chunk-map change
 (rspack hash didn't move when only async chunks changed) can pin the
 old map — watch for this after partial frontend rebuilds.
+
+**Bind-completion UX fixed (2026-10-04, commit 2a3ec8c74):** the bind
+itself worked (DB: captainbeo telegram_id=7011234035, quota 2,500,000
+granted) but the popup hung on "Processing OAuth response…" — the
+widget popup's direct opener is the telegram.org iframe, so the
+result postMessage stopped one hop short of the dialog's window. The
+callback page now posts up the whole opener chain (opener, its
+parent, own parent; targetOrigin-confined), and the dialog polls
+`/api/user/self` for the bound telegram_id every 3s as a safety net.
+Image `pinned-next6` (4fa3bc0f2d3b) deployed; new index bundle
+`index.59fede6efd.js`. **Owner browser needs one more hard refresh**
+(Ctrl+Shift+R) to pick up the new bundle.
