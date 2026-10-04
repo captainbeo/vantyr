@@ -444,9 +444,14 @@ published price table (24/4/13/20 vs computed 23.92/3.68/13.00/19.76).
 **Launch-day fork fix (d80b6056e):** registration granted
 `QuotaForNewUser` at Insert — an unverified $5 leak (and a double grant
 with Telegram bind). Registration now grants 0; Telegram bind is the
-only trial source. On the server: QuotaForNewUser temporarily set to 0
-(image still pre-fix) — **restore to 2500000 after deploying the fixed
-image**.
+only trial source. Fixed image `vantyr/new-api:pinned-next` (9cecb2de2a5d) built on-server
+from the patched tree and deployed 03:35 UTC; gateway healthy, relay
+regression passed, `QuotaForNewUser` restored to 2500000 (Telegram bind
+remains the only grant: new registrations verified quota 0 both before
+and after the restore). Smoke/verify users deleted from the production
+DB. `./model/` suite green on the fix; controller suite is slow (the
+upstream suite hits Go's default 10-min timeout in the container — not
+a failure, re-run with 25-min timeout).
 
 **Still open at launch (owner actions):** BotFather `/setdomain` →
 vantyr.xyz (Telegram OAuth bind flow needs it); Stripe live keys + live
