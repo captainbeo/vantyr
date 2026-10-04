@@ -507,3 +507,21 @@ step-up security proof (password/2FA) via the UI — raw API calls get
 403 SECURITY_PROOF_REQUIRED by design. After the owner registers the
 allowed URLs, the full flow (login page → oauth.telegram.org →
 callback → $5 grant) needs an end-to-end browser test.
+
+**Telegram OAuth live-wired (2026-10-04, commit 0ff9fbaf0):** the owner
+registered `vantyr.xyz` with @VantyrVerificationBot via BotFather
+(/setdomain, single domain entry — covers the OIDC redirect on the same
+domain). Two fixes landed from probing the live flow: (1)
+`client_id` must be the **numeric bot ID** (8655936058), not the bot
+username — Telegram's OIDC `aud` is the bot ID; (2) the authorization
+URL must carry an **`origin` parameter** (the embedding site's origin,
+`https://vantyr.xyz`) — oauth.telegram.org answers a bare
+"origin required" stub without it, even though Telegram's docs never
+list the parameter (their widget JS computes it client-side; our
+server-side URL construction had to add it — fork commit 0ff9fbaf0
+with a focused test). Image `pinned-next2` (10f1db821a8e) deployed;
+verified live: `/api/oauth/state` now returns an auth URL that renders
+Telegram's full Authorization page (phone login form, bot name shown).
+Relay regression passed post-deploy (redemption-code credit path,
+which is cache-consistent — direct DB quota edits leave a stale Redis
+cache; use the redemption/admin-API path for manual credits).
