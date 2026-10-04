@@ -525,3 +525,14 @@ Telegram's full Authorization page (phone login form, bot name shown).
 Relay regression passed post-deploy (redemption-code credit path,
 which is cache-consistent — direct DB quota edits leave a stale Redis
 cache; use the redemption/admin-API path for manual credits).
+
+**Root-callback forwarding (2026-10-04, commit bf2aabffd):** if Telegram
+delivers the OAuth response to `/` (origin- or bare-domain registration
+only — the owner could not add a second Allowed URL in BotFather), the
+SPA now forwards `/?code=&state=` to `/oauth/telegram` preserving query
+and hash, so the authorization still completes. Image `pinned-next3`
+(014a89c4601a) deployed; forwarding code verified present in the live
+bundle. Decision tree for the owner's live test: (1) if Telegram
+redirects to `/oauth/telegram` — done; (2) if it redirects to `/` —
+now also handled; (3) if Telegram refuses to redirect at all — the
+mini-app Allowed URLs list is the remaining registration step.
