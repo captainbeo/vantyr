@@ -475,3 +475,17 @@ password auth remained enabled. Fixed in the cloud-init drop-in and
 reloaded; `sshd -T` now reports `passwordauthentication no` and key
 login verified after reload. Server headroom: 13G/193G disk,
 6.6G free RAM. ufw 22/80/443 only.
+
+**Controller-suite verdict (2026-10-04, evidence):** the full
+`./controller/` suite is environmentally slow in the Docker test
+container — 269 tests PASS, 0 FAIL, yet the package still hits Go's
+global timeout (50 min) mid-run; the "hung" test
+(`TestSecurityEnrollmentAccessTokenMethodPolicy/wechat_session_cannot_manage_tokens`)
+passes in 22s when run alone on BOTH the pre-fix and fixed trees
+(189–190s for the whole test). Individual tests take 20–30s each in
+this container (sqlite + many AutoMigrate per test). The changed code
+lives in `./model/` (full suite green, 13s) and the
+registration/token/login/Telegram focused controller set (all PASS,
+233s). Inherited upstream characteristic, not a fork regression —
+hardening candidate: split or parallelize the controller suite, or run
+it on a faster host.
