@@ -558,3 +558,14 @@ pipeline then verified a freshly self-signed assertion AND the
 owner's actual widget hash offline. Image `pinned-next4`
 (9df5d83b95ba) deployed; widget code confirmed served in async
 chunks 94983/14172. NOTE: the token remains on the rotation list.
+
+**Browser-cache lesson (2026-10-04):** static JS is served with
+`max-age=604800` (7 days) while index.html is `no-cache`. After several
+same-day frontend deployments, the owner's browser kept running the old
+bundle from cache (old async chunks + old index mapping) — the "bind
+does nothing after password" report was the OLD OIDC flow still
+executing client-side. A hard refresh (Ctrl+Shift+R) loads the new
+bundle. Chunk names are content-hashed, so long caching is safe for
+unchanged files, but same-hash index.js across a chunk-map change
+(rspack hash didn't move when only async chunks changed) can pin the
+old map — watch for this after partial frontend rebuilds.
