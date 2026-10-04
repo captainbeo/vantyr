@@ -72,6 +72,13 @@ export function resolveLegacyRoute(rawHref: string): string | null {
   }
 
   const pathname = normalizeLegacyPath(source.pathname)
+  // Telegram registers redirect targets per bot. When only the site origin (or bare
+  // domain) is registered, the OAuth callback may land on "/" instead of
+  // "/oauth/:provider". Forward the authorization response so the flow still
+  // completes, preserving query and hash.
+  if (pathname === '/' && source.searchParams.has('code') && source.searchParams.has('state')) {
+    return buildTargetHref('/oauth/telegram', source)
+  }
   if (pathname === '/login') {
     return buildTargetHref('/sign-in', source)
   }

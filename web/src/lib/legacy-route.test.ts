@@ -88,4 +88,13 @@ describe('legacy frontend route migration', () => {
     expect(resolveLegacyRoute('/dashboard')).toBe(null)
     expect(resolveLegacyRoute('/api/status')).toBe(null)
   })
+
+  test('forwards OAuth authorization responses landing on the root page', () => {
+    expect(
+      resolveLegacyRoute('/?code=abc&state=st-123&scope=openid')
+    ).toBe('/oauth/telegram?code=abc&state=st-123&scope=openid')
+    expect(resolveLegacyRoute('/?code=abc')).toBe(null)
+    expect(resolveLegacyRoute('/?state=st-123')).toBe(null)
+    expect(resolveLegacyRoute('/')).toBe(null)
+  })
 })
