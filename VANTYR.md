@@ -387,3 +387,70 @@ add pricing when a source exists.
   cohort.
 - No strict per-plan concurrent-request cap; native rate limiting
   (ModelRequestRateLimit) covers burst abuse.
+
+## R5 production deploy (2026-10-04, live at https://vantyr.xyz)
+
+Server: one.com VPS 85.190.118.190 (Ubuntu 26.04, 4 vCPU/7.8GB),
+SSH key-only (`~/.ssh/vantyr_server`, user `administrator`), ufw
+22/80/443, Docker 29.1 + compose v2. Stack at `/opt/vantyr/deploy/vantyr`:
+gateway `vantyr/new-api:pinned` (built from source at deploy commit) on
+127.0.0.1:3000 behind Caddy 2 (auto-TLS, Let's Encrypt cert, HSTS,
+nosniff, `-Server`, 600s read timeout, no proxy buffering for SSE —
+`X-Accel-Buffering: no` verified live). Postgres 17 + Redis 7 with
+on-server-generated secrets in chmod-600 `.env` (never transmitted).
+
+DNS: `vantyr.xyz` A-record → 85.190.118.190 (Namecheap; the URL-redirect
+and www parking CNAME that broke ACME were deleted).
+
+**Bootstrap:** root admin `H049161` created by the owner via the web
+setup wizard at 02:42 UTC (password never transited chat). A temporary
+`vantyr-bootstrap` root (id 2) was inserted directly in the DB for
+config automation and **must be deleted at launch** (see rotation list).
+Config rebuilt from this doc: channels 1=selora-reseller
+(default+unlimited), 2=a6-marketplace (default only; 50/50 weights,
+retry=1), all 9 pricing ratios, `GroupRatio` default/unlimited = 1.0,
+UserUsableGroups, `Unlimited Monthly` plan (id 1, $180, total_amount=0,
+upgrade_group=unlimited, one-time Stripe test price
+`price_1ULtvo22rqPqAmkD…` — live price at launch), payment compliance
+confirmed, rate limits (default 30/min success+total counts, unlimited
+60/min via `ModelRequestRateLimitGroup`), Telegram OAuth (bot
+@VantyrVerificationBot + token in options), `ServerAddress`,
+`HomePageContent` (domain fixed to vantyr.xyz), `SystemName=Vantyr API`.
+
+**Stripe on production (test mode):** valid key recovered from the
+owner's original chat message (the shell copy had one corrupted char —
+position 51 `b`→`m`; the same corruption bit again this session when
+extracting keys, both times the user's original paste was the valid
+one). Top-up product `prod_VNQVEq1YsbsyIU` + one-time $1/unit price
+`price_1UMfeF22rqPqAmkD0Ntf2iy1` (StripeUnitPrice=1, min top-up 1).
+Webhook `we_1UMfeW22rqPqAmkD5RkKzlNC` →
+`https://vantyr.xyz/api/stripe/webhook` (checkout.session.completed),
+signing secret in options. Checkout link generation verified live.
+
+**Backups:** nightly 3:30 UTC `pg_dump | gzip` via
+`/opt/vantyr/deploy/vantyr/backup.sh`, 7-day retention. Restore drill
+passed 2026-10-04: backup loaded into scratch DB, 2 users/2 channels/1
+plan verified, scratch dropped.
+
+**Live smoke test (all through https://vantyr.xyz):** registration →
+login → key creation → `claude-sonnet-5` chat completion (reply exact,
+24 quota, ch2/A6) → `gpt-6-astra` `/v1/responses` with developer-role
+input (param_override works, 4 quota, ch1/Selora) → SSE stream
+(unbuffered, chunked) → `/v1/messages` Anthropic format (20 quota) →
+`/v1/models` (9 models). Every billed quota reconciled to the
+published price table (24/4/13/20 vs computed 23.92/3.68/13.00/19.76).
+50/50 channel split live.
+
+**Launch-day fork fix (d80b6056e):** registration granted
+`QuotaForNewUser` at Insert — an unverified $5 leak (and a double grant
+with Telegram bind). Registration now grants 0; Telegram bind is the
+only trial source. On the server: QuotaForNewUser temporarily set to 0
+(image still pre-fix) — **restore to 2500000 after deploying the fixed
+image**.
+
+**Still open at launch (owner actions):** BotFather `/setdomain` →
+vantyr.xyz (Telegram OAuth bind flow needs it); Stripe live keys + live
+$180 one-time price + live top-up price via admin UI (never chat);
+delete `vantyr-bootstrap` user; rotate the Selora key to the unlimited
+account; deploy the d80b6056e image; AGPL source-offer link in footer;
+SMTP/Turnstile registration gating optional later.
