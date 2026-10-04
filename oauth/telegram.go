@@ -75,6 +75,10 @@ func (flow *TelegramOAuthFlow) AuthorizationURL(state string) string {
 		"state":                 {state},
 		"code_challenge":        {oauth2.S256ChallengeFromVerifier(flow.CodeVerifier)},
 		"code_challenge_method": {"S256"},
+		// oauth.telegram.org renders the authorization page only when the
+		// embedding site's origin is supplied (and registered for the bot via
+		// BotFather); without it the endpoint answers a bare "origin required".
+		"origin": {strings.TrimRight(system_setting.ServerAddress, "/")},
 	}
 	return TelegramIssuer + "/auth?" + values.Encode()
 }
