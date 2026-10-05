@@ -32,6 +32,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
 
 import { telegramLogin } from '../api'
+import { sanitizeAuthRedirect } from '../lib/auth-redirect'
 import { pickTelegramAuthorization } from '../lib/telegram-login'
 import { useOAuthLogin } from '../hooks/use-oauth-login'
 import { TelegramLoginDialog } from './telegram-login-dialog'
@@ -87,7 +88,8 @@ export function OAuthProviders({
       try {
         const response = await telegramLogin(picked)
         if (response.success) {
-          window.location.href = redirectTo || '/'
+          window.location.href =
+            sanitizeAuthRedirect(redirectTo, window.location.origin) ?? '/'
         } else {
           toast.error(response.message || t('Login failed'))
         }

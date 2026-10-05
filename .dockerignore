@@ -10,3 +10,8 @@ docs
 /web/node_modules
 /web/dist
 !THIRD-PARTY-LICENSES.md
+
+# Deployment secrets and runtime data must never enter the build context:
+# deploy/vantyr/.env holds real PostgreSQL/Redis credentials on the server
+# and deploy/vantyr/data holds runtime logs.
+/deploy

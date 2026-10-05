@@ -19,7 +19,9 @@ services:
     restart: unless-stopped
     command: --log-dir /app/logs
     ports:
-      - "3000:3000"
+      # Loopback only: Caddy (the TLS entrypoint) proxies to the gateway;
+      # a 0.0.0.0 publish would bypass the firewall via Docker's iptables rules.
+      - "127.0.0.1:3000:3000"
     env_file:
       - .env
     environment:

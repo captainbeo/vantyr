@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
@@ -380,9 +381,12 @@ func handleOAuthBind(c *gin.Context, providerName string, provider oauth.Provide
 		common.ApiErrorI18n(c, i18n.MsgOAuthAlreadyBound, providerParams(provider.GetName()))
 		return false, false
 	}
+	credit := 0
 	_, err = model.ConsumeAuthFlowWithAction(state, match, func(tx *gorm.DB, _ *model.AuthFlow) error {
 		if providerName == "telegram" {
-			return model.BindTelegramForSessionWithTx(tx, identity, oauthUser.ProviderUserID)
+			granted, err := model.BindTelegramForSessionWithTx(tx, identity, oauthUser.ProviderUserID)
+			credit = granted
+			return err
 		}
 		if custom, ok := provider.(*oauth.GenericOAuthProvider); ok {
 			return model.UpdateUserOAuthBindingForSessionWithTx(tx, identity, custom.GetProviderId(), oauthUser.ProviderUserID)
@@ -392,6 +396,13 @@ func handleOAuthBind(c *gin.Context, providerName string, provider oauth.Provide
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return false, false
+	}
+	if credit > 0 {
+		// The trial credit committed with the bind; sync the quota cache and
+		// write the audit log only now (post-commit).
+		model.SyncCreditUserQuotaCache(identity.UserID, credit, "telegram verification")
+		model.RecordLog(identity.UserID, model.LogTypeSystem,
+			fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
 	}
 	user, err := model.GetUserById(identity.UserID, false)
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -89,38 +88,40 @@ func GetUserByTelegramID(telegramID string) (*User, error) {
 // started the binding. The caller consumes its OAuth flow in this transaction.
 // Vantyr: binding a Telegram account grants the trial credit exactly once
 // (single ownership above guarantees one grant per Telegram account).
-func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, telegramID string) error {
+// The credit is returned so the caller can sync the quota cache after the
+// transaction commits — a pre-commit sync would expose credit that rolls back
+// on commit failure (fail-open on a money path).
+func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, telegramID string) (int, error) {
 	if err := ValidateAuthSessionWithTx(tx, identity); err != nil {
-		return err
+		return 0, err
 	}
 	var user User
 	if err := tx.Select("id", "quota", "telegram_id").First(&user, identity.UserID).Error; err != nil {
-		return err
+		return 0, err
 	}
 	if user.TelegramId != "" {
-		return ErrExternalIdentityAlreadyClaimed
+		return 0, ErrExternalIdentityAlreadyClaimed
 	}
 	if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegramID, user.Id); err != nil {
-		return err
+		return 0, err
 	}
 	result := tx.Model(&User{}).Where("id = ? AND (telegram_id = ? OR telegram_id IS NULL)", user.Id, "").Update("telegram_id", telegramID)
 	if result.Error != nil {
-		return result.Error
+		return 0, result.Error
 	}
 	if result.RowsAffected != 1 {
-		return ErrExternalIdentityAlreadyClaimed
+		return 0, ErrExternalIdentityAlreadyClaimed
 	}
 	// Trial credit granted on Telegram verification instead of at registration.
 	// Bounded like the wallet: refuses to push the user over MaxWalletQuota.
 	credit := common.QuotaForNewUser
 	if credit > 0 && user.Quota <= common.MaxWalletQuota-credit {
 		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
-			return err
+			return 0, err
 		}
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
-		syncCreditUserQuotaCache(user.Id, credit, "telegram verification")
+		return credit, nil
 	}
-	return nil
+	return 0, nil
 }
 
 func releaseAllExternalIdentitiesWithTx(tx *gorm.DB, userId int) error {

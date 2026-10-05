@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -200,11 +202,20 @@ func TelegramBind(c *gin.Context) {
 			UserAuthVersion: user.AuthVersion,
 			SessionVersion:  session.Version,
 		}
-		if err := model.BindTelegramForSessionWithTx(tx, bindIdentity, telegramId); err != nil {
+		credit, err := model.BindTelegramForSessionWithTx(tx, bindIdentity, telegramId)
+		if err != nil {
 			if errors.Is(err, model.ErrExternalIdentityAlreadyClaimed) {
 				return errTelegramAccountAlreadyBound
 			}
 			return err
+		}
+		if credit > 0 {
+			// Cache sync and audit log run only after the transaction commits.
+			defer func() {
+				model.SyncCreditUserQuotaCache(flow.UserId, credit, "telegram verification")
+			}()
+			model.RecordLog(flow.UserId, model.LogTypeSystem,
+				fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
 		}
 		return nil
 	})

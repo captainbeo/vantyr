@@ -164,6 +164,12 @@ func syncCreditUserQuotaCache(userId int, quota int, operation string) {
 	}
 }
 
+// SyncCreditUserQuotaCache exposes the post-commit cache sync to controllers
+// that run credit transactions in model package transactions.
+func SyncCreditUserQuotaCache(userId int, quota int, operation string) {
+	syncCreditUserQuotaCache(userId, quota, operation)
+}
+
 // Helper functions to get individual fields if needed
 func getUserGroupCache(userId int) (string, error) {
 	cache, err := GetUserCache(userId)
