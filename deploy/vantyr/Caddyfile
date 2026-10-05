@@ -1,10 +1,16 @@
 vantyr.xyz {
     # Corresponding Source (AGPL) archive + notices served from ./static/.
-    # The SPA's own /static/js/* assets are NOT intercepted: this handle
-    # matches only /static/source/*.
+    # The SPA's own /static/js/* assets are NOT intercepted: these handles
+    # match only /static/source/* and /static/brand/*.
     handle /static/source/* {
         root * /srv/vantyr-static
         # /static/source/x -> /srv/vantyr-static/source/x
+        uri strip_prefix /static
+        file_server
+    }
+    handle /static/brand/* {
+        root * /srv/vantyr-static
+        # /static/brand/logo.png -> /srv/vantyr-static/brand/logo.png
         uri strip_prefix /static
         file_server
     }

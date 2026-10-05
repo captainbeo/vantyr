@@ -661,6 +661,20 @@ Fixed by narrowing to `handle /static/source/*` with
 `/srv/vantyr-static/source/`). The Caddyfile + caddy compose service are
 now committed to the repo (audit finding closed). Verified: API,
 homepage, SPA JS, source archive/notice, widget test page all 200.
+**Brand logo deployed (2026-10-05):** the Vantyr wordmark (dark navy +
+orange) processed to a transparent background, 512×512 square with the
+wordmark at 90% width (the sidebar avatar is `object-cover` on a square,
+so a wide mark would be cropped). Served from
+`static/brand/logo.png` via a new `handle /static/brand/*` Caddy route
+(zero-downtime `caddy reload`; the Caddyfile is a single-file bind mount
+— edit it in place, never replace the file, or the container keeps
+serving the old inode). The `Logo` option was inserted directly in the
+options table (`https://vantyr.xyz/static/brand/logo.png`); New API's
+`SyncOptions` (60s default, `SYNC_FREQUENCY` env to override) polls the
+table, so no gateway restart was needed. The same URL is used as favicon
+(`applyFaviconToDom`), sidebar, and footer. The full-width wordmark
+backup lives at `static/brand/vantyr-wordmark.png`.
+
 **Landing page switched to the built-in New API marketing landing**
 (Hero/terminal-demo/Stats/Features/HowItWorks/CTA) by clearing
 `HomePageContent` (the old markdown brief is backed up locally;
