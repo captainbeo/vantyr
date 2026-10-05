@@ -651,3 +651,18 @@ numeric ID, owner Telegram ID redacted — full values remain in local
 git history only. Procedure going forward: every production image
 deploy gets a `deploy/<date>-<image>` tag, a fresh archive in
 static/source/, and a footer update.
+
+**White-page incident + Caddy fix (2026-10-05, commit 6827b5e1e):** the
+AGPL static route (`handle_path /static/*`) intercepted the SPA's own
+`/static/js/*` bundles → all JS 404 → white page. Root cause: the SPA
+serves its assets under the SAME /static/ path the source route claimed.
+Fixed by narrowing to `handle /static/source/*` with
+`uri strip_prefix /static` (files live under
+`/srv/vantyr-static/source/`). The Caddyfile + caddy compose service are
+now committed to the repo (audit finding closed). Verified: API,
+homepage, SPA JS, source archive/notice, widget test page all 200.
+**Landing page switched to the built-in New API marketing landing**
+(Hero/terminal-demo/Stats/Features/HowItWorks/CTA) by clearing
+`HomePageContent` (the old markdown brief is backed up locally;
+set the option again to restore it — the component also supports a
+full-HTML or iframe-URL homepage if a custom design is wanted later).
