@@ -629,3 +629,25 @@ cycles (same economics as upstream's registration grant — accepted);
 Stripper object IDs and the owner's Telegram ID sit in VANTYR.md
 (repo currently private/unpushed — scrub before any public push);
 VERSION file is empty (image↔commit traceability is prose-only).
+
+**AGPL Corresponding Source offer live (2026-10-05):** the audit's
+blocking finding is closed two ways. (1) Public repo:
+`github.com/captainbeo/vantyr` (branch `main` = vantyr/main; tag
+`deploy/2026-10-05-pinned-next7` marks the exact deployed source —
+the tagged tree's program is byte-identical to the running
+pinned-next7 image; the tag only additionally scrubs VANTYR.md
+identifiers and removes the inherited release workflows, which do
+not affect the binary). (2) Self-hosted archive:
+`https://vantyr.xyz/static/source/vantyr-source-2026-10-05-pinned-next7.tar.gz`
+(sha256 c20726f6…e5815, see `static/source/source-notice.txt`),
+served by Caddy's `handle_path /static/*` file_server from
+`deploy/vantyr/static/`. The footer links the GitHub tag tree with
+the archive as fallback. Inherited docker-build/electron-build/
+release/gitcode workflows were deleted before the tag push (they
+fire on tag pushes and would have attempted upstream DockerHub
+publishing); `ci.yml` (PR-only) kept. VANTYR.md was scrubbed for
+publication: Stripe object IDs, server IP, root admin username, bot
+numeric ID, owner Telegram ID redacted — full values remain in local
+git history only. Procedure going forward: every production image
+deploy gets a `deploy/<date>-<image>` tag, a fresh archive in
+static/source/, and a footer update.
