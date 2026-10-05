@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ReactNode } from 'react'
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
