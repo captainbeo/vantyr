@@ -1,0 +1,21 @@
+vantyr.xyz {
+    # Corresponding Source (AGPL) archive + notices served from ./static/.
+    # The SPA's own /static/js/* assets are NOT intercepted: this handle
+    # matches only /static/source/*.
+    handle /static/source/* {
+        root * /srv/vantyr-static
+        # /static/source/x -> /srv/vantyr-static/source/x
+        uri strip_prefix /static
+        file_server
+    }
+    reverse_proxy gateway:3000 {
+        transport http {
+            read_timeout 600s
+        }
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        -Server
+    }
+}

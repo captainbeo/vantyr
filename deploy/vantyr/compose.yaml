@@ -80,12 +80,31 @@ services:
       timeout: 5s
       retries: 5
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/vantyr-static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - vantyr
+
   # sub2api (Claude OAuth accounts → Anthropic-compatible API) is added at
   # Phase R2 once its image and credential handling are configured.
 
 volumes:
   pg_data:
   redis_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   vantyr:
