@@ -60,8 +60,39 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
 - Publish the Corresponding Source offer: link the exact git commit (public
   repo or archive) on the site footer/about page. `docs/compliance/2026-07-31-new-api-license-compliance.md`
   has the full analysis.
+- **Every deploy must repeat the full protocol** (missed on the first
+  sign-in-fix deploy, then completed): push `vantyr/main` → `main` on
+  github.com/captainbeo/vantyr, tag `deploy/<date>-<desc>` and push it,
+  `git archive` that tag → `deploy/vantyr/static/source/` with a refreshed
+  `source-notice.txt` (sha256 + tag + commit), and update the `Footer`
+  option (repo link + archive link). Current: tag
+  `deploy/2026-10-05-signin-fix` (commit 3b3da6d07).
 - Keep `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` intact in the image
   (upstream Dockerfile already ships them in `/licenses`).
+
+## Production ops log (2026-10-05)
+
+- **Sign-in 500 (root cause + fix):** the Telegram widget restoration
+  patch (2cb526aff) dropped `import { useTranslation } from
+  'react-i18next'` from `oauth-providers.tsx` while the component still
+  called it — the built bundle crashed with `ReferenceError:
+  useTranslation is not defined` and the whole sign-in page (and any page
+  rendering the OAuth buttons) showed the styled 500 error screen.
+  Server logs showed ZERO 5xx because the crash was purely client-side.
+  Fixed by restoring the import (3b3da6d07), rebuilt, deployed, verified
+  with a real-browser login round-trip (Playwright) on production.
+  Diagnosis technique that found it: headless browser + `pageerror`
+  capture — grep server logs for 5xx finds nothing in client crashes.
+  The local worktree at D:\worktrees\vantyr-main tracks this; the
+  on-server source at /opt/vantyr receives changes via git diff patch
+  + rebuilt dist upload + on-server docker build.
+- Auth hardening deployed: `SESSION_COOKIE_SECURE=true` +
+  `SESSION_COOKIE_TRUSTED_URL=https://vantyr.xyz` (Secure/SameSite
+  cookies, Origin validation on refresh/logout). `telegram.client_id`
+  on prod = numeric bot id `8655936058` — correct; oauth.telegram.org
+  /auth rejects usernames ("bot_id required").
+- `captainbeo` (user 11) password reset to a temporary value via DB
+  (owner must change it in UI; on the rotation list).
 
 ## Backups
 
