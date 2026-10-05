@@ -192,7 +192,7 @@ $2×ratio/MTok, output at input×completion, cache read at input×cache):
 Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
 quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
 1.0; channel serves `default,unlimited`). One-time Stripe price
-(`price_1ULtvo...`); renewal is manual — the customer re-purchases. No
+(`price_1ULt… (redacted)`); renewal is manual — the customer re-purchases. No
 `invoice.paid` handler exists, so Stripe auto-renewal would NOT extend
 access; one-time price + manual renewal is the intended and correct
 shape. Note: `gpt-6-sol` requires `ModelRatio` present to override the
@@ -390,7 +390,7 @@ add pricing when a source exists.
 
 ## R5 production deploy (2026-10-04, live at https://vantyr.xyz)
 
-Server: one.com VPS 85.190.118.190 (Ubuntu 26.04, 4 vCPU/7.8GB),
+Server: one.com VPS 85.190.x.x (redacted) (Ubuntu 26.04, 4 vCPU/7.8GB),
 SSH key-only (`~/.ssh/vantyr_server`, user `administrator`), ufw
 22/80/443, Docker 29.1 + compose v2. Stack at `/opt/vantyr/deploy/vantyr`:
 gateway `vantyr/new-api:pinned` (built from source at deploy commit) on
@@ -399,10 +399,10 @@ nosniff, `-Server`, 600s read timeout, no proxy buffering for SSE —
 `X-Accel-Buffering: no` verified live). Postgres 17 + Redis 7 with
 on-server-generated secrets in chmod-600 `.env` (never transmitted).
 
-DNS: `vantyr.xyz` A-record → 85.190.118.190 (Namecheap; the URL-redirect
+DNS: `vantyr.xyz` A-record → 85.190.x.x (redacted) (Namecheap; the URL-redirect
 and www parking CNAME that broke ACME were deleted).
 
-**Bootstrap:** root admin `H049161` created by the owner via the web
+**Bootstrap:** root admin (username redacted) created by the owner via the web
 setup wizard at 02:42 UTC (password never transited chat). A temporary
 `vantyr-bootstrap` root (id 2) was inserted directly in the DB for
 config automation and **must be deleted at launch** (see rotation list).
@@ -411,7 +411,7 @@ Config rebuilt from this doc: channels 1=selora-reseller
 retry=1), all 9 pricing ratios, `GroupRatio` default/unlimited = 1.0,
 UserUsableGroups, `Unlimited Monthly` plan (id 1, $180, total_amount=0,
 upgrade_group=unlimited, one-time Stripe test price
-`price_1ULtvo22rqPqAmkD…` — live price at launch), payment compliance
+`price_1ULt… (redacted)` — live price at launch), payment compliance
 confirmed, rate limits (default 30/min success+total counts, unlimited
 60/min via `ModelRequestRateLimitGroup`), Telegram OAuth (bot
 @VantyrVerificationBot + token in options), `ServerAddress`,
@@ -421,9 +421,9 @@ confirmed, rate limits (default 30/min success+total counts, unlimited
 owner's original chat message (the shell copy had one corrupted char —
 position 51 `b`→`m`; the same corruption bit again this session when
 extracting keys, both times the user's original paste was the valid
-one). Top-up product `prod_VNQVEq1YsbsyIU` + one-time $1/unit price
-`price_1UMfeF22rqPqAmkD0Ntf2iy1` (StripeUnitPrice=1, min top-up 1).
-Webhook `we_1UMfeW22rqPqAmkD5RkKzlNC` →
+one). Top-up product `prod_VNQ… (redacted)` + one-time $1/unit price
+`price_1UMf… (redacted)` (StripeUnitPrice=1, min top-up 1).
+Webhook `we_1UMf… (redacted)` →
 `https://vantyr.xyz/api/stripe/webhook` (checkout.session.completed),
 signing secret in options. Checkout link generation verified live.
 
@@ -494,7 +494,7 @@ it on a faster host.
 
 Per Telegram's current Login Widget/OIDC docs, `client_id` must be the
 **numeric bot ID** (the `aud` claim matches the bot ID), not the bot
-username. Fixed on production: `telegram.client_id` = `8655936058`
+username. Fixed on production: `telegram.client_id` = `<bot numeric ID>`
 (@VantyrVerificationBot's numeric ID); `client_secret` remains the bot
 token. Domain registration moved from the legacy `/setdomain` command
 to the **BotFather mini app**: choose the bot → **Login Widget** →
@@ -512,7 +512,7 @@ callback → $5 grant) needs an end-to-end browser test.
 registered `vantyr.xyz` with @VantyrVerificationBot via BotFather
 (/setdomain, single domain entry — covers the OIDC redirect on the same
 domain). Two fixes landed from probing the live flow: (1)
-`client_id` must be the **numeric bot ID** (8655936058), not the bot
+`client_id` must be the **numeric bot ID** (redacted), not the bot
 username — Telegram's OIDC `aud` is the bot ID; (2) the authorization
 URL must carry an **`origin` parameter** (the embedding site's origin,
 `https://vantyr.xyz`) — oauth.telegram.org answers a bare
@@ -571,7 +571,7 @@ unchanged files, but same-hash index.js across a chunk-map change
 old map — watch for this after partial frontend rebuilds.
 
 **Bind-completion UX fixed (2026-10-04, commit 2a3ec8c74):** the bind
-itself worked (DB: captainbeo telegram_id=7011234035, quota 2,500,000
+itself worked (DB: owner telegram_id=<redacted>, quota 2,500,000
 granted) but the popup hung on "Processing OAuth response…" — the
 widget popup's direct opener is the telegram.org iframe, so the
 result postMessage stopped one hop short of the dialog's window. The
