@@ -581,3 +581,51 @@ parent, own parent; targetOrigin-confined), and the dialog polls
 Image `pinned-next6` (4fa3bc0f2d3b) deployed; new index bundle
 `index.59fede6efd.js`. **Owner browser needs one more hard refresh**
 (Ctrl+Shift+R) to pick up the new bundle.
+
+## Independent launch audit (2026-10-05, five parallel review agents)
+
+Scope: full fork diff v1.0.0-rc.41..8f7c96683 (32 files). Five independent
+read-only agents: Telegram-bind security, trial-credit billing, frontend
+OAuth callback, deployment/secrets, AGPL compliance.
+
+**Verdicts:** security PASS (clean across signature verification, replay
+protection, bind authorization, redirect escaping, disclosure); billing,
+frontend, deployment, compliance each FAIL with one blocking finding —
+three fixed immediately in fb2570dde (deployed as `pinned-next7`
+92f8e6877ac7): (1) trial-credit cache sync + grant log moved to
+post-commit (was inside the bind transaction — commit failure would have
+left phantom Redis credit, fail-open on a money path);
+BindTelegramForSessionWithTx now returns the granted credit, both bind
+callers sync after commit; (2) widget-login success redirect routed
+through sanitizeAuthRedirect (was raw ?redirect= → open redirect /
+javascript: XSS); (3) committed compose.yaml now pins the gateway to
+127.0.0.1:3000 (matches production; a 0.0.0.0 publish bypasses ufw via
+Docker iptables) and .dockerignore excludes /deploy so on-server .env
+secrets can never enter build layers. Verified: model + Telegram
+controller suites green post-fix.
+
+**Still open (owner action) — AGPL: the footer source link
+(github.com/captainbeo/vantyr) is 404; publishing the exact deployed
+commit (tag it, e.g. deploy/2026-10-05) is required to satisfy §13 now
+that the service is live.** Publish to a PUBLIC repo or archive and point
+the footer at the commit tree URL; disable the inherited
+.github/workflows docker-build.yml triggers when publishing (they'd fire
+on tag push). The old compliance doc (2026-07-31) describes the abandoned
+commercial-MVP branch — treat its [x] items as unverified; the README
+fork notice + intact LICENSE/NOTICE (byte-identical to upstream) carry
+the substance.
+
+Advisory items (non-blocking, for hardening): stale
+enrollment.test.tsx for the telegram bind flow (drives the removed
+OAuth-popup path — update when touching that suite); admin UI label for
+QuotaForNewUser still says "new user" but means Telegram-bind trial;
+admin binding-clear/hard-delete re-arms the per-Telegram grant (admin
+trust boundary, audited); widget bind start lacks the OIDC path's
+step-up proof (session hijacker could bind their Telegram to a victim
+account — money lands on the victim, identity locked); flow_token is a
+5-minute capability URL (leak → attacker binds their Telegram to the
+owner within TTL); grant-once invariant breaks across self-delete
+cycles (same economics as upstream's registration grant — accepted);
+Stripper object IDs and the owner's Telegram ID sit in VANTYR.md
+(repo currently private/unpushed — scrub before any public push);
+VERSION file is empty (image↔commit traceability is prose-only).
