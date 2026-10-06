@@ -490,6 +490,64 @@ final money-path gate; unpaid orders simply expire after 15 min). The
 wanted. GM Pay's Telegram notification bot is unconfigured (optional;
 bot token would go in its admin settings).
 
+## GM Pay integration audit (2026-10-06, two independent reviewers + live adversarial battery)
+
+**Verdict: sound for production.** No critical findings on either side.
+New API reviewer: every credit requires a valid MD5 signature over
+attacker-uncontrolled content; settlement is row-locked, idempotent,
+and credits exclusively from the order row (`topUp.Amount`), never
+callback fields; `EpayKey` never logged and root-only via options API;
+min-topup and quota bounds (2^53−1 ceiling, re-enforced atomically at
+credit time) hold; provider guards block cross-gateway tradeNo replay;
+notify endpoint does signature verification before any DB access and
+sits behind GlobalAPIRateLimit (360/180s/IP, Redis) + 512KB body limit.
+GM Pay reviewer: the critical sub-order question resolves safely —
+network-switch sub-order payments route the merchant callback through
+the PARENT order (pay_by_sub_id), so the customer is credited in both
+flows; inbound epay verification is constant-time and canonicalization
+matches exactly; address+amount reservation is atomic with a unique
+index; trade IDs are 144-bit.
+
+**Live adversarial battery (all green):** valid callback credited
+exactly 5,000,000 quota; identical replay and signed money-inflation
+(999999) callbacks credited nothing extra (idempotent/ignored);
+wrong-key and unknown-order callbacks rejected; amount floors
+(1/0/−5) rejected; GET-variant delivery — the transport GM Pay's
+worker actually uses — verified end-to-end: credit lands AND the ack
+body is the literal `success` GM Pay requires (a JSON body would burn
+the retry window). No secret in either system's logs. GM Pay
+config/wallets/orders survive restart (SQLite bind mount).
+
+**Hardening applied during the audit:** callback retry envelope raised
+from ~35s (3 retries) to ~10min (8 retries, data/gmpay/.env
+order_notice_max_retry=8); nightly backup now covers GM Pay's SQLite
+via the online-backup API in a one-shot alpine container (WAL-safe) +
+restore drill passed; watchdog added to backup.sh flagging paid orders
+whose merchant callback never delivered (the vendor C1 stuck-money
+state) with trade IDs for admin resend; probe users/orders fully
+cleaned both sides.
+
+**Open code fix (M-1, medium, recommended):**
+`SubscriptionEpayNotify`/`SubscriptionEpayReturn`
+(controller/subscription_payment_epay.go) lack the
+`isEpayWebhookEnabled()` fail-closed gate that `EpayNotify` enforces —
+during an incident (compliance un-confirmed or Epay config cleared) a
+valid pending $180 callback would still complete. One-line guard each
++ focused test; not yet applied (code change → test → rebuild → deploy
+cycle).
+
+**Accepted minor items:** notify endpoint logs full unverified params
+at info (control chars escaped, rate-limited, no secrets) — demote to
+warn someday; pending unpaid epay topup rows never expire (GM Pay
+expires its side at 15 min; our rows are dead-letter accumulation
+only); GM Pay admin login has no rate limit (96-bit random password +
+loopback-only in our exposure via Caddy — publicly reachable at
+pay.vantyr.xyz/admin; keep the password strong); vendor crash-window
+edge (paid sub-order, parent not finalized) has no API repair —
+recovery runbook: SQLite edit parent `status=2, callback_confirm=2`,
+sub `callback_confirm=1`, or admin resend-callback; watchdog detects
+it.
+
 ## Known-weak spots (accepted at launch)
 
 - Subscription recurring renewal is manual (native webhook activates
