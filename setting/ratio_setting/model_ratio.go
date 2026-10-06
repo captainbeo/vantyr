@@ -500,7 +500,12 @@ func getHardcodedCompletionModelRatio(name string) (float64, bool) {
 		// gpt-5 匹配
 		if strings.HasPrefix(name, "gpt-5") {
 			if !strings.Contains(name, ".") {
-				return 8, true
+				// Vantyr fork: unlocked. Reseller catalogs use dash-named models
+				// (gpt-5-6-luna) whose sell ratio must stay operator-configurable;
+				// the blanket 8x lock overrode the CompletionRatio map. The 8 here
+				// is now only the fallback when nothing is configured, matching the
+				// "gpt-5.5 and later" unlocked branch below.
+				return 8, false
 			}
 			if strings.HasPrefix(name, "gpt-5.4") {
 				if strings.HasPrefix(name, "gpt-5.4-nano") {

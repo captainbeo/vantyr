@@ -43,6 +43,7 @@ import { taskPriceLabel, taskUsageUnitLabel } from '../lib/task-price-display'
 import type { PricingModel, PriceType, TokenUnit } from '../types'
 import { ModelBillingModeBadge } from './model-billing-mode-badge'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
+import { OfficialPriceLine } from './official-price-line'
 
 export interface ModelCardProps {
   model: PricingModel
@@ -330,6 +331,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <div className='grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-x-3 gap-y-2'>
             {priceSummary}
           </div>
+          <OfficialPriceLine model={props.model} />
         </div>
         {(groups.length > 0 || endpoints.length > 0) && (
           <dl

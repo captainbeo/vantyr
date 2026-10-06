@@ -3588,7 +3588,7 @@
     "Model selected": "已选择模型",
     "Model shown in model square": "已在模型广场显示",
     "Model source": "模型来源",
-    "Model Square": "模型广场",
+    "Model Overview": "模型总览",
     "Model square visibility": "广场展示",
     "Model Tags": "模型标签",
     "Model to use for testing": "用于测试的模型",
@@ -6933,6 +6933,8 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Official API price": "Official API price",
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
   }
 }

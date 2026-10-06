@@ -3588,7 +3588,7 @@
     "Model selected": "Modèle sélectionné",
     "Model shown in model square": "Modèle affiché dans la galerie",
     "Model source": "Source du modèle",
-    "Model Square": "Place des modèles",
+    "Model Overview": "Aperçu des modèles",
     "Model square visibility": "Visibilité",
     "Model Tags": "Tags de modèle",
     "Model to use for testing": "Modèle à utiliser pour les tests",
@@ -6933,6 +6933,8 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Official API price": "Official API price",
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
   }
 }

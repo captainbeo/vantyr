@@ -34,6 +34,7 @@ import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import { taskUsageUnitLabel } from '../lib/task-price-display'
 import type { PricingModel, TokenUnit } from '../types'
+import { OfficialPriceLine } from './official-price-line'
 
 export type ModelPriceCellOptions = {
   tokenUnit?: TokenUnit
@@ -264,6 +265,7 @@ export function ModelPriceCell(props: {
       >
         {caption}
       </span>
+      <OfficialPriceLine model={props.model} />
     </span>
   )
 }

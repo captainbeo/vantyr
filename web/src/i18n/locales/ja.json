@@ -3588,7 +3588,7 @@
     "Model selected": "選択済みモデル",
     "Model shown in model square": "モデル広場に表示しました",
     "Model source": "モデルの取得元",
-    "Model Square": "モデル広場",
+    "Model Overview": "モデル概要",
     "Model square visibility": "一覧表示",
     "Model Tags": "モデルタグ",
     "Model to use for testing": "テストに使用するモデル",
@@ -6933,6 +6933,8 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Official API price": "Official API price",
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
   }
 }

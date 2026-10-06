@@ -81,6 +81,7 @@ import { parseTags } from '../lib/filters'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { withPluginPricing } from '../lib/plugin-pricing'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
+import { OfficialPriceLine } from './official-price-line'
 import {
   evaluateTaskUsageExamples,
   getTaskEnumFields,
@@ -913,6 +914,11 @@ function PriceSection(props: {
           </div>
         </div>
       )}
+      <OfficialPriceLine
+        model={props.model}
+        variant='block'
+        className='mt-3'
+      />
     </section>
   )
 }

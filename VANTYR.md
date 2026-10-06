@@ -218,7 +218,7 @@ $2×ratio/MTok, output at input×completion, cache read at input×cache):
 | claude-sonnet-5 | 0.26 | 1.30 | 0.026 |
 | gpt-6-astra | 0.08 | 0.16 | 0.04 |
 | gpt-6-sol | 0.02 | 0.10 | 0.02 |
-| gpt-5-6-luna | 0.02 | 0.12 | 0.002 |
+| gpt-5-6-luna | 0.02 | 0.08 | 0.002 |
 
 Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
 quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
@@ -571,6 +571,26 @@ remain protected by the per-user rate limiter (unchanged). Rotation
 (if the secret ever leaks): new keys from the Cloudflare dashboard,
 update the two option rows. Email/SMTP verification remains an
 optional future layer on top.
+
+**Model Overview + official-price comparison (2026-10-06):** the public
+pricing page renamed to Model Overview (i18n across 7 locales; nav,
+settings, page header call sites). Each model now shows the vendor's
+official list price and a live "% cheaper than official" badge beside
+our price (table cell, card grid, details drawer). Official prices are
+display-only data from a new root-editable `OfficialPricing` option
+(JSON: model -> {input, output, cache} in USD/1M) injected into
+/api/pricing by updatePricing; the discount is computed client-side
+from live ratios, so it updates automatically on any price change
+(both sides refresh within the 60s pricing/option caches). Also fixed:
+gpt-5-6-luna output price — upstream hardcodes all dot-less gpt-5*
+completion ratios at 8x LOCKED, silently overriding the configured
+CompletionRatio map (relay billing and the pricing page both resolved
+8 -> $0.16); the fork unlocks dash-named models so the configured
+value wins (8 stays the fallback), luna CompletionRatio=4 ->
+$0.02/$0.08 (owner decision; was $0.16). Official reference prices
+recorded 2026-10-06: fable 10/50/1 (5.1 cache 0.25), opus-5 5/25/0.5,
+opus-5-5 4/20/0.2, sonnet 2/10/0.2, gpt-6-astra 10/50/1 (short ctx),
+gpt-6-sol 2/10/0.2, gpt-5.6-luna 0.2/1.2/0.02.
 
 ## Known-weak spots (accepted at launch)
 

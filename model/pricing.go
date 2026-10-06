@@ -42,6 +42,12 @@ type Pricing struct {
 	ImageRatio             *float64                             `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                             `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                             `json:"audio_completion_ratio,omitempty"`
+	// Vendor official list prices (USD per million tokens) for the pricing
+	// page's comparison display. Populated from the OfficialPricing option;
+	// display-only data that must never influence billing.
+	OfficialInput          *float64                             `json:"official_input_usd,omitempty"`
+	OfficialOutput         *float64                             `json:"official_output_usd,omitempty"`
+	OfficialCache          *float64                             `json:"official_cache_usd,omitempty"`
 	EnableGroup            []string                             `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType              `json:"supported_endpoint_types"`
 	BillingMode            string                               `json:"billing_mode,omitempty"`
@@ -242,6 +248,7 @@ func updatePricing() {
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
 	advancedCustomConfigs := loadPricingAdvancedCustomConfigs(enableAbilities)
+	officialPricing := loadOfficialPricing()
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
@@ -353,6 +360,14 @@ func updatePricing() {
 			pricing.ModelRatio = modelRatio
 			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
 			pricing.QuotaType = 0
+		}
+		if official, ok := officialPricing[model]; ok {
+			pricing.OfficialInput = &official.Input
+			pricing.OfficialOutput = &official.Output
+			if official.Cache > 0 {
+				officialCache := official.Cache
+				pricing.OfficialCache = &officialCache
+			}
 		}
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
 			pricing.CacheRatio = &cacheRatio

@@ -3588,7 +3588,7 @@
     "Model selected": "Đã chọn mô hình",
     "Model shown in model square": "Đã hiển thị mô hình trong kho mô hình",
     "Model source": "Nguồn mô hình",
-    "Model Square": "Quảng trường mô hình",
+    "Model Overview": "Tổng quan về mô hình",
     "Model square visibility": "Hiển thị",
     "Model Tags": "Thẻ mô hình",
     "Model to use for testing": "Mô hình dùng để kiểm thử",
@@ -6933,6 +6933,8 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Official API price": "Official API price",
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
   }
 }

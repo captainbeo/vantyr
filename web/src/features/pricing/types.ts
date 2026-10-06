@@ -69,6 +69,10 @@ export type PricingModel = {
   model_ratio: number
   completion_ratio: number
   model_price?: number
+  /** Vendor official list price (USD / 1M tokens), display-only. */
+  official_input_usd?: number | null
+  official_output_usd?: number | null
+  official_cache_usd?: number | null
   cache_ratio?: number | null
   create_cache_ratio?: number | null
   image_ratio?: number | null
