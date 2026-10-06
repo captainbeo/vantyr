@@ -592,6 +592,34 @@ recorded 2026-10-06: fable 10/50/1 (5.1 cache 0.25), opus-5 5/25/0.5,
 opus-5-5 4/20/0.2, sonnet 2/10/0.2, gpt-6-astra 10/50/1 (short ctx),
 gpt-6-sol 2/10/0.2, gpt-5.6-luna 0.2/1.2/0.02.
 
+**Model Overview deployed (2026-10-06):** shipped as image
+`vantyr/new-api:pinned-next9` (ca5b1100cf08, built on-server from the
+tree synced via git archive; feature markers grep-verified in the
+binary before the swap). AGPL protocol repeated in full: `vantyr/main`
+→ public `main` (4ba755b08 + 07055f4e2 + this docs commit), tag
+`deploy/2026-10-06-model-overview` pushed, source archive
+`vantyr-source-2026-10-06-model-overview.tar.gz` (sha256 1cdd2a2328b1…,
+see `static/source/source-notice.txt`) published, `Footer` option
+updated to the new tag/archive links. Options written via SQL (60s
+sync): `CompletionRatio` full 13-key map with luna 6→4, new
+`OfficialPricing` option (the 9 models above), `Footer`. On-server
+tests in golang:1.26.1-alpine (persistent gomod/build volumes):
+ratio_setting package green; model focused tests green after fixing
+the test bootstrap (common.OptionMap is nil in the model test binary;
+the helper now swaps in a fresh map per repo convention, fixed by
+amend before the build). Live verification: /api/pricing carries
+official_input/output/cache_usd for all 9 models and luna
+completion_ratio 4 → $0.02/$0.08; served bundle contains the new
+strings (index.52d14c1c64.js); /docs intact with the $0.08 row;
+archive and source-notice.txt return 200; footer_html in /api/status
+links the new tag. Expected badges: fable 75%, sonnet/opus-5.5 87%,
+luna 93%, astra/sol 99% (clamped). pinned-next8 (f7910964e15f)
+retained for rollback. Transient during the options write: the first
+upsert passed empty values (paths resolved inside the postgres
+container, not the host) and was corrected via env-var passing within
+the same sync window; worst case was ≤60s of luna resolving to the 8x
+fallback with no traffic at risk.
+
 ## Known-weak spots (accepted at launch)
 
 - Subscription recurring renewal is manual (native webhook activates
