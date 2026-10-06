@@ -17,8 +17,11 @@ vantyr.xyz {
     # Setup & pricing guide (static HTML in Control Room styling).
     # /docs -> /docs/ (canonical trailing slash); /docs/* serves
     # static/docs/ directly so relative font paths resolve.
+    # NOTE: redir needs the absolute target URL here — the two-argument
+    # form `redir /docs/ 308` parses as "redirect to URL '308' with code
+    # 302", which broke the no-slash path (SPA fallback served instead).
     handle /docs {
-        redir /docs/ 308
+        redir https://vantyr.xyz/docs/ 308
     }
     handle /docs/* {
         root * /srv/vantyr-static/docs
