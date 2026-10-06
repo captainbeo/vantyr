@@ -409,6 +409,87 @@ add pricing when a source exists.
   both seller-side failures and the one gateway-side override error while
   debugging).
 
+## R6: crypto top-up via GM Pay (2026-10-06, live pending DNS)
+
+**Provider choice:** New API's other payment providers (Creem, Waffo,
+Waffo Pancake) are card/MoR rails; only Waffo has a USDC-on-Base side
+path. Upstream has no native self-hosted crypto provider. GM Pay
+(github.com/GMWalletApp/epusdt, GPL-3.0, ~3.9k stars) is the ecosystem's
+standard answer: self-hosted, 0% platform fee, direct-to-own-wallet, and
+Epay-protocol compatible with New API out of the box.
+
+**Zero-code integration (verified contract):** New API's go-epay client
+POSTs to `<PayAddress>/submit.php` with MD5 over sorted, sign/sign_type-
+and-empty-filtered params + key. GM Pay v2.0.0's Epay endpoint
+`/payments/epay/v1/order/create-transaction/submit.php` verifies exactly
+that scheme (v2.0.0's HMAC-SHA256 breaking change applies only to the
+GMPay-native API, not the Epay compat mode). So
+`PayAddress=https://pay.vantyr.xyz/payments/epay/v1/order/create-transaction`
+routes New API's client precisely onto GM Pay. GM Pay's paid callback
+(TRADE_SUCCESS, MD5-signed) is exactly what `EpayNotify` → `RechargeEpay`
+verifies and credits idempotently (row lock + status check; credits from
+the order row's amount, not the callback's money field).
+
+**Deployment:** compose service `gmpay` (image `gmwallet/epusdt:v2.0.0`,
+pinned by digest 9d2fef82; loopback 127.0.0.1:8000 published, internal
+`gmpay:8000`), SQLite + config persisted under `./data/gmpay` (bind
+-mounted /data). Caddy site block `pay.vantyr.xyz` → `gmpay:8000` (TLS
+auto-issued once the DNS A record exists — Caddy retries; NXDOMAIN until
+then is expected, not an error). Setup performed via the admin API:
+install wizard (app_uri=https://pay.vantyr.xyz), admin password rotated
+to a random value, merchant API key pid=1001 created with
+notify_url=https://vantyr.xyz/api/user/epay/notify. GM Pay credentials
+live ONLY in `/opt/vantyr/deploy/vantyr/.gmpay-secrets` (root 600) and
+the New API options table (`EpayId`/`EpayKey` — admin-visible, like all
+payment keys; never in chat/files).
+
+**Wallets (owner-supplied receive addresses, direct custody):** TRON
+TP66A6…DgiP (TRC20 USDT), Solana BzakFf…AfWE (USDT/USDC), and
+0x1dd5…ed54 for Ethereum/BSC/Polygon (USDT/USDC each; the chain id in
+GM Pay's admin API is `binance` for BSC — a row added as `bsc` does NOT
+serve payments). All non-stable tokens disabled (TRX, SOL, TON, native,
+plasma/ton/aptos entirely). GM Pay v2.0.0 does not support
+AVAX/Arbitrum/Base/Optimism — the owner's EVM address serves
+ERC20+BSC+Polygon; the cashier's network picker only shows chains with
+a registered wallet. `epay.default_currency=usd`,
+`rate.forced_rate_list {"usd":{"usdt":1,"usdc":1}}` (1 USDT = 1 USD;
+chain fees are the customer's), amount_precision 4, min token amount
+10, order expiry 15 min.
+
+**New API options (set directly in the options table; SyncOptions picks
+up within 60s):** `PayAddress` as above, `EpayId`/`EpayKey` = GM Pay
+merchant pid/secret, `Price=1` (USD per unit; was 7.3 CNY-era default),
+`MinTopUp=10`, `PayMethods=[{"name":"Crypto (USDT / USDC)",
+"icon":"SiTether","type":"alipay","min_topup":"10"}]` — the wallet
+renders this as the crypto top-up button (generic pay-method buttons
+auto-POST the signed form to GM Pay; `type=alipay` with no default
+token/network means GM Pay's cashier shows the network picker:
+Tron/Ethereum/Solana/BSC/Polygon × USDT/USDC).
+
+**Stripe test keys CLEARED 2026-10-06:** with open registration, live
+test-mode keys meant anyone could "pay" with public Stripe test cards
+and receive real credit. `StripeApiSecret`/`StripeWebhookSecret`/
+`StripePriceId` emptied until live keys exist (enter via admin UI only,
+never chat). The wallet now shows only the crypto button.
+
+**Evidence:** signature compatibility proven both directions — a
+New-API-style signed form POST to the Epay endpoint → 302 to the
+cashier with a live trade_id; and a full loop through New API's real
+`/api/user/pay` (register → login → pay → GM Pay accepted the exact
+signed params New API produced, pending top_ups row created). Garbage
+callback to `/api/user/epay/notify` rejected with `fail` (signature
+mismatch path works). All test users/orders deleted both sides.
+
+**Remaining at this writing:** DNS A record `pay.vantyr.xyz` →
+85.190.118.190 (owner action, Namecheap; Caddy then finishes the cert
+automatically). After that: one real small USDT payment end-to-end and
+reconciliation of the wallet credit against the usage log (the
+final money-path gate; unpaid orders simply expire after 15 min). The
+`$180 Unlimited Monthly` plan can ride the same rail via
+`/api/subscription/epay/pay` if crypto subscription purchases are
+wanted. GM Pay's Telegram notification bot is unconfigured (optional;
+bot token would go in its admin settings).
+
 ## Known-weak spots (accepted at launch)
 
 - Subscription recurring renewal is manual (native webhook activates

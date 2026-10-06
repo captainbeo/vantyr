@@ -80,6 +80,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # GM Pay (epusdt) — self-hosted crypto top-up gateway (Epay-compatible).
+  # Pinned image; config + SQLite live under ./data/gmpay (bind-mounted /data).
+  gmpay:
+    image: gmwallet/epusdt:v2.0.0
+    container_name: vantyr-gmpay
+    restart: unless-stopped
+    environment:
+      - EPUSDT_CONFIG=/data/.env
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - ./data/gmpay:/data
+    networks:
+      - vantyr
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

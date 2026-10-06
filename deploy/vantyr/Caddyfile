@@ -25,3 +25,14 @@ vantyr.xyz {
         -Server
     }
 }
+
+# GM Pay (epusdt) crypto top-up gateway. Own site block: the cashier is a
+# full hosted page with absolute URLs built from app_uri=https://pay.vantyr.xyz.
+pay.vantyr.xyz {
+    reverse_proxy gmpay:8000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        -Server
+    }
+}
