@@ -1,0 +1,23 @@
+Vantyr self-hosted web fonts (files in this directory)
+======================================================
+
+All font files in this directory are licensed under the SIL Open Font
+License, Version 1.1 (https://openfontlicense.org/open-font-license-official-text/).
+Each file is a subset produced from the upstream Fontsource packages.
+
+Families and copyright:
+- Chakra Petch (chakra-petch-latin-*.woff2)
+  Copyright (c) 2010-2011, Cadson Demak (cadsondemak fonts), with Reserved
+  Font Name "Chakra Petch".
+- IBM Plex Sans (ibm-plex-sans-latin-*.woff2)
+  Copyright (c) 2017 IBM Corp., with Reserved Font Name "IBM Plex Sans".
+- JetBrains Mono (jetbrains-mono-latin-*.woff2)
+  Copyright (c) 2020 JetBrains s.r.o., with Reserved Font Name
+  "JetBrains Mono".
+
+Per the OFL-1.1, these files may be bundled, embedded, and redistributed
+as part of this software; the license text and copyright notices must be
+preserved (this file), and the Reserved Font Names may not be used for
+derived fonts. The full upstream projects, including their complete OFL
+texts, are available at https://fontsource.org/ and the respective
+family pages there.
