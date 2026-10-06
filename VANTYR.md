@@ -66,7 +66,7 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   `git archive` that tag → `deploy/vantyr/static/source/` with a refreshed
   `source-notice.txt` (sha256 + tag + commit), and update the `Footer`
   option (repo link + archive link). Current: tag
-  `deploy/2026-10-05-signin-fix` (commit 3b3da6d07).
+  `deploy/2026-10-06-control-room` (commit 8515a3715).
 - Keep `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` intact in the image
   (upstream Dockerfile already ships them in `/licenses`).
 
@@ -893,3 +893,25 @@ frontend as native theming, not a fork of the page tree:
   `use-oauth-login.ts` (leftover from the same widget patch) was removed
   so `tsgo -b` runs clean.
 
+
+**Control Room frontend deployed (2026-10-06):** the landing + console
+theme redesign shipped to production as image `vantyr/new-api:pinned-next8`
+(997bd7e4558c, built on-server from the patched tree, byte-verified
+against the tag archive before build). AGPL protocol repeated in full:
+`vantyr/main` pushed to public `main` (5 app commits + redaction
+8515a3715), tag `deploy/2026-10-06-control-room` pushed (workflows
+untouched — only PR-triggered ci.yml), source archive
+`vantyr-source-2026-10-06-control-room.tar.gz`
+(sha256 7a47b2ca…47c2, see `static/source/source-notice.txt`) published,
+`Footer` option updated to the new tag/archive links. `HomePageContent`
+cleared so the built-in Control Room landing renders (old markdown
+brief backed up at `backups/homepage-content-2026-10-06.md` on the
+server — restore by setting the option again). Verified live:
+`index.f66045d6df.js` embeds the new landing, CSS
+`index.76dbfc9afe.css` carries the vantyr preset tokens + label-mono,
+Chakra Petch / JetBrains Mono woff2 served 200, home_page_content API
+returns empty, SPA JS + source notice + archive all 200, relay fails
+closed (401 unauthenticated), gateway healthy with no errors in logs,
+pay.vantyr.xyz unaffected. `pinned-next7` retained for instant rollback
+(repoint compose.yaml image, `docker compose up -d --no-build gateway`,
+re-set HomePageContent when reverting the landing).
