@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vantyr — Setup & Pricing Guide</title>
-<meta name="description" content="Set up your Vantyr API key and use Vantyr models in Codex CLI, Claude Code, and any OpenAI-compatible client.">
+<title>Vantyr — Docs</title>
+<meta name="description" content="Connect Claude Code, Codex CLI, Cursor, Windsurf, Cline, Aider, Kilo Code and OpenCode to the Vantyr gateway. Base URLs, keys, and copy-paste config for every agent.">
 <link rel="icon" href="/static/brand/logo.png">
 <link rel="stylesheet" href="fonts.css">
 <style>
@@ -13,11 +13,14 @@
   --surface: oklch(0.19 0.02 255);
   --surface-2: oklch(0.235 0.018 255);
   --border: oklch(0.30 0.02 255);
+  --border-soft: oklch(0.24 0.02 255);
   --ink: oklch(0.93 0.006 255);
   --ink-muted: oklch(0.62 0.015 255);
   --accent: oklch(0.62 0.19 45);
+  --accent-soft: oklch(0.62 0.19 45 / 0.12);
   --accent-ink: oklch(0.15 0.02 255);
   --ok: oklch(0.55 0.14 150);
+  --warn: oklch(0.68 0.13 75);
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Chakra Petch', var(--font-sans);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -28,14 +31,43 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: var(--font-sans); line-height: 1.65; font-size: 16px;
 }
-.wrap { max-width: 980px; margin: 0 auto; padding: 0 20px 96px; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 20px 110px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, pre, .mono { font-family: var(--font-mono); font-size: 0.85em; }
 
+/* ---------- top nav ---------- */
+.topnav {
+  position: sticky; top: 0; z-index: 50; background: oklch(0.155 0.018 255 / 0.92);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--border);
+}
+.topnav .inner {
+  max-width: 1000px; margin: 0 auto; padding: 14px 20px;
+  display: flex; align-items: center; gap: 22px;
+}
+.topnav .brand {
+  font-family: var(--font-display); font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink); font-size: 17px; white-space: nowrap;
+}
+.topnav .brand .tick { color: var(--accent); }
+.topnav .links { display: flex; gap: 18px; flex-wrap: wrap; }
+.topnav .links a {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-muted);
+}
+.topnav .links a:hover { color: var(--accent); text-decoration: none; }
+.topnav .cta {
+  margin-left: auto; font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 4px; padding: 7px 14px;
+  white-space: nowrap;
+}
+.topnav .cta:hover { background: var(--accent); color: var(--accent-ink); text-decoration: none; }
+
+/* ---------- hero ---------- */
 header {
-  border-bottom: 1px solid var(--border); padding: 40px 0 28px;
-  position: relative; overflow: hidden;
+  padding: 72px 0 40px; position: relative; overflow: hidden;
+  border-bottom: 1px solid var(--border);
 }
 header .grid-bg {
   position: absolute; inset: 0; opacity: 0.5; pointer-events: none;
@@ -45,63 +77,150 @@ header .grid-bg {
   mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, black, transparent);
 }
 header .inner { position: relative; }
-.brand {
-  font-family: var(--font-display); font-weight: 600; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--ink); font-size: 22px;
+h1 {
+  font-family: var(--font-display); font-weight: 600; font-size: 40px;
+  line-height: 1.15; letter-spacing: 0.02em; margin: 0 0 12px;
 }
-.brand .tick { color: var(--accent); }
-.tagline {
-  color: var(--ink-muted); margin-top: 6px; font-family: var(--font-mono);
-  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
-}
-nav.toc {
-  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px;
-}
-nav.toc a {
-  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;
+h1 .tick { color: var(--accent); }
+.sub { color: var(--ink-muted); font-size: 18px; max-width: 560px; margin: 0; }
+.hero-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
+.chip {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-muted);
-  border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px;
+  border: 1px solid var(--border); border-radius: 3px; padding: 5px 10px;
 }
-nav.toc a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+.chip.hot { color: var(--accent); border-color: var(--accent); }
 
-section { margin-top: 64px; }
+/* ---------- sections ---------- */
+section { margin-top: 72px; }
 h2 {
   font-family: var(--font-display); font-weight: 600; font-size: 24px;
-  letter-spacing: 0.04em; border-bottom: 1px solid var(--border);
-  padding-bottom: 10px; margin: 0 0 20px;
+  letter-spacing: 0.03em; margin: 0 0 8px;
 }
-h2 .step {
-  color: var(--accent); font-family: var(--font-mono); font-size: 14px;
-  display: block; letter-spacing: 0.12em; margin-bottom: 4px;
-}
-h3 { font-size: 17px; margin: 28px 0 10px; letter-spacing: 0.02em; }
-p { color: var(--ink); margin: 12px 0; }
-p.note, li { color: var(--ink); }
-.muted { color: var(--ink-muted); }
+h2 .tick { color: var(--accent); }
+.sec-sub { color: var(--ink-muted); margin: 0 0 24px; max-width: 640px; }
+h3 { font-size: 16px; margin: 26px 0 10px; letter-spacing: 0.02em; }
+p { margin: 12px 0; }
+.muted { color: var(--ink-muted); font-size: 14px; }
 ul, ol { padding-left: 22px; }
-li { margin: 6px 0; }
+li { margin: 7px 0; }
 
-.card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 6px; padding: 18px 20px; margin: 16px 0;
+/* ---------- step blocks ---------- */
+.step {
+  display: flex; gap: 22px; margin-top: 34px; align-items: flex-start;
 }
+.step .num {
+  font-family: var(--font-display); font-size: 44px; font-weight: 600;
+  color: var(--accent); line-height: 1; min-width: 72px;
+  border-right: 1px solid var(--border); padding-right: 18px; opacity: 0.9;
+}
+.step .body { flex: 1; min-width: 0; }
+.step .body h3 { margin-top: 0; }
+
+/* ---------- base URL cards ---------- */
+.urls { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin: 20px 0; }
+.url-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 20px; position: relative;
+}
+.url-card .tag {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-muted); margin-bottom: 10px;
+}
+.url-card .proto {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+  text-transform: uppercase; margin-bottom: 4px;
+}
+.url-card.anthropic .proto { color: var(--warn); }
+.url-card.openai .proto { color: var(--ok); }
+.url-card .url {
+  font-family: var(--font-mono); font-size: 15px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 4px; padding: 10px 44px 10px 12px; position: relative;
+  word-break: break-all; margin-top: 8px;
+}
+.copy-btn {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  background: var(--surface); color: var(--ink-muted);
+  border: 1px solid var(--border-soft); border-radius: 4px;
+  padding: 5px 10px; cursor: pointer; font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.copy-btn.done { color: var(--ok); border-color: var(--ok); }
+.url-card .hint { font-size: 13px; color: var(--ink-muted); margin: 10px 0 0; }
+
+/* ---------- agent grid ---------- */
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 20px 0; }
+.agent-card {
+  display: block; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px 18px; color: var(--ink);
+}
+.agent-card:hover { border-color: var(--accent); text-decoration: none; }
+.agent-card .name { font-weight: 600; font-size: 15px; }
+.agent-card .kind {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-muted); margin-top: 5px;
+}
+.agent-card .arrow { color: var(--accent); float: right; font-family: var(--font-mono); }
+
+/* ---------- tabs ---------- */
+.tabs {
+  display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border);
+  margin: 18px 0 0; padding-bottom: 0;
+}
+.tab {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-muted); background: transparent;
+  border: 1px solid transparent; border-bottom: none; cursor: pointer;
+  padding: 9px 14px; border-radius: 5px 5px 0 0; position: relative; top: 1px;
+}
+.tab:hover { color: var(--ink); }
+.tab.active {
+  color: var(--accent); background: var(--surface);
+  border-color: var(--border); border-bottom: 1px solid var(--surface);
+}
+.tabpanel { display: none; }
+.tabpanel.active { display: block; }
+.panel-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-top: none; border-radius: 0 0 6px 6px; padding: 18px 20px;
+}
+
+/* ---------- code blocks with copy ---------- */
+pre {
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 16px; overflow-x: auto; margin: 14px 0;
+  line-height: 1.55; font-size: 13px; position: relative;
+}
+pre .cm { color: var(--ink-muted); }
+pre .copy-btn {
+  position: absolute; top: 8px; right: 8px; transform: none;
+  opacity: 0; transition: opacity 0.15s;
+}
+pre:hover .copy-btn { opacity: 1; }
+pre .copy-btn:focus-visible { opacity: 1; }
+@media (hover: none) { pre .copy-btn { opacity: 0.7; } }
+.copy-hint {
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);
+  text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;
+}
+.kv {
+  display: grid; grid-template-columns: 150px 1fr; gap: 4px 14px;
+  font-family: var(--font-mono); font-size: 13px; margin: 12px 0;
+}
+.kv .k { color: var(--ink-muted); }
+.kv .v { color: var(--ink); word-break: break-all; }
+
 .callout {
   border-left: 3px solid var(--accent); background: var(--surface);
   padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0;
+  font-size: 15px;
 }
-.callout.warn { border-left-color: var(--warning, #d97706); }
+.callout.warn { border-left-color: var(--warn); }
+.callout p { margin: 0; }
 
-pre {
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 16px; overflow-x: auto; margin: 12px 0;
-  line-height: 1.55; font-size: 13px;
-}
-pre .cm { color: var(--ink-muted); }
-.copy-hint {
-  font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);
-  text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;
-}
-
+/* ---------- pricing table ---------- */
 table {
   width: 100%; border-collapse: collapse; margin: 16px 0;
   font-size: 14px; background: var(--surface);
@@ -113,110 +232,243 @@ th {
 }
 td.num, th.num { text-align: right; font-family: var(--font-mono); }
 tr:hover td { background: oklch(0.21 0.02 255); }
-.tag {
+.pill {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
   text-transform: uppercase; border: 1px solid var(--border);
   border-radius: 3px; padding: 2px 6px; color: var(--ink-muted); white-space: nowrap;
 }
-.tag.hit { color: var(--accent); border-color: var(--accent); }
+.pill.hot { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- troubleshooting ---------- */
+.err-box { margin: 14px 0; }
+.err-box dt {
+  font-family: var(--font-mono); font-size: 13px; color: var(--warn);
+  margin-top: 14px;
+}
+.err-box dd { margin: 4px 0 0; color: var(--ink); }
 
 footer {
-  margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border);
+  margin-top: 90px; padding-top: 24px; border-top: 1px solid var(--border);
   color: var(--ink-muted); font-size: 13px; font-family: var(--font-mono);
+  display: flex; flex-wrap: wrap; gap: 14px;
 }
 footer a { color: var(--ink-muted); }
 footer a:hover { color: var(--accent); }
+footer .right { margin-left: auto; }
+
 @media (max-width: 640px) {
-  .wrap { padding: 0 14px 64px; }
+  .wrap { padding: 0 14px 80px; }
+  h1 { font-size: 30px; }
+  .step { gap: 14px; }
+  .step .num { min-width: 50px; font-size: 32px; padding-right: 12px; }
+  .kv { grid-template-columns: 110px 1fr; }
   table { font-size: 12px; }
   th, td { padding: 7px 8px; }
+  .topnav .links { display: none; }
 }
 </style>
 </head>
 <body>
+
+<nav class="topnav">
+  <div class="inner">
+    <div class="brand">VANTYR<span class="tick">//</span></div>
+    <div class="links">
+      <a href="#base-urls">Base URLs</a>
+      <a href="#agents">Agents</a>
+      <a href="#setup">Setup</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#payments">Payments</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <a class="cta" href="https://vantyr.xyz/console">Open Console</a>
+  </div>
+</nav>
+
 <div class="wrap">
 
 <header>
   <div class="grid-bg"></div>
   <div class="inner">
-    <div class="brand">VANTYR<span class="tick">//</span>SETUP</div>
-    <div class="tagline">Setup &amp; pricing guide — vantyr.xyz</div>
-    <nav class="toc">
-      <a href="#quickstart">Quickstart</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#codex">Codex CLI</a>
-      <a href="#claude-code">Claude Code</a>
-      <a href="#openai">Other clients</a>
-      <a href="#payments">Payments</a>
-      <a href="#faq">FAQ</a>
-    </nav>
+    <h1>One key.<br>Every agent<span class="tick">.</span></h1>
+    <p class="sub">Vantyr is one gateway for Claude, GPT and open models — plug the same API key into Claude Code, Codex, Cursor, Windsurf, Cline, Aider, Kilo Code, OpenCode, or any OpenAI-compatible client.</p>
+    <div class="hero-chips">
+      <span class="chip hot">8 agent guides</span>
+      <span class="chip">OpenAI + Anthropic compatible</span>
+      <span class="chip">from $0.02 / 1M tokens</span>
+      <span class="chip">crypto top-up from $1</span>
+    </div>
   </div>
 </header>
 
-<section id="quickstart">
-  <h2><span class="step">// 00</span>Quickstart — four steps to your first request</h2>
-  <ol>
-    <li><strong>Create an account</strong> at <a href="https://vantyr.xyz">vantyr.xyz</a>. Registration is free and takes a minute; email verification is not required to start.</li>
-    <li><strong>Top up your wallet</strong> from the Wallet page — pay with crypto (USDT/USDC over 8 networks; minimum $1). Credit lands in your account automatically once the transaction confirms.</li>
-    <li><strong>Create an API key</strong> from the Keys page. The full key is shown once — copy it then. You can set a quota ceiling, expiry, and restrict which models the key may call.</li>
-    <li><strong>Point your client at Vantyr</strong> — base URL <span class="mono">https://vantyr.xyz/v1</span> with your key as the API token. Sections below show the exact config for Codex CLI, Claude Code, and generic OpenAI-compatible clients.</li>
-  </ol>
+<section id="base-urls">
+  <h2>Base URLs<span class="tick">//</span> two protocols, one key</h2>
+  <p class="sec-sub">Every Vantyr model works over both protocols with the same <span class="mono">sk-</span> key. Pick the URL that matches your client — the difference is only the <span class="mono">/v1</span> suffix.</p>
+  <div class="urls">
+    <div class="url-card anthropic">
+      <div class="proto">Anthropic-compatible</div>
+      <div class="tag">for Claude Code · Anthropic SDK</div>
+      <div class="url">https://vantyr.xyz
+        <button class="copy-btn" data-copy="https://vantyr.xyz">Copy</button>
+      </div>
+      <p class="hint">No <span class="mono">/v1</span> suffix. Use with <span class="mono">x-api-key</span> header or <span class="mono">ANTHROPIC_BASE_URL</span>. Requests hit <span class="mono">/v1/messages</span> under the hood.</p>
+    </div>
+    <div class="url-card openai">
+      <div class="proto">OpenAI-compatible</div>
+      <div class="tag">for Codex CLI · OpenAI SDK · agents</div>
+      <div class="url">https://vantyr.xyz/v1
+        <button class="copy-btn" data-copy="https://vantyr.xyz/v1">Copy</button>
+      </div>
+      <p class="hint">With <span class="mono">/v1</span>. Serves <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/models</span>. Bearer token auth.</p>
+    </div>
+  </div>
   <div class="callout">
-    Everything on the <a href="https://vantyr.xyz/pricing">Pricing page</a> is generated from live configuration: what you see there is exactly what you are billed — no hidden fees, no per-key surcharges. Wallet balance is consumed per request as tokens flow; nothing is charged for failed requests.
+    <p><strong>Why two URLs?</strong> Anthropic's protocol expects the base to be the server root (it appends <span class="mono">/v1/messages</span> itself), while OpenAI tools expect the versioned root. Same key, same models, same billing on both.</p>
+  </div>
+  <p>Your key: create one in the console at <a href="https://vantyr.xyz/console">Keys</a>. It is shown once — copy it then. The key works on both URLs.</p>
+</section>
+
+<section id="agents">
+  <h2>Agents<span class="tick">//</span> works with your tool</h2>
+  <p class="sec-sub">Guides with copy-paste config for each client. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> lists every model ID you can use.</p>
+  <div class="agents">
+    <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Anthropic native</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses wire</div></a>
+    <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">via extension</div></a>
+    <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">via extension</div></a>
+    <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI compatible</div></a>
+    <a class="agent-card" href="#agent-aider"><span class="arrow">→</span><div class="name">Aider</div><div class="kind">env vars</div></a>
+    <a class="agent-card" href="#agent-kilocode"><span class="arrow">→</span><div class="name">Kilo Code</div><div class="kind">provider config</div></a>
+    <a class="agent-card" href="#agent-opencode"><span class="arrow">→</span><div class="name">OpenCode</div><div class="kind">provider config</div></a>
+  </div>
+  <p class="muted">Something else? Any client that accepts a custom OpenAI-compatible base URL works with <span class="mono">https://vantyr.xyz/v1</span> + your key — see <a href="#agent-generic">generic clients</a>.</p>
+</section>
+
+<section id="setup">
+  <h2>Setup<span class="tick">//</span> three steps, five minutes</h2>
+
+  <div class="step">
+    <div class="num">01</div>
+    <div class="body">
+      <h3>Create an account and top up</h3>
+      <p>Register at <a href="https://vantyr.xyz">vantyr.xyz</a> (free; a Cloudflare captcha keeps the bots out). Top up your wallet from the Wallet page with USDT or USDC on 8 networks — minimum $1, credit lands in 1–3 minutes after the transaction confirms.</p>
+      <p class="muted">Wallet balance is consumed per token as requests run. Failed requests are refunded automatically — you never pay for a response you didn't get.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">02</div>
+    <div class="body">
+      <h3>Create a key and paste the config</h3>
+      <p>Keys page → Add Key. Give it a name, optionally a quota ceiling or model restriction. The full <span class="mono">sk-…</span> value appears once — copy it. Then pick your agent below:</p>
+      <div class="tabs" id="setup-tabs">
+        <button class="tab active" data-panel="t-claude">Claude Code</button>
+        <button class="tab" data-panel="t-codex">Codex CLI</button>
+        <button class="tab" data-panel="t-cline">Cline / Kilo</button>
+        <button class="tab" data-panel="t-cursor">Cursor / Windsurf</button>
+        <button class="tab" data-panel="t-other">Something else</button>
+      </div>
+      <div class="tabpanel active" id="t-claude"><div class="panel-box">
+        <div class="copy-hint">~/.claude/settings.json (or PowerShell env vars)</div>
+        <pre>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
+    "ANTHROPIC_AUTH_TOKEN": "sk-your-vantyr-key"
+  }
+}</pre>
+      </div></div>
+      <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <div class="copy-hint">~/.codex/config.toml — provider block</div>
+        <pre>model_provider = "vantyr"
+model = "claude-sonnet-5"
+
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+env_key = "VANTYR_API_KEY"
+supports_websockets = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+        <div class="copy-hint">then</div>
+        <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
+codex</pre>
+      </div></div>
+      <div class="tabpanel" id="t-cline"><div class="panel-box">
+        <div class="copy-hint">Cline / Kilo Code provider settings</div>
+        <div class="kv">
+          <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+          <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
+          <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+          <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
+        </div>
+      </div></div>
+      <div class="tabpanel" id="t-cursor"><div class="panel-box">
+        <p>Cursor's and Windsurf's own agents can't take a custom base URL — install the Cline or Kilo Code extension inside the editor and point it at Vantyr (exact steps in the <a href="#agents">agent guides</a> below).</p>
+      </div></div>
+      <div class="tabpanel" id="t-other"><div class="panel-box">
+        <p>Any OpenAI-compatible client: base URL <span class="mono">https://vantyr.xyz/v1</span>, Bearer auth with your key. Anthropic-native clients: base URL <span class="mono">https://vantyr.xyz</span> with <span class="mono">x-api-key</span>. See <a href="#agent-generic">generic client snippets</a>.</p>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">03</div>
+    <div class="body">
+      <h3>Test it</h3>
+      <div class="tabs">
+        <button class="tab active" data-panel="t-test-nix">macOS / Linux</button>
+        <button class="tab" data-panel="t-test-win">Windows PowerShell</button>
+      </div>
+      <div class="tabpanel active" id="t-test-nix"><div class="panel-box">
+        <pre>curl https://vantyr.xyz/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-vantyr-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hello vantyr"}]}'</pre>
+      </div></div>
+      <div class="tabpanel" id="t-test-win"><div class="panel-box">
+        <pre>curl.exe https://vantyr.xyz/v1/chat/completions `
+  -H "Authorization: Bearer sk-your-vantyr-key" `
+  -H "Content-Type: application/json" `
+  -d '{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hello vantyr\"}]}'</pre>
+      </div></div>
+      <p>A JSON response with <span class="mono">"content": "..."</span> means you're live. Something wrong? <a href="#troubleshooting">Troubleshooting</a>.</p>
+    </div>
   </div>
 </section>
 
-<section id="pricing">
-  <h2><span class="step">// 01</span>Pricing — how you are billed</h2>
-  <p>Vantyr bills per token, in US dollars, per million tokens (1M). Input and output tokens are priced separately: the <em>input</em> rate applies to your prompt and context; the <em>output</em> rate (typically several times higher) applies to the model's reply. Cached/repeated prompt segments are billed at the discounted cache rate shown on the pricing page. When a request fails upstream, the held amount is refunded automatically — you are never charged for a response you didn't get.</p>
+<section id="guides">
+  <h2>Agent guides<span class="tick">//</span> exact config per tool</h2>
+  <p class="sec-sub">Every block has a copy button. Replace <span class="mono">sk-your-vantyr-key</span> with your real key. In all configs the model ID is your choice from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — examples use <span class="mono">claude-sonnet-5</span> (value pick) and <span class="mono">gpt-6-astra</span>.</p>
 
-  <h3>Current models &amp; rates (per 1M tokens)</h3>
-  <table>
-    <thead><tr>
-      <th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th class="num">Min top-up</th><th>Notes</th>
-    </tr></thead>
-    <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$2.50</td><td class="num">$12.50</td><td class="num">$0.25</td><td class="num">$1</td><td><span class="tag hit">flagship</span> strongest reasoning</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$2.50</td><td class="num">$12.50</td><td class="num">$0.06</td><td class="num">$1</td><td><span class="tag hit">latest</span> newest Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td class="num">$1</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td class="num">$1</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td class="num">$1</td><td><span class="tag">value</span> everyday workhorse</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td class="num">$1</td><td><span class="tag">value</span></td></tr>
-      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td class="num">$1</td><td><span class="tag">cheap</span> high-volume</td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td class="num">$1</td><td><span class="tag">cheap</span></td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td class="num">$1</td><td>mid-tier reasoning</td></tr>
-    </tbody>
-  </table>
-  <p class="muted">Rates are live configuration — always verify on the <a href="https://vantyr.xyz/pricing">pricing page</a>, which reflects any change immediately. The table above reflects the configuration as of 2026-10-06.</p>
+  <div id="agent-claude-code">
+    <h3>Claude Code</h3>
+    <p>Anthropic's terminal coding agent. Vantyr serves the native Anthropic protocol, so Claude Code needs only environment settings.</p>
+    <div class="copy-hint">Install (Node 18+)</div>
+    <pre>npm install -g @anthropic-ai/claude-code</pre>
+    <div class="copy-hint">Global config — ~/.claude/settings.json (applies to every project)</div>
+    <pre>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
+    "ANTHROPIC_AUTH_TOKEN": "sk-your-vantyr-key"
+  }
+}</pre>
+    <div class="copy-hint">…or per-shell environment variables</div>
+    <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"      <span class="cm"># no /v1</span>
+export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
+    <p>Run <span class="mono">claude</span> in your project directory. Pick a model with <span class="mono">claude /model claude-sonnet-5</span>.</p>
+    <div class="callout warn"><p>Use <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (bearer), not <span class="mono">ANTHROPIC_API_KEY</span>. The gateway auths with a bearer token, and the AUTH_TOKEN form maps directly onto it.</p></div>
+  </div>
 
-  <h3>Worked example</h3>
-  <p>A typical coding session on <span class="mono">claude-sonnet-5</span> that sends 30k input tokens and receives 5k output tokens costs: 30,000 × $0.26/1M + 5,000 × $1.30/1M = <strong>about $0.014</strong>. A month of heavy daily use lands in single-digit dollars.</p>
-
-  <h3>Wallet mechanics</h3>
-  <ul>
-    <li>Wallet balance is in US dollars. Requests pre-authorize a small hold, then settle to actual token usage; the difference is returned immediately.</li>
-    <li>Set per-key quota limits on the Keys page to cap spend per key — useful for automation or shared team keys.</li>
-    <li>When the balance hits zero, requests stop before reaching the model — no surprise overdraft.</li>
-  </ul>
-</section>
-
-<section id="codex">
-  <h2><span class="step">// 02</span>Codex CLI setup</h2>
-  <p>Codex CLI talks to Vantyr through the OpenAI Responses wire API. Two environment items: your key, and a provider entry pointing Codex at Vantyr.</p>
-
-  <h3>1. Put your key in an environment variable</h3>
-  <div class="copy-hint">PowerShell (persistent)</div>
-  <pre>[Environment]::SetEnvironmentVariable('VANTYR_API_KEY', 'sk-your-vantyr-key', 'User')</pre>
-  <div class="copy-hint">macOS / Linux (persistent)</div>
-  <pre>echo 'export VANTYR_API_KEY="sk-your-vantyr-key"' >> ~/.zshrc   <span class="cm"># or ~/.bashrc</span>
-source ~/.zshrc</pre>
-
-  <h3>2. Add the Vantyr provider to your Codex config</h3>
-  <p>Edit <span class="mono">%USERPROFILE%\.codex\config.toml</span> (Windows) or <span class="mono">~/.codex/config.toml</span> (macOS/Linux) and add:</p>
-  <pre><span class="cm"># Use Vantyr as the model provider</span>
-model_provider = "vantyr"
+  <div id="agent-codex">
+    <h3>Codex CLI</h3>
+    <p>OpenAI's terminal agent. Codex talks the Responses wire API and takes a provider entry in its config.</p>
+    <div class="copy-hint">Install</div>
+    <pre>npm install -g @openai/codex</pre>
+    <div class="copy-hint">~/.codex/config.toml — add the Vantyr provider</div>
+    <pre>model_provider = "vantyr"
 model = "claude-fable-5"
-review_model = "claude-fable-5"
+review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
 disable_response_storage = true
 
@@ -229,38 +481,140 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-  <div class="callout warn">
-    Keep the display <span class="mono">name = "OpenAI"</span> exactly as shown — Codex's compaction feature keys off that value. The provider ID (<span class="mono">vantyr</span>) is what you select; the name is a Codex internal signal.
+    <div class="copy-hint">Key in the environment</div>
+    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+[Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
+    <div class="callout"><p>Keep <span class="mono">name = "OpenAI"</span> exactly — Codex's remote compaction keys off that display name. The provider ID (<span class="mono">vantyr</span>) is what your <span class="mono">model_provider</span> selects. If you also use Codex with an OpenAI account, the two configs coexist — the provider block only routes Vantyr traffic.</p></div>
   </div>
-  <p>Pick any model from the pricing table as your <span class="mono">model</span>. For long coding sessions, <span class="mono">claude-sonnet-5</span> is the value choice; <span class="mono">claude-fable-5</span> for the hardest problems.</p>
 
-  <h3>3. Run it</h3>
-  <pre>codex "explain the build error in src/main.rs"</pre>
-  <p>If you previously logged in to Codex with a ChatGPT account, that session is unaffected — the provider entry routes only Vantyr traffic; OpenAI traffic still uses your OpenAI auth. Never paste your key into <span class="mono">auth.json</span> or commit it to a repository.</p>
-</section>
-
-<section id="claude-code">
-  <h2><span class="step">// 03</span>Claude Code setup</h2>
-  <p>Claude Code routes through standard Anthropic environment variables:</p>
-  <div class="copy-hint">macOS / Linux</div>
-  <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"
-export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
-  <div class="copy-hint">Windows PowerShell</div>
-  <pre>[Environment]::SetEnvironmentVariable('ANTHROPIC_BASE_URL','https://vantyr.xyz','User')
-[Environment]::SetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN','sk-your-vantyr-key','User')</pre>
-  <p>Then start Claude Code normally. Set the model with <span class="mono">claude /model claude-sonnet-5</span> or <span class="mono">claude --model claude-fable-5</span>.</p>
-  <div class="callout">
-    Prefer the <span class="mono">ANTHROPIC_AUTH_TOKEN</span> form (bearer token) as shown above — it maps directly to how Vantyr authenticates requests.
+  <div id="agent-cursor">
+    <h3>Cursor</h3>
+    <p>Cursor's own agent models can't be pointed at a custom gateway — the reliable path is running an OpenAI-compatible extension <em>inside</em> Cursor. Only the extension's traffic bills to your Vantyr wallet; Cursor's chat and Tab keep using Cursor's models.</p>
+    <div class="copy-hint">Install Cline inside Cursor (integrated terminal)</div>
+    <pre>code --install-extension saoudrizwan.claude-dev</pre>
+    <p>Or install <a href="#agent-kilocode">Kilo Code</a> the same way. Then open the extension's settings and enter:</p>
+    <div class="kv">
+      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
+    </div>
+    <div class="callout"><p>Model metadata (context window, prices) in extension settings is display-only; edit it to match the <a href="#pricing">real Vantyr prices</a> if you want accurate cost estimates in the UI. Billing is always server-side from live token counts.</p></div>
   </div>
-</section>
 
-<section id="openai">
-  <h2><span class="step">// 04</span>Any OpenAI-compatible client</h2>
-  <p>Point the client at the Vantyr base URL and use your key as the API key:</p>
-  <div class="copy-hint">Base URL</div>
-  <pre>https://vantyr.xyz/v1</pre>
-  <div class="copy-hint">Python (openai SDK)</div>
-  <pre>from openai import OpenAI
+  <div id="agent-windsurf">
+    <h3>Windsurf</h3>
+    <p>Same pattern as Cursor: Cascade (Windsurf's agent) doesn't expose a custom base URL, so run Cline or Kilo Code as an extension inside Windsurf. Cascade keeps running on Windsurf's own credits.</p>
+    <div class="copy-hint">Install Cline inside Windsurf (integrated terminal)</div>
+    <pre>code --install-extension saoudrizwan.claude-dev</pre>
+    <p>Extension settings — identical values:</p>
+    <div class="kv">
+      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
+    </div>
+  </div>
+
+  <div id="agent-cline">
+    <h3>Cline</h3>
+    <p>Cline is an open-source agent extension for VS Code (also the recommended path inside Cursor and Windsurf).</p>
+    <div class="copy-hint">Install (VS Code)</div>
+    <pre>code --install-extension saoudrizwan.claude-dev</pre>
+    <p>Open the Cline panel → gear icon → provider settings:</p>
+    <div class="kv">
+      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
+    </div>
+    <p>After entering values, click <strong>Verify</strong> in the extension: "Invalid API Key" means a typo in the key; "Model Not Found" means the model ID isn't one Vantyr serves — check the <a href="https://vantyr.xyz/pricing">Model Overview</a> for exact IDs.</p>
+    <p class="muted">Recommended model metadata for claude-sonnet-5: context window 200000, max output 16384, input $0.26/1M, output $1.30/1M (see the <a href="#pricing">table</a>).</p>
+  </div>
+
+  <div id="agent-aider">
+    <h3>Aider</h3>
+    <p>Aider reads the standard OpenAI environment variables, so it needs no config file.</p>
+    <div class="copy-hint">Install (Python 3.9+)</div>
+    <pre>python -m pip install aider-install &amp;&amp; aider-install</pre>
+    <div class="copy-hint">Point it at Vantyr — macOS / Linux</div>
+    <pre>export OPENAI_API_BASE="https://vantyr.xyz/v1"
+export OPENAI_API_KEY="sk-your-vantyr-key"</pre>
+    <div class="copy-hint">Windows PowerShell (restart shell after)</div>
+    <pre>setx OPENAI_API_BASE "https://vantyr.xyz/v1"
+setx OPENAI_API_KEY "sk-your-vantyr-key"</pre>
+    <div class="copy-hint">Run in a repo</div>
+    <pre>aider --model openai/claude-sonnet-5</pre>
+    <div class="callout"><p>The <span class="mono">openai/</span> prefix tells Aider to use its OpenAI-compatible client instead of looking the model up in its built-in list. A "model not in metadata" warning is cosmetic — the request still routes through Vantyr.</p></div>
+  </div>
+
+  <div id="agent-kilocode">
+    <h3>Kilo Code</h3>
+    <p>Kilo Code can run as a VS Code extension or a standalone CLI, sharing the same provider config. Add Vantyr as a custom provider:</p>
+    <div class="copy-hint">Install</div>
+    <pre>code --install-extension kilocode.kilo-code   <span class="cm"># VS Code extension</span>
+npm install -g @kilocode/cli                    <span class="cm"># or standalone CLI</span></pre>
+    <div class="copy-hint">Provider config (~/.config/kilo/kilo.json, or Settings → Providers → Custom provider in the UI)</div>
+    <pre>{
+  "providers": {
+    "vantyr": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Vantyr Gateway",
+      "options": {
+        "baseURL": "https://vantyr.xyz/v1",
+        "apiKey": "{env:VANTYR_API_KEY}"
+      },
+      "models": {
+        "claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "gpt-6-astra": { "name": "GPT-6 Astra" },
+        "claude-fable-5": { "name": "Claude Fable 5" }
+      },
+      "defaultModel": "vantyr/claude-sonnet-5"
+    }
+  }
+}</pre>
+    <div class="copy-hint">Run</div>
+    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
+kilo
+<span class="cm"># inside Kilo: /models  →  select vantyr/claude-sonnet-5</span></pre>
+    <div class="callout warn"><p>The <span class="mono">{env:VANTYR_API_KEY}</span> form resolves only from trusted global config — keep the real key out of committed project files.</p></div>
+  </div>
+
+  <div id="agent-opencode">
+    <h3>OpenCode</h3>
+    <p>OpenCode merges a global config with a project-level <span class="mono">opencode.json</span>. Add Vantyr as an OpenAI-compatible provider:</p>
+    <div class="copy-hint">Install</div>
+    <pre>curl -fsSL https://opencode.ai/install | bash</pre>
+    <div class="copy-hint">~/.config/opencode/opencode.json</div>
+    <pre>{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vantyr": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Vantyr Gateway",
+      "options": {
+        "baseURL": "https://vantyr.xyz/v1",
+        "apiKey": "{env:VANTYR_API_KEY}"
+      },
+      "models": {
+        "claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "gpt-6-astra": { "name": "GPT-6 Astra" }
+      }
+    }
+  }
+}</pre>
+    <div class="copy-hint">Run</div>
+    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
+cd /path/to/project
+opencode
+<span class="cm"># in the TUI: /models  →  vantyr/claude-sonnet-5</span></pre>
+  </div>
+
+  <div id="agent-generic">
+    <h3>Any other OpenAI-compatible client</h3>
+    <div class="copy-hint">Python (openai SDK)</div>
+    <pre>from openai import OpenAI
+
 client = OpenAI(
     base_url="https://vantyr.xyz/v1",
     api_key="sk-your-vantyr-key",
@@ -270,45 +624,154 @@ resp = client.chat.completions.create(
     messages=[{"role": "user", "content": "hello vantyr"}],
 )
 print(resp.choices[0].message.content)</pre>
-  <div class="copy-hint">curl</div>
-  <pre>curl https://vantyr.xyz/v1/chat/completions \
+    <div class="copy-hint">curl</div>
+    <pre>curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-your-vantyr-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hello"}]}'</pre>
-  <p>Supported endpoints: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span> (Anthropic), and <span class="mono">/v1/models</span>. For Anthropic-native clients, use base URL <span class="mono">https://vantyr.xyz</span> with the <span class="mono">x-api-key</span> header instead.</p>
+    <p>Anthropic-native SDKs: base URL <span class="mono">https://vantyr.xyz</span>, header <span class="mono">x-api-key</span>. Supported endpoints: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span>, <span class="mono">/v1/models</span>.</p>
+  </div>
 </section>
 
-<section id="payments">
-  <h2><span class="step">// 05</span>Payments — crypto top-up</h2>
+<section id="pricing">
+  <h2>Pricing<span class="tick">//</span> per-token, no minimums</h2>
+  <p class="sec-sub">Prices in USD per 1M tokens; input and output billed separately; cached prompt segments at the discount rate. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> is generated from live configuration and is always authoritative.</p>
+  <table>
+    <thead><tr>
+      <th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th>Best for</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$2.50</td><td class="num">$12.50</td><td class="num">$0.25</td><td><span class="pill hot">flagship</span> hardest problems</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$2.50</td><td class="num">$12.50</td><td class="num">$0.06</td><td><span class="pill hot">latest</span> newest Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td>balanced flagship</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>balanced flagship</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span> everyday coding</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span></td></tr>
+      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td><span class="pill">cheap</span> high volume</td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td><span class="pill">cheap</span></td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td>mid-tier reasoning</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">Table reflects live configuration as of 2026-10-07.</p>
+  <p><strong>Worked example:</strong> a coding session on <span class="mono">claude-sonnet-5</span> sending 30k input + 5k output tokens costs about <strong>$0.014</strong>. A month of heavy daily use lands in single-digit dollars.</p>
   <ul>
-    <li>Top-ups are in USDT/USDC, priced 1:1 against the dollar, over 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, and Aptos.</li>
-    <li>Minimum top-up is <strong>$1</strong>. There is no maximum.</li>
-    <li>After you click Top Up, you get a payment address and amount — send exactly that amount from your wallet. Credit is applied automatically when the network confirms (usually 1–3 minutes; TON can take a little longer).</li>
-    <li>If your payment is stuck (sent but not credited after 30 minutes), note the transaction hash and contact support — the payment gateway records every order and it can be reconciled manually.</li>
-    <li>Wallet credit never expires. Top-up amounts are final once confirmed; see the Terms for the refund policy on unused balance.</li>
+    <li>Requests pre-authorize a small hold, then settle to actual usage — the difference returns immediately.</li>
+    <li>Upstream-failed requests are refunded automatically; zero charge for a response you didn't get.</li>
+    <li>Per-key quota ceilings (Keys page) cap spend per key — useful for automation or shared keys.</li>
+    <li>Balance hits zero → requests stop before reaching the model. No overdraft.</li>
   </ul>
 </section>
 
+<section id="payments">
+  <h2>Payments<span class="tick">//</span> crypto top-up</h2>
+  <ul>
+    <li>USDT / USDC at 1:1 against the dollar, on 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
+    <li>Minimum top-up <strong>$1</strong>, no maximum. Wallet credit never expires.</li>
+    <li>After clicking Top Up you get an address and exact amount — send exactly that amount. Credit lands automatically on network confirmation (typically 1–3 minutes; TON can take longer).</li>
+    <li>Payment stuck (sent but not credited after 30 minutes)? Note the transaction hash and contact support — every order is recorded and can be reconciled manually.</li>
+  </ul>
+</section>
+
+<section id="troubleshooting">
+  <h2>Troubleshooting<span class="tick">//</span> common failures</h2>
+  <dl class="err-box">
+    <dt>401 Invalid API key</dt>
+    <dd>The key is wrong or mistyped. Keys are shown once at creation — if you lost it, create a new one in the console. Also check the right env var is set for your agent (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, or <span class="mono">OPENAI_API_KEY</span> depending on the tool).</dd>
+    <dt>404 / Not Found</dt>
+    <dd>Almost always the wrong base URL — Anthropic clients need <span class="mono">https://vantyr.xyz</span> (no <span class="mono">/v1</span>), OpenAI clients need <span class="mono">https://vantyr.xyz/v1</span>. Check both cards at the <a href="#base-urls">top of this page</a>.</dd>
+    <dt>Model not found / no channel available</dt>
+    <dd>The model ID doesn't match. Use exact IDs from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — e.g. <span class="mono">claude-sonnet-5</span>, not <span class="mono">claude-sonnet</span>. Also check the model isn't restricted on your key (Keys page → model limits).</dd>
+    <dt>Insufficient quota / balance</dt>
+    <dd>Wallet empty or the key hit its quota ceiling. Top up at the Wallet page, or raise/remove the key's quota limit.</dd>
+    <dt>Stream disconnected mid-response</dt>
+    <dd>Rare upstream hiccup. Your key was not charged for the failed portion (failed requests auto-refund). Retry the turn; if it repeats, check the <a href="https://vantyr.xyz">status banner</a> or contact support.</dd>
+  </dl>
+</section>
+
 <section id="faq">
-  <h2><span class="step">// 06</span>FAQ</h2>
+  <h2>FAQ<span class="tick">//</span></h2>
   <h3>Where do I see my usage and spend?</h3>
-  <p>The Usage page in the console shows every request: model, input/output tokens, and the amount billed. The Wallet page shows balance and top-up history.</p>
-  <h3>My key was rejected — what's wrong?</h3>
-  <p>Check the key is the full <span class="mono">sk-…</span> value (Keys page shows it masked; recreate if you lost it), that it hasn't expired or hit its quota ceiling, and that your wallet balance isn't zero. The error response always states which of these it is.</p>
+  <p>Usage page in the console: every request with model, tokens, and amount billed. Wallet page: balance and top-up history.</p>
   <h3>Which model should I pick?</h3>
-  <p><span class="mono">claude-sonnet-5</span> for most coding and chat (best quality per dollar); <span class="mono">claude-fable-5</span> when the task is genuinely hard; <span class="mono">gpt-5-6-luna</span> or <span class="mono">gpt-6-sol</span> when volume matters more than peak quality.</p>
-  <h3>Do you support function calling / tool use / streaming?</h3>
-  <p>Yes — all standard client features (streaming, tools, structured outputs) pass through unchanged on every model.</p>
+  <p><span class="mono">claude-sonnet-5</span> for most coding and chat (best quality per dollar); <span class="mono">claude-fable-5</span> when the task is genuinely hard; <span class="mono">gpt-5-6-luna</span> or <span class="mono">gpt-6-sol</span> when volume beats peak quality.</p>
+  <h3>Do you support streaming / tools / structured output?</h3>
+  <p>Yes — all standard client features pass through on every model: SSE streaming, tool calling, structured outputs, prompt caching.</p>
   <h3>Is my data used for training?</h3>
-  <p>Vantyr is a relay: your prompts and completions are forwarded to the upstream model provider and logged only as billing metadata (token counts, model, timestamp) — never message content.</p>
+  <p>Vantyr is a relay: prompts and completions are forwarded to the upstream provider and logged only as billing metadata (token counts, model, timestamp) — never message content.</p>
+  <h3>Can I use one key across many tools?</h3>
+  <p>Yes — the same key works on both base URLs in any number of clients. For separating budgets, create one key per tool and set a quota ceiling on each.</p>
 </section>
 
 <footer>
-  VANTYR // control room — <a href="https://vantyr.xyz">vantyr.xyz</a> ·
-  <a href="https://vantyr.xyz/pricing">pricing</a> ·
+  <span>VANTYR// control room</span>
+  <a href="https://vantyr.xyz">vantyr.xyz</a>
+  <a href="https://vantyr.xyz/pricing">models &amp; pricing</a>
   <a href="https://github.com/captainbeo/vantyr">source (AGPL)</a>
+  <span class="right">docs rev 2026-10-07</span>
 </footer>
 
 </div>
+
+<script>
+// Tabs: each .tab toggles its data-panel; siblings share the .tabs parent.
+document.querySelectorAll('.tabs').forEach(function(group) {
+  group.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      group.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      var want = tab.getAttribute('data-panel');
+      // panels for this group are the .tabpanel elements that follow it
+      var el = group.nextElementSibling;
+      while (el && el.classList.contains('tabpanel')) {
+        el.classList.toggle('active', el.id === want);
+        el = el.nextElementSibling;
+      }
+    });
+  });
+});
+
+// Copy buttons: url cards + code blocks.
+// Inject a copy button into every <pre> (hover to reveal).
+document.querySelectorAll('pre').forEach(function(pre) {
+  if (pre.querySelector('.copy-btn')) return;
+  var btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.type = 'button';
+  btn.textContent = 'Copy';
+  pre.appendChild(btn);
+});
+
+function flash(btn, ok) {
+  var old = btn.textContent;
+  btn.textContent = ok ? 'Copied' : 'Failed';
+  btn.classList.add('done');
+  setTimeout(function() { btn.textContent = old; btn.classList.remove('done'); }, 1400);
+}
+document.querySelectorAll('.copy-btn').forEach(function(btn) {
+  btn.addEventListener('click', function(ev) {
+    ev.preventDefault();
+    var text = btn.getAttribute('data-copy');
+    if (!text) {
+      // fall back to nearest <pre> text
+      var pre = btn.closest('pre');
+      if (pre) text = pre.innerText;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() { flash(btn, true); }, function() { legacyCopy(btn, text); });
+    } else {
+      legacyCopy(btn, text);
+    }
+  });
+});
+function legacyCopy(btn, text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); flash(btn, true); } catch (e) { flash(btn, false); }
+  document.body.removeChild(ta);
+}
+</script>
 </body>
 </html>
