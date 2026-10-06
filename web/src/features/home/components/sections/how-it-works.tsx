@@ -16,74 +16,65 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Settings, Zap, BarChart3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AnimateInView } from '@/components/animate-in-view'
+import { SectionCode } from './vantyr-sections'
 
-export function HowItWorks() {
+interface HowItWorksProps {
+  className?: string
+}
+
+interface StepDef {
+  num: string
+  title: string
+  desc: string
+}
+
+export function HowItWorks(_props: HowItWorksProps) {
   const { t } = useTranslation()
 
-  const steps = [
+  const steps: StepDef[] = [
     {
-      num: '1',
-      title: t('Configure'),
+      num: '01',
+      title: t('Issue a key'),
       desc: t(
-        'Add your API keys, set up channels and configure access permissions'
+        'Subscribe and get a single key. No provider accounts to juggle.'
       ),
-      icon: <Settings className='size-6' strokeWidth={1.5} />,
     },
     {
-      num: '2',
-      title: t('Connect'),
+      num: '02',
+      title: t('Swap the base URL'),
       desc: t(
-        'Connect through OpenAI, Claude, Gemini, and other compatible API routes'
+        'Point your SDK at this relay. Request and response shapes stay identical.'
       ),
-      icon: <Zap className='size-6' strokeWidth={1.5} />,
     },
     {
-      num: '3',
-      title: t('Monitor'),
-      desc: t('Track usage, costs and performance with real-time analytics'),
-      icon: <BarChart3 className='size-6' strokeWidth={1.5} />,
+      num: '03',
+      title: t('Ship'),
+      desc: t(
+        'Traffic is relayed to the upstream model over pooled capacity at a lower rate.'
+      ),
     },
   ]
 
   return (
-    <section className='border-border/40 relative z-10 border-t px-6 py-24 md:py-32'>
-      <div className='mx-auto max-w-6xl'>
-        <AnimateInView className='mb-16 text-center md:mb-20'>
-          <p className='text-muted-foreground mb-3 text-xs font-medium tracking-widest uppercase'>
-            {t('How It Works')}
-          </p>
-          <h2 className='text-2xl font-bold tracking-tight md:text-3xl'>
-            {t('Three steps to get started')}
-          </h2>
-        </AnimateInView>
-
-        <div className='grid gap-8 md:grid-cols-3 md:gap-12'>
-          {steps.map((step, i) => (
-            <AnimateInView
-              key={step.num}
-              delay={i * 150}
-              animation='fade-up'
-              className='relative flex flex-col items-center text-center'
-            >
-              <div className='relative mb-6'>
-                <div className='text-muted-foreground border-border/50 bg-muted/30 flex size-16 items-center justify-center rounded-2xl border transition-colors'>
-                  {step.icon}
-                </div>
-                <div className='bg-foreground text-background absolute -top-2 -right-2 flex size-6 items-center justify-center rounded-full text-xs font-bold'>
-                  {step.num}
-                </div>
-              </div>
-              <h3 className='mb-2 text-base font-semibold'>{step.title}</h3>
-              <p className='text-muted-foreground max-w-[240px] text-sm leading-relaxed'>
-                {step.desc}
-              </p>
-            </AnimateInView>
+    <section className='border-b'>
+      <div className='mx-auto max-w-7xl px-5 py-20'>
+        <SectionCode code='SYS-01'>{t('Integration')}</SectionCode>
+        <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+          {t('Three steps. No rewrite.')}
+        </h2>
+        <ol className='mt-10 grid list-none gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-3'>
+          {steps.map((s) => (
+            <li key={s.num} className='bg-background p-6'>
+              <div className='font-mono text-sm text-primary'>{s.num}</div>
+              <h3 className='mt-6 font-display text-xl font-semibold'>
+                {s.title}
+              </h3>
+              <p className='mt-2 text-sm text-muted-foreground'>{s.desc}</p>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   )

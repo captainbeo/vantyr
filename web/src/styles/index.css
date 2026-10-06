@@ -26,9 +26,14 @@ For commercial licensing, please contact support@quantumnous.com
  * that activates it. Loaded globally so font-switching is instantaneous
  * with no FOUT once the variable is fetched. */
 @import '@fontsource-variable/lora';
+/* Self-hosted Vantyr brand fonts (Chakra Petch / IBM Plex Sans /
+ * JetBrains Mono) — see public/fonts/LICENSE.txt for OFL attribution. */
+@import './fonts.css';
 
 @import './theme.css';
 @import './theme-presets.css';
+/* Control Room utilities (labels, grid, ambient background, sidebar marker) */
+@import './vantyr.css';
 
 @layer base {
   :root {

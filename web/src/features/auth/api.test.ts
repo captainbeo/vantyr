@@ -25,7 +25,6 @@ import type { AuthBundle } from '@/stores/auth-store'
 
 import { executeLogout } from './api'
 import { useOAuthLogin } from './hooks/use-oauth-login'
-import { consumeOAuthLoginRedirect } from './lib/oauth-callback-mode'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -36,18 +35,6 @@ test.each([true, false])(
       window.sessionStorage
     )
     const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
-      if (url === '/api/oauth/state') {
-        return {
-          data: {
-            success: true,
-            data: {
-              flow_token: 'telegram-state',
-              authorization_url: 'https://oauth.telegram.org/auth?server=pkce',
-            },
-          },
-        }
-      }
-      if (url === '/api/user/auth/logout') return { data: { success: true } }
       throw new Error(`Unexpected POST ${url}`)
     })
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
@@ -60,22 +47,14 @@ test.each([true, false])(
     )
     await act(() => result.current.handleTelegramLogin())
     if (configured) {
-      expect(post.mock.calls.map(([url]) => url)).toEqual([
-        '/api/oauth/state',
-        '/api/user/auth/logout',
-      ])
-      expect(post).toHaveBeenCalledWith(
-        '/api/oauth/state',
-        expect.objectContaining({ provider: 'telegram', intent: 'login' }),
-        expect.anything()
-      )
-      expect(open).toHaveBeenCalledWith(
-        'https://oauth.telegram.org/auth?server=pkce',
-        '_self'
-      )
-      expect(consumeOAuthLoginRedirect('telegram-state')).toBe(
-        '/console/personal'
-      )
+      // Widget protocol (deployed 2cb526aff): handleTelegramLogin opens the
+      // telegram-login dialog instead of POSTing /api/oauth/state. The
+      // dialog itself is mounted by the sign-in page, so the observable
+      // contract here is the open flag flipping — no network, no popup.
+      expect(result.current.telegramDialogOpen).toBe(true)
+      expect(post).not.toHaveBeenCalled()
+      expect(open).not.toHaveBeenCalled()
+      expect(error).not.toHaveBeenCalled()
     } else {
       expect(post).not.toHaveBeenCalled()
       expect(open).not.toHaveBeenCalled()

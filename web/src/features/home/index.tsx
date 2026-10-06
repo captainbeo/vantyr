@@ -27,6 +27,7 @@ import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import { AmbientBackground } from './components/ambient-background'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -122,12 +123,18 @@ export function Home() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
-      <Features />
-      <HowItWorks />
-      <CTA isAuthenticated={isAuthenticated} />
-      <Footer />
+      {/* Decorative ambient traces sit behind the landing content: the
+       * fixed layer paints over the layout's background, and the content
+       * wrapper lifts above it (z-10) like the marketing pages. */}
+      <AmbientBackground />
+      <div className='relative z-10 flex min-h-screen flex-col'>
+        <Hero isAuthenticated={isAuthenticated} />
+        <Stats />
+        <Features />
+        <HowItWorks />
+        <CTA isAuthenticated={isAuthenticated} />
+        <Footer />
+      </div>
     </PublicLayout>
   )
 }

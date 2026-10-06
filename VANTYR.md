@@ -858,3 +858,38 @@ backup lives at `static/brand/vantyr-wordmark.png`.
 `HomePageContent` (the old markdown brief is backed up locally;
 set the option again to restore it — the component also supports a
 full-HTML or iframe-URL homepage if a custom design is wanted later).
+
+**Frontend: Vantyr "Control Room" design (2026-10-06).** The Lovable-built
+Vantyr design (homepage + console look) was integrated into the New API
+frontend as native theming, not a fork of the page tree:
+
+- New `vantyr` theme preset (theme-presets.css) is the deployment default
+  (`DEFAULT_THEME_CUSTOMIZATION.preset`): navy-charcoal console canvas,
+  single electric-orange accent, hairline borders, `--radius` 0.25rem,
+  green reserved for health. Light + dark blocks; dark is the default
+  mode for fresh visitors (`DEFAULT_THEME = 'dark'`, stored user
+  preferences still win). The preset attribute on `<body>` is now always
+  written so the generic `[data-theme-preset]` CSS bridges opt out via
+  `:not()` guards.
+- Brand fonts self-hosted and bundled: Chakra Petch (display), IBM Plex
+  Sans (preset body), JetBrains Mono (preset mono) as woff2 subsets in
+  `web/src/styles/fonts/` with OFL attribution in `fonts/LICENSE.txt`
+  and rows in `THIRD-PARTY-LICENSES.md`. `--font-display-stack` /
+  `--font-mono-stack` tokens were added to theme.css.
+- Landing sections (hero/relay-map, stats band, problems/comparison,
+  steps, request-log, CTA) were rebuilt in the Control Room language
+  inside `features/home/components/sections/`, with an
+  `ambient-background.tsx` decorative layer; auth-aware hero/CTA buttons,
+  docs link and i18n preserved. New `label-mono` utility + sidebar
+  active-item 2px signal marker are scoped utilities (vantyr.css).
+- Dead template components (terminal-demo, scrolling-icons, gateway-card,
+  feature/stat/connection items, icon-mapper) removed with their
+  constants; ~80 new i18n keys added across all 7 locales via
+  `i18n:sync`.
+- The old Telegram OAuth unit test asserted the pre-widget OIDC POST
+  flow and was failing at HEAD (hidden by the console-pipe exit code);
+  it now asserts the deployed widget-protocol behavior (dialog opens, no
+  network). The unused `createOAuthAuthorization` import in
+  `use-oauth-login.ts` (leftover from the same widget patch) was removed
+  so `tsgo -b` runs clean.
+

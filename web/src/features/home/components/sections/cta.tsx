@@ -17,68 +17,94 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AnimateInView } from '@/components/animate-in-view'
 import { Button } from '@/components/ui/button'
+
+import { ControlRoomPanel, LiveDot, SectionCode } from './vantyr-sections'
 
 interface CTAProps {
   className?: string
   isAuthenticated?: boolean
 }
 
+// Sample request stream — decorative marketing data (model names are literals).
+const LOG_ROWS: readonly (readonly string[])[] = [
+  ['01:51:04.112', 'POST', '/v1/messages', 'claude-sonnet', '200', '412ms'],
+  ['01:51:04.380', 'POST', '/v1/responses', 'codex', '200', '655ms'],
+  ['01:51:04.902', 'POST', '/v1/messages', 'claude-opus', '200', '1.12s'],
+  [
+    '01:51:05.017',
+    'POST',
+    '/v1/chat/completions',
+    'codex-mini',
+    '200',
+    '201ms',
+  ],
+  ['01:51:05.344', 'POST', '/v1/messages', 'claude-haiku', '200', '133ms'],
+]
+
 export function CTA(props: CTAProps) {
   const { t } = useTranslation()
 
-  if (props.isAuthenticated) {
-    return null
-  }
-
   return (
-    <section className='relative z-10 overflow-hidden px-6 py-24 md:py-32'>
-      {/* Gradient mesh background */}
-      <div
-        aria-hidden
-        className='absolute inset-0 -z-10 opacity-20 dark:opacity-[0.08]'
-        style={{
-          background: [
-            'radial-gradient(ellipse 50% 50% at 30% 50%, oklch(0.7 0.15 250 / 70%) 0%, transparent 70%)',
-            'radial-gradient(ellipse 40% 40% at 70% 40%, oklch(0.65 0.12 200 / 50%) 0%, transparent 70%)',
-          ].join(', '),
-        }}
-      />
-
-      <AnimateInView
-        className='mx-auto max-w-2xl text-center'
-        animation='scale-in'
-      >
-        <h2 className='text-2xl leading-tight font-bold tracking-tight md:text-4xl'>
-          {t('Ready to simplify')}
-          <br />
-          <span className='bg-gradient-to-r from-blue-400 via-violet-400 to-purple-500 bg-clip-text text-transparent'>
-            {t('your AI integration?')}
-          </span>
-        </h2>
-        <p className='text-muted-foreground/80 mx-auto mt-5 max-w-md text-sm leading-relaxed md:text-base'>
-          {t(
-            'Deploy your own gateway and start routing requests through your configured upstream services.'
-          )}
-        </p>
-        <div className='mt-8 flex items-center justify-center gap-3'>
-          <Button className='group rounded-lg' render={<Link to='/sign-up' />}>
-            {t('Get Started')}
-            <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-          </Button>
-          <Button
-            variant='outline'
-            className='border-border/50 hover:border-border hover:bg-muted/50 rounded-lg'
-            render={<Link to='/pricing' />}
+    <>
+      {/* Transparency: request log */}
+      <section className='border-b'>
+        <div className='mx-auto grid max-w-7xl gap-10 px-5 py-20 lg:grid-cols-[1fr_1.6fr]'>
+          <div>
+            <SectionCode code='SYS-02'>{t('Transparency')}</SectionCode>
+            <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+              {t('Every request, accounted for.')}
+            </h2>
+            <p className='mt-4 text-muted-foreground'>
+              {t(
+                'Per-request logs with model, status, latency and token cost. Nothing is stored beyond what billing needs.'
+              )}
+            </p>
+          </div>
+          <ControlRoomPanel
+            title={t('stream · sample')}
+            right={<LiveDot caption='● REC' tone='primary' />}
           >
-            {t('View Pricing')}
-          </Button>
+            <table className='w-full font-mono text-[12px]'>
+              <caption className='sr-only'>{t('Sample request log')}</caption>
+              <tbody>
+                {LOG_ROWS.map((row) => (
+                  <tr key={row[0]} className='border-b last:border-b-0'>
+                    <td className='px-4 py-2 text-muted-foreground'>{row[0]}</td>
+                    <td className='px-2 py-2'>{row[1]}</td>
+                    <td className='px-2 py-2'>{row[2]}</td>
+                    <td className='px-2 py-2 text-primary'>{row[3]}</td>
+                    <td className='px-2 py-2 text-success'>{row[4]}</td>
+                    <td className='px-4 py-2 text-right text-muted-foreground'>
+                      {row[5]}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ControlRoomPanel>
         </div>
-      </AnimateInView>
-    </section>
+      </section>
+
+      {/* Final CTA */}
+      {props.isAuthenticated ? null : (
+        <section>
+          <div className='mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-5 py-16 md:flex-row md:items-center'>
+            <h2 className='font-display text-3xl font-semibold md:text-4xl'>
+              {t('Open a channel.')}{' '}
+              <span className='text-primary'>{t('Keep coding.')}</span>
+            </h2>
+            <Button
+              className='rounded-sm font-mono tracking-wider uppercase'
+              render={<Link to='/pricing' />}
+            >
+              {t('View Pricing')}
+            </Button>
+          </div>
+        </section>
+      )}
+    </>
   )
 }

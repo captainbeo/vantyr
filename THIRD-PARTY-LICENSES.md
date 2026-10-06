@@ -75,6 +75,9 @@ Transitive dependencies should be audited before a final external release.
 | web      | production  | npm       | `@codemirror/view`                                    | `6.43.6`                             | MIT                                                |
 | web      | production  | npm       | `@fontsource-variable/lora`                           | `5.3.0`                              | OFL-1.1                                            |
 | web      | production  | npm       | `@fontsource-variable/public-sans`                    | `5.3.0`                              | OFL-1.1                                            |
+| web      | production  | vendored  | `chakra-petch` (subset woff2, `web/src/styles/fonts/`) | `5.2.5`                              | OFL-1.1                                            |
+| web      | production  | vendored  | `ibm-plex-sans` (subset woff2, `web/src/styles/fonts/`) | `1.2.0`                              | OFL-1.1                                            |
+| web      | production  | vendored  | `jetbrains-mono` (subset woff2, `web/src/styles/fonts/`) | `5.2.5`                              | OFL-1.1                                            |
 | web      | production  | npm       | `@hookform/resolvers`                                 | `5.4.0`                              | MIT                                                |
 | web      | production  | npm       | `@hugeicons/core-free-icons`                          | `4.2.2`                              | MIT                                                |
 | web      | production  | npm       | `@hugeicons/react`                                    | `1.1.9`                              | MIT                                                |

@@ -1,0 +1,180 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+/*
+ * Vantyr "Control Room" utilities — section labels, ambient background,
+ * and live-signal animations. Design tokens come from the `vantyr` preset
+ * in theme-presets.css; utilities here are color-agnostic (they only
+ * reference tokens), so they stay safe under every preset.
+ */
+
+/* Mono micro-label: 11px, uppercase, wide tracking, muted.
+ * Pairs with a signal-colored code prefix in the markup, e.g.
+ * `<span className='text-primary'>CON-01</span> / Title`. Uses the stack
+ * var (not --font-mono) so the body-level `--font-mono-stack` override in
+ * the vantyr preset cascades in — custom-property substitution happens at
+ * the referencing element, and :root-level vars are already resolved. */
+@utility label-mono {
+  font-family: var(--font-mono-stack);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Live status dot pulse (pairs with mono captions like "LIVE"). */
+@keyframes vantyr-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@utility animate-blink {
+  animation: vantyr-blink 1.6s steps(2, start) infinite;
+}
+
+/* Signal flow along relay-map SVG paths. */
+@keyframes vantyr-flow {
+  from {
+    stroke-dashoffset: 40;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@utility animate-flow {
+  stroke-dasharray: 4 6;
+  animation: vantyr-flow 1.2s linear infinite;
+}
+
+/* ── Ambient background (public marketing surfaces, decorative) ──────── */
+/* Slow drifting glow plus oscilloscope-at-rest signal traces. Every trace
+ * path is two seamless periods wide and slides by exactly one period, so
+ * the loop never jumps. Reduced motion freezes both layers. */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 80% at 50% 45%,
+    #000 40%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 90% 80% at 50% 45%,
+    #000 40%,
+    transparent 100%
+  );
+}
+.ambient-drift {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(
+      40% 35% at 30% 30%,
+      oklch(0.32 0.04 255 / 35%),
+      transparent 70%
+    ),
+    radial-gradient(
+      35% 30% at 75% 70%,
+      oklch(0.28 0.035 250 / 30%),
+      transparent 70%
+    );
+  animation: ambient-drift 48s ease-in-out infinite alternate;
+}
+.ambient-traces {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.ambient-trace {
+  animation: ambient-slide linear infinite;
+}
+.ambient-trace-rev {
+  animation-direction: reverse;
+}
+.ambient-line,
+.ambient-line-accent {
+  fill: none;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ambient-line {
+  stroke: oklch(0.93 0.008 250 / 7%);
+}
+.ambient-line-accent {
+  stroke: color-mix(in oklch, var(--primary) 22%, transparent);
+}
+@keyframes ambient-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.06);
+  }
+}
+@keyframes ambient-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-1440px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-drift,
+  .ambient-trace {
+    animation: none;
+  }
+}
+
+/* ── Sidebar active marker (Control Room 2px signal bar) ─────────────── */
+/* Scoped to the vantyr preset: a 2px primary bar on the leading edge of
+ * the active sidebar item, echoing the Lovable console navigation. The
+ * bar is an ::before on the shadcn menu-button so it works for links and
+ * collapsible parents alike; `position: relative` on the host is
+ * layout-neutral and gives the absolute bar its anchor. Hidden in
+ * icon-collapsed mode, where the 32px button is too narrow to carry it
+ * (data-collapsible lives on the sidebar container, an ancestor). */
+[data-theme-preset='vantyr'] [data-slot='sidebar-menu-button'] {
+  position: relative;
+}
+[data-theme-preset='vantyr'] [data-slot='sidebar-menu-button']::before {
+  content: '';
+  position: absolute;
+  inset-block: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+[data-theme-preset='vantyr']
+  [data-slot='sidebar-menu-button'][data-active]::before {
+  opacity: 1;
+}
+[data-theme-preset='vantyr']
+  [data-collapsible='icon']
+  [data-slot='sidebar-menu-button']::before {
+  display: none;
+}

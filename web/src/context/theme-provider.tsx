@@ -34,7 +34,10 @@ import {
 type Theme = 'dark' | 'light' | 'system'
 type ResolvedTheme = Exclude<Theme, 'system'>
 
-const DEFAULT_THEME = 'system'
+// Control Room is a dark-first design: fresh visitors land in the dark
+// console variant. Stored preferences ('light' | 'dark' | 'system') always
+// win, so existing users keep their choice.
+const DEFAULT_THEME = 'dark'
 const THEMES = new Set<Theme>(['dark', 'light', 'system'])
 
 type ThemeProviderProps = {

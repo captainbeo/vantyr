@@ -403,6 +403,138 @@ For commercial licensing, please contact support@quantumnous.com
   --skeleton-highlight: oklch(0.415 0 0);
 }
 
+/* ── Vantyr ("Control Room") ───────────────────────────────────────────── */
+/*
+ * The deployment-default preset. Dark operations-console language: deep
+ * navy-charcoal canvas, flat 1px hairline borders, small radius (0.25rem),
+ * one electric-orange accent, green reserved for health, mono labels.
+ * Faces: Chakra Petch (display), IBM Plex Sans (body), JetBrains Mono
+ * (mono) — loaded via fonts.css, stacks carry CJK fallbacks so zh/ja/…
+ * interfaces degrade gracefully.
+ *
+ * Bespoke surfaces (NOT primary-mix derivations), so it opts out of the
+ * semantic surface bridge below exactly like `anthropic`.
+ */
+[data-theme-preset='vantyr'] {
+  --radius: 0.25rem;
+
+  --font-sans:
+    'IBM Plex Sans', 'Public Sans', ui-sans-serif, system-ui, 'PingFang SC',
+    'Hiragino Sans', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-display-stack:
+    'Chakra Petch', 'IBM Plex Sans', 'Public Sans', ui-sans-serif, system-ui,
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono-stack:
+    'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono',
+    'Menlo', 'Consolas', 'Liberation Mono', monospace;
+
+  /* Light: cool paper canvas, ink foreground. */
+  --background: oklch(0.977 0.003 255);
+  --foreground: oklch(0.235 0.018 255);
+  --card: oklch(0.998 0.001 255);
+  --card-foreground: oklch(0.235 0.018 255);
+  --popover: oklch(0.998 0.001 255);
+  --popover-foreground: oklch(0.235 0.018 255);
+
+  /* Electric orange — the single accent. Dark ink text on the fill. */
+  --primary: oklch(0.62 0.19 45);
+  --primary-foreground: oklch(0.15 0.02 255);
+
+  --secondary: oklch(0.94 0.004 255);
+  --secondary-foreground: oklch(0.3 0.015 255);
+  --muted: oklch(0.955 0.004 255);
+  --muted-foreground: oklch(0.45 0.02 255);
+  --accent: oklch(0.93 0.006 255);
+  --accent-foreground: oklch(0.2 0.015 255);
+
+  --destructive: oklch(0.55 0.21 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.55 0.14 150);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.68 0.13 75);
+  --warning-foreground: oklch(0.2 0.015 255);
+  --info: oklch(0.5 0.08 250);
+  --info-foreground: oklch(0.985 0 0);
+  --neutral: oklch(0.45 0.02 255);
+  --neutral-foreground: oklch(0.985 0 0);
+
+  /* Hairline borders — cool gray, not orange. */
+  --border: oklch(0.885 0.006 255);
+  --input: oklch(0.885 0.006 255);
+  --ring: oklch(0.62 0.19 45);
+
+  /* Chart palette: orange / green / slate / amber / blue. */
+  --chart-1: oklch(0.62 0.19 45);
+  --chart-2: oklch(0.55 0.14 150);
+  --chart-3: oklch(0.5 0.02 250);
+  --chart-4: oklch(0.68 0.13 75);
+  --chart-5: oklch(0.5 0.12 260);
+
+  --sidebar: oklch(0.965 0.004 255);
+  --sidebar-foreground: oklch(0.235 0.018 255);
+  --sidebar-primary: oklch(0.62 0.19 45);
+  --sidebar-primary-foreground: oklch(0.15 0.02 255);
+  --sidebar-accent: oklch(0.93 0.006 255);
+  --sidebar-accent-foreground: oklch(0.235 0.018 255);
+  --sidebar-border: oklch(0.885 0.006 255);
+  --sidebar-ring: oklch(0.62 0.19 45);
+
+  --skeleton-base: oklch(0.94 0.004 255);
+  --skeleton-highlight: oklch(0.97 0.002 255);
+}
+.dark [data-theme-preset='vantyr'] {
+  /* Dark: deep navy-charcoal console, warm-gray text — the Control Room. */
+  --background: oklch(0.155 0.018 255);
+  --foreground: oklch(0.93 0.008 250);
+  --card: oklch(0.19 0.02 255);
+  --card-foreground: oklch(0.93 0.008 250);
+  --popover: oklch(0.19 0.02 255);
+  --popover-foreground: oklch(0.93 0.008 250);
+
+  --primary: oklch(0.7 0.19 45);
+  --primary-foreground: oklch(0.15 0.02 255);
+
+  --secondary: oklch(0.23 0.022 255);
+  --secondary-foreground: oklch(0.93 0.008 250);
+  --muted: oklch(0.21 0.02 255);
+  --muted-foreground: oklch(0.65 0.02 250);
+  --accent: oklch(0.25 0.025 255);
+  --accent-foreground: oklch(0.93 0.008 250);
+
+  --destructive: oklch(0.62 0.21 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.78 0.16 150);
+  --success-foreground: oklch(0.15 0.02 255);
+  --warning: oklch(0.8 0.15 85);
+  --warning-foreground: oklch(0.15 0.02 255);
+  --info: oklch(0.68 0.045 250);
+  --info-foreground: oklch(0.15 0.02 255);
+  --neutral: oklch(0.65 0.02 250);
+  --neutral-foreground: oklch(0.155 0.018 255);
+
+  --border: oklch(0.3 0.022 255);
+  --input: oklch(0.3 0.022 255);
+  --ring: oklch(0.7 0.19 45);
+
+  --chart-1: oklch(0.7 0.19 45);
+  --chart-2: oklch(0.78 0.16 150);
+  --chart-3: oklch(0.65 0.02 250);
+  --chart-4: oklch(0.8 0.15 85);
+  --chart-5: oklch(0.6 0.15 260);
+
+  --sidebar: oklch(0.19 0.02 255);
+  --sidebar-foreground: oklch(0.93 0.008 250);
+  --sidebar-primary: oklch(0.7 0.19 45);
+  --sidebar-primary-foreground: oklch(0.15 0.02 255);
+  --sidebar-accent: oklch(0.25 0.025 255);
+  --sidebar-accent-foreground: oklch(0.93 0.008 250);
+  --sidebar-border: oklch(0.3 0.022 255);
+  --sidebar-ring: oklch(0.7 0.19 45);
+
+  --skeleton-base: oklch(0.23 0.022 255);
+  --skeleton-highlight: oklch(0.3 0.022 255);
+}
+
 /* Overview accents mirror the public blue/cyan/violet palette by default.
  * Named presets map those slots to their own chart palette so the overview
  * stays coherent with the user's selected theme. */
@@ -426,10 +558,13 @@ For commercial licensing, please contact support@quantumnous.com
  *   - `anthropic`: warm cream surfaces are a brand choice, NOT a primary-mix
  *     derivation (the Anthropic system deliberately uses warm neutrals for
  *     cards/borders rather than tinting them with the clay accent).
- *   - `simple-large`: keeps intentionally neutral, high-contrast surfaces. */
+ *   - `simple-large`: keeps intentionally neutral, high-contrast surfaces.
+ *   - `vantyr`: cool navy-charcoal console surfaces are a brand choice, NOT
+ *     orange-tinted derivations (the Control Room system keeps every
+ *     surface neutral; orange is reserved for action/selection). */
 [data-theme-preset]:not([data-theme-preset='default']):not(
   [data-theme-preset='anthropic']
-):not([data-theme-preset='simple-large']) {
+):not([data-theme-preset='simple-large']):not([data-theme-preset='vantyr']) {
   --card: color-mix(in oklch, var(--primary) 3%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 5%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 7%, var(--background));
@@ -454,7 +589,7 @@ For commercial licensing, please contact support@quantumnous.com
 .dark
   [data-theme-preset]:not([data-theme-preset='default']):not(
     [data-theme-preset='anthropic']
-  ):not([data-theme-preset='simple-large']) {
+  ):not([data-theme-preset='simple-large']):not([data-theme-preset='vantyr']) {
   --card: color-mix(in oklch, var(--primary) 8%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 12%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 12%, var(--background));

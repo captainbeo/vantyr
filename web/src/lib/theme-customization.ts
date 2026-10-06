@@ -25,6 +25,14 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const THEME_PRESETS = [
   {
+    // Vantyr "Control Room": dark operations-console canvas, single
+    // electric-orange accent, hairline borders, mono labels. The
+    // deployment-default preset for this fork.
+    value: 'vantyr',
+    name: 'Vantyr',
+    swatches: ['oklch(0.155 0.018 255)', 'oklch(0.7 0.19 45)'],
+  },
+  {
     value: 'default',
     name: 'Default',
     swatches: ['oklch(0.72 0.18 250)', 'oklch(0.7 0.12 280)'],
@@ -116,7 +124,7 @@ export type ThemeCustomization = {
 }
 
 export const DEFAULT_THEME_CUSTOMIZATION: ThemeCustomization = {
-  preset: 'default',
+  preset: 'vantyr',
   font: 'default',
   radius: 'default',
   scale: 'default',
@@ -170,6 +178,9 @@ export const PRESET_DEFAULT_FONT: Partial<
 > = {
   default: 'sans',
   anthropic: 'serif',
+  // Control Room body face: IBM Plex Sans (the preset re-points
+  // `--font-sans` at it; the generic sans resolution picks that up).
+  vantyr: 'sans',
 }
 
 /**

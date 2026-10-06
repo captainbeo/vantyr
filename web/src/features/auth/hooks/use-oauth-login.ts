@@ -25,7 +25,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
 import { createServerError } from '@/lib/server-error-message'
 
-import { createOAuthAuthorization, createOAuthFlow, logout } from '../api'
+import { createOAuthFlow, logout } from '../api'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,

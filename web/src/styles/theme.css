@@ -39,6 +39,12 @@ For commercial licensing, please contact support@quantumnous.com
   --font-manrope:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
     'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  /* Vantyr "Control Room" faces: display headings plus a preset-aware mono
+   * stack. Declared as var references (like the color tokens above) so the
+   * `vantyr` preset can swap them at runtime — see the stacks in `:root`
+   * and the preset blocks in theme-presets.css. */
+  --font-display: var(--font-display-stack);
+  --font-mono: var(--font-mono-stack);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -103,6 +109,16 @@ For commercial licensing, please contact support@quantumnous.com
    * in theme-presets.css. Default mirrors `--font-sans` so behavior is
    * identical when no font preference is set. */
   --font-body: var(--font-sans);
+  /* Control Room display/mono stacks (faces loaded in fonts.css). Defaults
+   * keep non-vantyr presets on the project faces; the `vantyr` preset
+   * overrides all three stacks (Chakra Petch display, IBM Plex body via
+   * --font-sans, JetBrains mono) on <body>. */
+  --font-display-stack:
+    'Public Sans', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  --font-mono-stack:
+    ui-monospace, 'SFMono-Regular', 'Menlo', 'Consolas', 'Liberation Mono',
+    monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

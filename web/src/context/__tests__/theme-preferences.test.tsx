@@ -98,7 +98,7 @@ afterEach(() => {
 })
 
 describe('theme preference persistence', () => {
-  it('starts with defaults when only shared legacy theme cookies exist', () => {
+  it('starts with deployment defaults (dark mode, vantyr preset) when only shared legacy theme cookies exist', () => {
     document.cookie = 'theme_preset=ocean-breeze; path=/'
     document.cookie = 'vite-ui-theme=dark; path=/'
     document.cookie = 'theme_font=serif; path=/'
@@ -108,9 +108,11 @@ describe('theme preference persistence', () => {
 
     render(<ThemeFixture />)
 
-    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.documentElement).toHaveClass('light')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    // The Vantyr deployment ships dark-first + the 'vantyr' Control Room
+    // preset as defaults; legacy cookies are ignored.
+    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('dark')
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'vantyr')
     expect(document.body).toHaveAttribute('data-theme-font', 'sans')
     expect(document.body).not.toHaveAttribute('data-theme-radius')
     expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -154,9 +156,10 @@ describe('theme preference persistence', () => {
     first.unmount()
     render(<ThemeFixture />)
 
-    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.documentElement).toHaveClass('light')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    // Reset lands back on the deployment defaults: dark mode + vantyr.
+    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('dark')
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'vantyr')
     expect(document.body).toHaveAttribute('data-theme-font', 'sans')
     expect(document.body).not.toHaveAttribute('data-theme-radius')
     expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -177,8 +180,8 @@ describe('theme preference persistence', () => {
 
       render(<ThemeFixture />)
 
-      expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-      expect(document.body).not.toHaveAttribute('data-theme-preset')
+      expect(screen.getByLabelText('Theme mode')).toHaveTextContent('dark')
+      expect(document.body).toHaveAttribute('data-theme-preset', 'vantyr')
       expect(document.body).toHaveAttribute('data-theme-font', 'sans')
       expect(document.body).not.toHaveAttribute('data-theme-radius')
       expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -193,8 +196,8 @@ describe('theme preference persistence', () => {
 
     render(<ThemeFixture />)
 
-    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('dark')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'vantyr')
   })
 
   it('still applies and resets preferences when storage writes fail', async () => {
@@ -214,8 +217,8 @@ describe('theme preference persistence', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reset' }))
 
-    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(screen.getByLabelText('Theme mode')).toHaveTextContent('dark')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'vantyr')
   })
 
   it('preserves saved theme preferences during frontend cache initialization', () => {

@@ -16,224 +16,194 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Zap,
-  Shield,
-  Globe,
-  Code,
-  Gauge,
-  DollarSign,
-  Users,
-  HeartHandshake,
-} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { AnimateInView } from '@/components/animate-in-view'
+import { SectionCode } from './vantyr-sections'
 
 interface FeaturesProps {
   className?: string
 }
 
+interface ProblemDef {
+  num: string
+  tag: string
+  problem: string
+  fix: string
+  desc: string
+}
+
+const COMPARE_COLS: readonly string[] = [
+  'Official APIs',
+  'Other relays',
+  'Vantyr',
+]
+
 export function Features(_props: FeaturesProps) {
   const { t } = useTranslation()
 
-  const features = [
+  const problems: ProblemDef[] = [
     {
-      id: 'fast',
       num: '01',
-      title: t('Lightning Fast'),
+      tag: 'Limits',
+      problem: t('Daily, weekly and monthly caps'),
+      fix: t('No usage limits. Ever.'),
       desc: t(
-        'Optimized network architecture ensures millisecond response times'
-      ),
-      span: 'md:col-span-2',
-      icon: <Zap className='size-4 text-blue-400' />,
-      visual: (
-        <div className='mt-4 grid grid-cols-3 gap-2'>
-          {['OpenAI', 'Claude', 'Gemini', 'DeepSeek', 'Qwen', 'Llama'].map(
-            (name) => (
-              <div
-                key={name}
-                className='border-border/30 bg-muted/20 text-muted-foreground flex items-center justify-center rounded-lg border px-3 py-2 text-xs transition-colors duration-300 hover:border-blue-500/30 hover:bg-blue-500/5'
-              >
-                {name}
-              </div>
-            )
-          )}
-        </div>
+        'No daily, weekly or monthly ceilings. Code all night without hitting a wall mid-task.'
       ),
     },
     {
-      id: 'secure',
       num: '02',
-      title: t('Secure & Reliable'),
+      tag: 'Models',
+      problem: t('Locked to one vendor'),
+      fix: t('Every major model, one key.'),
       desc: t(
-        'Enterprise-grade security with comprehensive permission management'
-      ),
-      span: 'md:col-span-1',
-      icon: <Shield className='size-4 text-emerald-400' />,
-      visual: (
-        <div className='mt-4 flex items-center justify-center'>
-          <div className='relative'>
-            <div className='flex size-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/5'>
-              <Shield
-                className='size-7 text-emerald-500/70'
-                strokeWidth={1.5}
-              />
-            </div>
-            <div className='absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-emerald-500'>
-              <svg
-                className='size-2.5 text-white'
-                fill='none'
-                viewBox='0 0 24 24'
-                stroke='currentColor'
-                strokeWidth={3}
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  d='m4.5 12.75 6 6 9-13.5'
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
+        'Claude and Codex behind one key. Switch models per project, or per request, by changing a single name.'
       ),
     },
     {
-      id: 'global',
       num: '03',
-      title: t('Global Coverage'),
-      desc: t('Multi-region deployment for stable global access'),
-      span: 'md:col-span-1',
-      icon: <Globe className='size-4 text-violet-400' />,
-      visual: (
-        <div className='mt-4 space-y-2'>
-          {[t('Load Balancing'), t('Rate Limiting'), t('Cost Tracking')].map(
-            (step, i) => (
-              <div key={step} className='flex items-center gap-2'>
-                <div
-                  className={`flex size-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                    i === 1
-                      ? 'border border-blue-500/30 bg-blue-500/20 text-blue-500'
-                      : 'border-border/40 bg-muted text-muted-foreground border'
-                  }`}
-                >
-                  {i + 1}
-                </div>
-                <div className='bg-border/40 h-px flex-1' />
-                <span className='text-muted-foreground text-xs'>{step}</span>
-              </div>
-            )
-          )}
-        </div>
+      tag: 'Price',
+      problem: t('Official API bills that scale with every token'),
+      fix: t('At least 98% cheaper.'),
+      desc: t(
+        'A minimum of 98% below official Anthropic and OpenAI rates, or one flat $180/month for unlimited use.'
       ),
     },
     {
-      id: 'developer',
       num: '04',
-      title: t('Developer Friendly'),
-      desc: t('Compatible API routes for common AI application workflows'),
-      span: 'md:col-span-2',
-      icon: <Code className='size-4 text-amber-400' />,
-      visual: (
-        <div className='mt-4 flex items-center gap-3'>
-          <div className='flex -space-x-2'>
-            {['API', 'SDK', 'CLI', 'Docs'].map((n) => (
-              <div
-                key={n}
-                className='border-background from-muted to-muted/60 text-muted-foreground flex size-8 items-center justify-center rounded-full border-2 bg-gradient-to-br text-[9px] font-bold'
-              >
-                {n}
-              </div>
-            ))}
-          </div>
-          <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
-            <Code className='size-3.5 text-blue-500' />
-            {t('Multi-protocol Compatible')}
-          </div>
-        </div>
+      tag: 'Integrity',
+      problem: t('Relays that quietly swap in cheaper models'),
+      fix: t('Real models. Tested daily.'),
+      desc: t(
+        'No model swapping, distilling or downgrading. We test every model daily to confirm you get what you asked for.'
+      ),
+    },
+    {
+      num: '05',
+      tag: 'Support',
+      problem: t('Setup docs nobody answers questions about'),
+      fix: t('Easy setup, real support.'),
+      desc: t(
+        'A step-by-step setup guide for Claude Code, Codex and SDKs, and a support team that answers any question.'
+      ),
+    },
+    {
+      num: '06',
+      tag: 'Drop-in',
+      problem: t('Rewriting code to change providers'),
+      fix: t('Change one URL.'),
+      desc: t(
+        'Same request and response format as the official APIs. Your tools keep working, you just pay less.'
       ),
     },
   ]
 
-  const additionalFeatures = [
-    {
-      icon: <Gauge className='size-5' strokeWidth={1.5} />,
-      title: t('High Performance'),
-      desc: t('Support for high concurrency with automatic load balancing'),
-    },
-    {
-      icon: <DollarSign className='size-5' strokeWidth={1.5} />,
-      title: t('Transparent Billing'),
-      desc: t('Pay-as-you-go with real-time usage monitoring'),
-    },
-    {
-      icon: <Users className='size-5' strokeWidth={1.5} />,
-      title: t('Team Collaboration'),
-      desc: t('Multi-user management with flexible permission allocation'),
-    },
-    {
-      icon: <HeartHandshake className='size-5' strokeWidth={1.5} />,
-      title: t('Open Source'),
-      desc: t('Community driven, self-hosted, and extensible'),
-    },
+  const compare: readonly (readonly string[])[] = [
+    [
+      t('Usage limits'),
+      t('Daily / weekly caps'),
+      t('Often throttled'),
+      t('None'),
+    ],
+    [
+      t('Price vs official'),
+      '100%',
+      t('Varies'),
+      t('98%+ less'),
+    ],
+    [
+      t('Models'),
+      t('One vendor'),
+      t('Mixed'),
+      t('Claude + Codex, one key'),
+    ],
+    [
+      t('Genuine models'),
+      t('Yes'),
+      t('Often swapped'),
+      t('Yes, tested daily'),
+    ],
+    [t('Setup'), t('Per vendor'), t('Unclear'), t('One URL change + guide')],
+    [
+      t('Support'),
+      t('Ticket queue'),
+      t('Rare'),
+      t('Answers any question'),
+    ],
   ]
 
   return (
-    <section className='relative z-10 px-6 py-24 md:py-32'>
-      <div className='mx-auto max-w-6xl'>
-        <AnimateInView className='mb-16 max-w-lg'>
-          <p className='text-muted-foreground mb-3 text-xs font-medium tracking-widest uppercase'>
-            {t('Core Features')}
-          </p>
-          <h2 className='text-2xl leading-tight font-bold tracking-tight md:text-3xl'>
-            {t('Built for developers,')}
-            <br />
-            {t('designed for scale')}
-          </h2>
-        </AnimateInView>
+    <section className='border-b'>
+      <div className='mx-auto max-w-7xl px-5 py-20'>
+        <SectionCode code='WHY-00'>{t('What Vantyr fixes')}</SectionCode>
+        <h2 className='mt-3 max-w-3xl font-display text-3xl font-semibold md:text-5xl'>
+          {t(
+            'Official APIs throttle you, bill you heavily and lock you to one vendor.'
+          )}{' '}
+          <span className='text-primary'>{t('Vantyr removes all three.')}</span>
+        </h2>
 
-        {/* Bento grid */}
-        <div className='border-border/40 bg-border/40 grid gap-px overflow-hidden rounded-xl border md:grid-cols-3'>
-          {features.map((f, i) => (
-            <AnimateInView
-              key={f.id}
-              delay={i * 100}
-              animation='scale-in'
-              className={`bg-background group hover:bg-muted/20 p-7 transition-colors duration-300 md:p-8 ${f.span}`}
-            >
-              <div className='mb-3 flex items-center gap-3'>
-                <span className='border-border/40 bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-md border text-[10px] font-semibold tabular-nums'>
-                  {f.num}
+        <div className='mt-12 grid gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-2 lg:grid-cols-3'>
+          {problems.map((p) => (
+            <div key={p.tag} className='bg-background p-6'>
+              <div className='flex items-center justify-between'>
+                <span className='font-mono text-sm text-primary'>
+                  {p.num}
                 </span>
-                <h3 className='text-sm font-semibold'>{f.title}</h3>
+                <span className='label-mono'>{p.tag}</span>
               </div>
-              <p className='text-muted-foreground text-sm leading-relaxed'>
-                {f.desc}
+              <p className='mt-6 font-mono text-xs text-muted-foreground line-through decoration-destructive/60'>
+                {p.problem}
               </p>
-              {f.visual}
-            </AnimateInView>
+              <h3 className='mt-2 font-display text-xl font-semibold'>
+                {p.fix}
+              </h3>
+              <p className='mt-2 text-sm text-muted-foreground'>{p.desc}</p>
+            </div>
           ))}
         </div>
 
-        {/* Additional features row */}
-        <div className='mt-12 grid grid-cols-2 gap-8 md:grid-cols-4 md:gap-12'>
-          {additionalFeatures.map((f, i) => (
-            <AnimateInView
-              key={f.title}
-              delay={i * 100}
-              animation='fade-up'
-              className='flex flex-col items-center text-center'
-            >
-              <div className='text-muted-foreground border-border/50 bg-muted/30 group-hover:text-foreground mb-3 flex size-12 items-center justify-center rounded-xl border transition-colors'>
-                {f.icon}
-              </div>
-              <h3 className='mb-1.5 text-sm font-semibold'>{f.title}</h3>
-              <p className='text-muted-foreground max-w-[200px] text-xs leading-relaxed'>
-                {f.desc}
-              </p>
-            </AnimateInView>
-          ))}
+        {/* Side-by-side comparison */}
+        <div className='mt-20'>
+          <SectionCode code='WHY-01'>{t('Side by side')}</SectionCode>
+          <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+            {t('Why choose Vantyr.')}
+          </h2>
+          <div className='mt-10 overflow-x-auto rounded-sm border bg-card'>
+            <table className='w-full min-w-[640px] font-mono text-[13px]'>
+              <thead>
+                <tr className='border-b'>
+                  <th className='label-mono px-4 py-3 text-left font-normal'>
+                    <span aria-hidden='true'>·</span>
+                  </th>
+                  {COMPARE_COLS.map((col) => (
+                    <th
+                      key={col}
+                      className='label-mono px-4 py-3 text-left font-normal'
+                    >
+                      {col === 'Vantyr' ? (
+                        <span className='text-primary'>{col}</span>
+                      ) : (
+                        col
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {compare.map((row) => (
+                  <tr key={row[0]} className='border-b last:border-b-0'>
+                    <td className='px-4 py-3 text-muted-foreground'>
+                      {row[0]}
+                    </td>
+                    <td className='px-4 py-3'>{row[1]}</td>
+                    <td className='px-4 py-3'>{row[2]}</td>
+                    <td className='px-4 py-3 text-primary'>{row[3]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
