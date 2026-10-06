@@ -489,7 +489,7 @@ callback to `/api/user/epay/notify` rejected with `fail` (signature
 mismatch path works). All test users/orders deleted both sides.
 
 **Remaining at this writing:** DNS A record `pay.vantyr.xyz` →
-85.190.118.190 (owner action, Namecheap; Caddy then finishes the cert
+85.190.x.x (redacted) (owner action, Namecheap; Caddy then finishes the cert
 automatically). After that: one real small USDT payment end-to-end and
 reconciliation of the wallet credit against the usage log (the
 final money-path gate; unpaid orders simply expire after 15 min). The
