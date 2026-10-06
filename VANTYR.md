@@ -454,13 +454,14 @@ ERC20+BSC+Polygon; the cashier's network picker only shows chains with
 a registered wallet. `epay.default_currency=usd`,
 `rate.forced_rate_list {"usd":{"usdt":1,"usdc":1}}` (1 USDT = 1 USD;
 chain fees are the customer's), amount_precision 4, min token amount
-10, order expiry 15 min.
+1 (lowered from 10 on owner decision 2026-10-06; verified end-to-end
+at $1), order expiry 15 min.
 
 **New API options (set directly in the options table; SyncOptions picks
 up within 60s):** `PayAddress` as above, `EpayId`/`EpayKey` = GM Pay
 merchant pid/secret, `Price=1` (USD per unit; was 7.3 CNY-era default),
-`MinTopUp=10`, `PayMethods=[{"name":"Crypto (USDT / USDC)",
-"icon":"SiTether","type":"alipay","min_topup":"10"}]` — the wallet
+`MinTopUp=1`, `PayMethods=[{"name":"Crypto (USDT / USDC)",
+"icon":"SiTether","type":"alipay","min_topup":"1"}]` — the wallet
 renders this as the crypto top-up button (generic pay-method buttons
 auto-POST the signed form to GM Pay; `type=alipay` with no default
 token/network means GM Pay's cashier shows the network picker:
