@@ -445,17 +445,24 @@ payment keys; never in chat/files).
 
 **Wallets (owner-supplied receive addresses, direct custody):** TRON
 TP66A6…DgiP (TRC20 USDT), Solana BzakFf…AfWE (USDT/USDC), and
-0x1dd5…ed54 for Ethereum/BSC/Polygon (USDT/USDC each; the chain id in
-GM Pay's admin API is `binance` for BSC — a row added as `bsc` does NOT
-serve payments). All non-stable tokens disabled (TRX, SOL, TON, native,
-plasma/ton/aptos entirely). GM Pay v2.0.0 does not support
-AVAX/Arbitrum/Base/Optimism — the owner's EVM address serves
-ERC20+BSC+Polygon; the cashier's network picker only shows chains with
-a registered wallet. `epay.default_currency=usd`,
-`rate.forced_rate_list {"usd":{"usdt":1,"usdc":1}}` (1 USDT = 1 USD;
-chain fees are the customer's), amount_precision 4, min token amount
-1 (lowered from 10 on owner decision 2026-10-06; verified end-to-end
-at $1), order expiry 15 min.
+0x1dd5…ed54 for Ethereum/BSC/Polygon/Plasma (USDT/USDC each; the chain
+id in GM Pay's admin API is `binance` for BSC — a row added as `bsc`
+does NOT serve payments), TON UQBzGz…6aea (TON + USDT), and Aptos
+0xb7c9…e1ee (USDT/USDC). Still disabled: TRX, SOL native, USDC.e.
+GM Pay v2.0.0 does not support AVAX/Arbitrum/Base/Optimism — the
+owner's EVM address serves ERC20+BSC+Polygon+Plasma; the cashier's
+network picker only shows chains with a registered wallet (8 live:
+tron, ethereum, solana, binance, polygon, plasma, ton, aptos —
+enabled 2026-10-06 on owner request, each verified with a real $1
+test order). `epay.default_currency=usd`,
+`rate.forced_rate_list {"usd":{"usdt":1,"usdc":1,"ton":0.625}}` (1
+USDT/USDC = 1 USD; TON native is VOLATILE — 0.625 TON/USD set
+manually 2026-10-06 from Binance TONUSDT $1.60 because no rate API
+carries a TON key, so auto mode cannot price it either; re-check
+periodically, drift under-prices orders), chain fees are the
+customer's), amount_precision 4, min token amount 1 (TON native min
+0.625 TON = the $1 floor; lowered from 10 on owner decision
+2026-10-06; verified end-to-end at $1), order expiry 15 min.
 
 **New API options (set directly in the options table; SyncOptions picks
 up within 60s):** `PayAddress` as above, `EpayId`/`EpayKey` = GM Pay
