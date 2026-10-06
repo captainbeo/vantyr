@@ -52,7 +52,7 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
 - [ ] PostgreSQL/Redis strong passwords (not compose defaults)
 - [ ] Stripe live API key + webhook secret
 - [ ] SMTP credentials
-- [ ] Turnstile site/secret keys
+- [x] Turnstile site/secret keys (live 2026-10-06, see ops log)
 - [ ] sub2api `SECRET_KEY` for its admin/cookie flows
 
 ## AGPL obligations (live)
@@ -555,6 +555,22 @@ edge (paid sub-order, parent not finalized) has no API repair —
 recovery runbook: SQLite edit parent `status=2, callback_confirm=2`,
 sub `callback_confirm=1`, or admin resend-callback; watchdog detects
 it.
+
+**Turnstile registration gating LIVE (2026-10-06):** owner-supplied
+Cloudflare Turnstile keys (Managed mode, hostname vantyr.xyz) written
+to the options table (`TurnstileSiteKey`/`TurnstileSecretKey`/
+`TurnstileCheckEnabled=true`, secret server-side only, 60s SyncOptions
+pick-up, no restart). Verified live: `/api/status` advertises
+`turnstile_check: true` + site key so the SPA mounts the widget on
+sign-in/sign-up; scripted registration without a token returns
+"Turnstile token 为空", with a bogus token "Turnstile 校验失败"
+(register AND login), and zero probe users were created — the
+2026-10-05 scanner-registration hole is closed. Turnstile covers
+registration + login + the check-in endpoint only; relay API calls
+remain protected by the per-user rate limiter (unchanged). Rotation
+(if the secret ever leaks): new keys from the Cloudflare dashboard,
+update the two option rows. Email/SMTP verification remains an
+optional future layer on top.
 
 ## Known-weak spots (accepted at launch)
 
