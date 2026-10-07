@@ -1072,3 +1072,48 @@ surface, and /docs got the homepage ambient background:
   `pinned-next10` (47eaaad68e52) retained for rollback (repoint
   compose.yaml, `docker compose up -d --no-build gateway`). The local
   sandbox image was rebuilt from 5817f96c2 in the same pass.
+
+
+**Original logo revert (2026-10-07, pinned-next12).** Owner decision
+the same day: the v2 artwork swap (5817f96c2) was reverted; the
+original Lovable zip design — the one the 3D intro was built from and
+pinned-next10 shipped — is back on every surface.
+
+- Revert commit `f933a8fa0` restores all 8 swapped files from the
+  pre-swap state (cc86d923c blobs): 3D intro geometry and colors (two
+  navy arms + narrow orange shard; navy `#33445f`, orange `#ff6a1a`,
+  emissive `#ff4a00`), the flat mark artwork (512x446 zip original,
+  md5-verified against the Lovable attachment), the brand PNGs,
+  favicon, and the wordmark CSS sizing/dark-invert rules. /docs keeps
+  the ambient background and Discord links but drops the v2 topnav
+  mark; the text brand returns there. Discord commits cc86d923c /
+  c1cc49597 are preserved.
+- Verification before deploy: intro-reveal tests 2/2, landing
+  regression 2/2, tsgo typecheck clean, and the web tree proven
+  byte-identical to the deployed pinned-next10 state
+  (`git diff a02126733 HEAD -- web/` empty) — the 76 full-suite
+  failures (models/pricing/keys display) pre-exist in that deployed
+  baseline, untouched by this change.
+- Deployed as `vantyr/new-api:pinned-next12`, which the Docker layer
+  cache resolved to the *same image ID 47eaaad68e52 as
+  pinned-next10* — independent proof the embedded frontend is the
+  original-logo build. AGPL protocol repeated in full: `vantyr/main`
+  → public `main` (f933a8fa0), tag
+  `deploy/2026-10-07-original-logo-revert` pushed, source archive
+  `vantyr-source-2026-10-07-original-logo-revert.tar.gz` (sha256
+  d5d1d822…c90a; 2590 files sha256-verified on-server before the
+  build and static sync) published, `Footer` option updated.
+- Live verification: gateway healthy; the running binary carries all
+  original geometry markers (`33445f`/`ff6a1a`/`ff4a00`, `20,5` /
+  `268,290` / `265,440` / `506,4`, ExtrudeGeometry) and zero v2
+  markers (`2e3a49`/`d2530f`/`496,51` all 0); brand logo 200/50779
+  bytes (sha256 7943154b…, the original artwork); wordmark
+  200/267948; favicon 200/49827 (original); /docs serves the text
+  brand + ambient-bg + Discord links; archive 200 with notice
+  updated; relay 401 unauthenticated; pay.vantyr.xyz unaffected;
+  zero errors in gateway logs. `pinned-next11` retained for rollback
+  (repoint compose.yaml, `docker compose up -d --no-build gateway`).
+  The v2 files were backed up server-side under
+  `/opt/vantyr/backups/revert-2026-10-07/` before the static swap.
+  The local sandbox image was rebuilt from f933a8fa0 in the same
+  pass (image `vantyr/new-api:pinned`, marker-verified).
