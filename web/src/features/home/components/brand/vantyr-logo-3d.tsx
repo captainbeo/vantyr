@@ -27,80 +27,111 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 
 /**
- * Fully 3D Vantyr mark: two faceted navy arms forming the V plus the
- * orange lightning shard, extruded with bevels so it reads from every
- * angle. Outline points are traced from the 2D mark (512px space, y
- * down). Ported from the Lovable brand design; the material colors are
- * fixed brand artwork (navy metal + signal orange), deliberately not
- * theme tokens — the mark must read identically under every preset,
- * like the flat PNG it replaces.
+ * Fully 3D Vantyr mark, traced from the rendered 3D icon
+ * (vantyr-icon-3d.png): two long faceted gunmetal blades forming the V,
+ * with a glowing orange lightning shard set into the right blade. Points
+ * are in the icon's 1024px space (y down) and extruded with sharp
+ * chamfers so it reads from every angle. Ported from the Lovable brand
+ * design; the material colors are fixed brand artwork (gunmetal + signal
+ * orange), deliberately not theme tokens — the mark must read
+ * identically under every preset, like the flat PNG it replaces.
  */
 type Pt = [number, number]
 
 const LEFT_ARM: Pt[] = [
-  [20, 5],
-  [205, 125],
-  [268, 290],
-  [265, 440],
+  [108, 175],
+  [135, 172],
+  [430, 355],
+  [515, 610],
+  [512, 852],
+  [488, 838],
 ]
 const RIGHT_ARM: Pt[] = [
-  [265, 440],
-  [268, 290],
-  [312, 142],
-  [482, 122],
+  [512, 852],
+  [515, 610],
+  [565, 358],
+  [850, 172],
+  [890, 170],
+  [775, 382],
+  [848, 355],
 ]
 const SHARD: Pt[] = [
-  [312, 246],
-  [352, 112],
-  [506, 4],
-  [440, 132],
-  [480, 120],
+  [585, 540],
+  [665, 320],
+  [890, 170],
+  [772, 384],
+  [842, 358],
 ]
 
-function toShape(pts: Pt[]) {
-  const s = new THREE.Shape()
-  pts.forEach(([x, y], i) => {
-    const X = (x - 262) / 100
-    const Y = -(y - 222) / 100
-    if (i === 0) s.moveTo(X, Y)
-    else s.lineTo(X, Y)
-  })
-  s.closePath()
-  return s
+const toXY = ([x, y]: Pt): [number, number] => [
+  (x - 500) / 160,
+  -(y - 510) / 160,
+]
+
+/**
+ * Faceted blade: the outline sits at ±depth/2, and both faces rise to a
+ * raised ridge point (the centroid), so every edge gets its own angled
+ * facet — the cut-gem look of the rendered icon.
+ */
+function bladeGeometry(pts: Pt[], depth: number, ridge: number, z: number) {
+  const p = pts.map(toXY)
+  const cx = p.reduce((s, q) => s + q[0]!, 0) / p.length
+  const cy = p.reduce((s, q) => s + q[1]!, 0) / p.length
+  const h = depth / 2
+  const v: number[] = []
+  const tri = (a: number[], b: number[], c: number[]) =>
+    v.push(...a, ...b, ...c)
+  const F = [cx, cy, h + ridge + z]
+  const B = [cx, cy, -h - ridge + z]
+  for (let i = 0; i < p.length; i++) {
+    const [ax, ay] = p[i]!
+    const [bx, by] = p[(i + 1) % p.length]!
+    const af = [ax, ay, h + z]
+    const bf = [bx, by, h + z]
+    const ab = [ax, ay, -h + z]
+    const bb = [bx, by, -h + z]
+    tri(af, bf, F)
+    tri(bb, ab, B)
+    tri(ab, bb, bf)
+    tri(ab, bf, af)
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+  g.computeVertexNormals()
+  return g
 }
 
-interface PieceProps {
+function Piece({
+  pts,
+  depth,
+  z,
+  bevel,
+  material,
+}: {
   pts: Pt[]
   depth: number
   z: number
+  bevel: number
   material: THREE.Material
-}
-
-function Piece(props: PieceProps) {
-  const geo = useMemo(() => {
-    const g = new THREE.ExtrudeGeometry(toShape(props.pts), {
-      depth: props.depth,
-      bevelEnabled: true,
-      bevelThickness: 0.12,
-      bevelSize: 0.08,
-      bevelSegments: 1,
-    })
-    g.translate(0, 0, -props.depth / 2 + props.z)
-    return g
-  }, [props.pts, props.depth, props.z])
-  return <mesh geometry={geo} material={props.material} castShadow />
+}) {
+  const geo = useMemo(
+    () => bladeGeometry(pts, depth, bevel, z),
+    [pts, depth, z, bevel]
+  )
+  return <mesh geometry={geo} material={material} castShadow />
 }
 
 function Mark() {
-  const navy = useMemo(
+  const steel = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: '#33445f',
-        metalness: 0.45,
-        roughness: 0.32,
+        color: '#3a475c',
+        metalness: 0.55,
+        roughness: 0.28,
         clearcoat: 1,
-        clearcoatRoughness: 0.15,
+        clearcoatRoughness: 0.12,
         flatShading: true,
+        side: THREE.DoubleSide,
       }),
     []
   )
@@ -109,19 +140,20 @@ function Mark() {
       new THREE.MeshPhysicalMaterial({
         color: '#ff6a1a',
         emissive: '#ff4a00',
-        emissiveIntensity: 0.45,
-        metalness: 0.2,
-        roughness: 0.2,
+        emissiveIntensity: 0.7,
+        metalness: 0.1,
+        roughness: 0.15,
         clearcoat: 1,
         flatShading: true,
+        side: THREE.DoubleSide,
       }),
     []
   )
   return (
-    <group scale={1}>
-      <Piece pts={LEFT_ARM} depth={0.42} z={0} material={navy} />
-      <Piece pts={RIGHT_ARM} depth={0.42} z={0} material={navy} />
-      <Piece pts={SHARD} depth={0.62} z={0} material={orange} />
+    <group>
+      <Piece pts={LEFT_ARM} depth={0.3} z={0} bevel={0.16} material={steel} />
+      <Piece pts={RIGHT_ARM} depth={0.3} z={0} bevel={0.16} material={steel} />
+      <Piece pts={SHARD} depth={0.3} z={0.14} bevel={0.12} material={orange} />
     </group>
   )
 }
@@ -144,7 +176,7 @@ export function VantyrLogo3D(props: VantyrLogo3DProps) {
     <Canvas
       shadows
       dpr={[1, 2]}
-      camera={{ position: [0, 0.2, 9], fov: 40 }}
+      camera={{ position: [0, 0.2, 11], fov: 40 }}
       gl={{ antialias: true, alpha: true }}
     >
       <ambientLight intensity={0.8} />
