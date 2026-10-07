@@ -20,6 +20,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import brandIcon from '@/assets/vantyr-mark.png'
 import wordmarkDark from '@/assets/vantyr-wordmark-dark.png'
 import wordmarkWhite from '@/assets/vantyr-wordmark-white.png'
 import { Dialog } from '@/components/dialog'
@@ -95,27 +96,40 @@ export function PublicHeader(props: PublicHeaderProps) {
   const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
 
-  // Brand lockup: the wordmark artwork carries the mark + VANTYR letters
-  // (white letters for dark mode, inverted letters for light mode). The
-  // square 3D icon serves the other logo surfaces (console, footer,
-  // favicon) via the system logo; the system name stays as the link title.
+  // Brand lockup: the 3D icon beside VANTYR letters (white letters in
+  // dark mode, inverted dark letters in light mode). When the header
+  // condenses on scroll, the letters collapse so the nav links keep
+  // their full labels and nothing overlaps; the icon stays. The system
+  // name remains as the link title for hover/assistive text.
   let logoContent: ReactNode = (
     <>
       <img
-        src={wordmarkWhite}
+        src={brandIcon}
         alt='Vantyr'
-        className='hidden h-6 w-auto object-contain md:h-7 dark:block'
+        className='size-7 shrink-0 object-contain'
       />
-      <img
-        src={wordmarkDark}
-        alt=''
+      <span
         aria-hidden='true'
-        className='h-6 w-auto object-contain md:h-7 dark:hidden'
-      />
+        className={cn(
+          'hidden overflow-hidden transition-all duration-500 dark:flex',
+          scrolled ? 'max-w-0 opacity-0' : 'max-w-24 opacity-100'
+        )}
+      >
+        <img src={wordmarkWhite} alt='' className='h-5 w-auto object-contain' />
+      </span>
+      <span
+        aria-hidden='true'
+        className={cn(
+          'flex overflow-hidden transition-all duration-500 dark:hidden',
+          scrolled ? 'max-w-0 opacity-0' : 'max-w-24 opacity-100'
+        )}
+      >
+        <img src={wordmarkDark} alt='' className='h-5 w-auto object-contain' />
+      </span>
     </>
   )
   if (customLogo) logoContent = customLogo
-  if (loading) logoContent = <Skeleton className='h-7 w-40 rounded-md' />
+  if (loading) logoContent = <Skeleton className='size-7 rounded-md' />
 
   let authContent = (
     <Button
@@ -228,7 +242,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 className='group flex min-w-0 items-center gap-2.5'
                 title={displaySiteName}
               >
-                <div className='flex shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
+                <div className='flex shrink-0 items-center justify-center gap-2 transition-all duration-300 group-hover:scale-105'>
                   {logoContent}
                 </div>
               </Link>
@@ -251,7 +265,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                       tabIndex={link.disabled ? -1 : undefined}
                       onClick={(event) => handleNavLinkClick(event, link)}
                       className={cn(
-                        'text-muted-foreground hover:text-foreground min-w-0 truncate rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
+                        'text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
                         link.disabled && 'pointer-events-none opacity-50'
                       )}
                     >
@@ -267,7 +281,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     disabled={link.disabled}
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
-                      'min-w-0 truncate rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
+                      'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
                       isActive
                         ? 'text-foreground'
                         : 'text-muted-foreground hover:text-foreground',
