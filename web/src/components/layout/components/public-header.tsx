@@ -20,6 +20,8 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import wordmarkDark from '@/assets/vantyr-wordmark-dark.png'
+import wordmarkWhite from '@/assets/vantyr-wordmark-white.png'
 import { Dialog } from '@/components/dialog'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { NotificationPopover } from '@/components/notification-popover'
@@ -36,7 +38,6 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
-import { HeaderLogo } from './header-logo'
 
 const AUTH_PROMPT_SECONDS = 5
 
@@ -83,12 +84,7 @@ export function PublicHeader(props: PublicHeaderProps) {
   const [authPromptSecondsLeft, setAuthPromptSecondsLeft] =
     useState(AUTH_PROMPT_SECONDS)
   const { auth } = useAuthStore()
-  const {
-    systemName,
-    logo: systemLogo,
-    loading,
-    logoLoaded,
-  } = useSystemConfig()
+  const { systemName, loading } = useSystemConfig()
   const dynamicLinks = useTopNavLinks()
   const notifications = useNotifications()
   const routerState = useRouterState()
@@ -99,16 +95,27 @@ export function PublicHeader(props: PublicHeaderProps) {
   const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
 
+  // Brand lockup: the wordmark artwork carries the mark + VANTYR letters
+  // (white letters for dark mode, inverted letters for light mode). The
+  // square 3D icon serves the other logo surfaces (console, footer,
+  // favicon) via the system logo; the system name stays as the link title.
   let logoContent: ReactNode = (
-    <HeaderLogo
-      src={systemLogo}
-      loading={loading}
-      logoLoaded={logoLoaded}
-      className='size-full rounded-lg object-contain'
-    />
+    <>
+      <img
+        src={wordmarkWhite}
+        alt='Vantyr'
+        className='hidden h-6 w-auto object-contain md:h-7 dark:block'
+      />
+      <img
+        src={wordmarkDark}
+        alt=''
+        aria-hidden='true'
+        className='h-6 w-auto object-contain md:h-7 dark:hidden'
+      />
+    </>
   )
   if (customLogo) logoContent = customLogo
-  if (loading) logoContent = <Skeleton className='size-full rounded-lg' />
+  if (loading) logoContent = <Skeleton className='h-7 w-40 rounded-md' />
 
   let authContent = (
     <Button
@@ -219,20 +226,11 @@ export function PublicHeader(props: PublicHeaderProps) {
               <Link
                 to={homeUrl}
                 className='group flex min-w-0 items-center gap-2.5'
+                title={displaySiteName}
               >
-                <div className='flex size-7 shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
+                <div className='flex shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
                   {logoContent}
                 </div>
-                <span
-                  className='max-w-48 truncate text-sm font-semibold tracking-tight'
-                  title={displaySiteName}
-                >
-                  {loading ? (
-                    <Skeleton className='h-4 w-16' />
-                  ) : (
-                    displaySiteName
-                  )}
-                </span>
               </Link>
               <SystemUpdateAction presentation='version' />
             </div>
