@@ -26,7 +26,14 @@ import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import {
+  CTA,
+  Features,
+  Hero,
+  HowItWorks,
+  IntroReveal,
+  Stats,
+} from './components'
 import { AmbientBackground } from './components/ambient-background'
 import { useHomePageContent } from './hooks'
 
@@ -123,6 +130,9 @@ export function Home() {
 
   return (
     <PublicLayout showMainContainer={false}>
+      {/* Opening scene: void overlay + 3D mark over the first screen.
+       * Scroll-driven, plays once per load (removed when finished). */}
+      <IntroReveal />
       {/* Decorative ambient traces sit behind the landing content: the
        * fixed layer paints over the layout's background, and the content
        * wrapper lifts above it (z-10) like the marketing pages. */}

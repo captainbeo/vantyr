@@ -979,3 +979,31 @@ closed (401 unauthenticated), gateway healthy with no errors in logs,
 pay.vantyr.xyz unaffected. `pinned-next7` retained for instant rollback
 (repoint compose.yaml image, `docker compose up -d --no-build gateway`,
 re-set HomePageContent when reverting the landing).
+
+**Homepage 3D intro reveal (2026-10-07).** The Lovable-designed opening
+scene was ported into `web/src/features/home/components/brand/`:
+
+- `intro-reveal.tsx`: scroll-driven, once-per-load void overlay. The
+  overlay is `pointer-events-none fixed inset-0 z-50 bg-void` (DOM-after
+  the fixed public header, so it covers it) and a 90svh spacer supplies
+  the scroll distance; when the fade finishes the spacer and overlay are
+  removed and the scroll position is shifted by the spacer height so the
+  page never jumps (the compensating scrollTo is deferred two frames
+  past the removal layout: Chrome's scroll anchoring also compensates,
+  and composing both shifts double-compensates to the top). Scrolling
+  back up stays on the landing; the intro
+  replays only on reload.
+- `vantyr-logo-3d.tsx`: the extruded 3D mark (three.js), lazily imported
+  and mounted only when a WebGL2 probe passes; otherwise the flat
+  `vantyr-mark.png` shows. Auto-rotation is disabled under
+  `prefers-reduced-motion`.
+- New web deps `three`, `@react-three/fiber`, `@react-three/drei`
+  (production) and `@types/three` (dev), rows added to
+  `THIRD-PARTY-LICENSES.md`.
+- New `--void` token + `--color-void`/`bg-void` utility in
+  `web/src/styles/theme.css` (fixed brand black, preset- and
+  mode-independent).
+- Two new i18n keys ("Scroll", "Endless coding with AI") synced across
+  all 7 locales.
+- The overlay renders only on the built-in Control Room landing; admin
+  `HomePageContent` overrides (URL/HTML/markdown) still bypass it.

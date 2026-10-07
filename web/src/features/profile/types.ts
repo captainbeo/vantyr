@@ -170,7 +170,9 @@ export interface UpdateUserSettingsRequest {
 export interface BindingItem {
   id: string
   label: string
-  icon: React.ElementType
+  // ComponentType for the same fiber-augmentation reason as
+  // BaseNavItem.icon in components/layout/types.ts.
+  icon: React.ComponentType<{ className?: string }>
   value?: string
   isBound: boolean
   isEnabled: boolean

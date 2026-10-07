@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type LinkProps } from '@tanstack/react-router'
-import { type TFunction } from 'i18next'
+import type { LinkProps } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 
 /**
  * Base navigation item type
@@ -25,7 +25,14 @@ import { type TFunction } from 'i18next'
 type BaseNavItem = {
   title: string
   badge?: string
-  icon?: React.ElementType
+  // ComponentType (not ElementType): once @react-three/fiber is in the
+  // program its JSX augmentation adds three.js elements to
+  // IntrinsicElements, and ElementType's intrinsic-keyword constituent
+  // intersects their props — className then resolves to `never` at every
+  // <item.icon className=...> call site. ComponentType keeps arbitrary
+  // icon components working (all icon props are optional) without that
+  // union.
+  icon?: React.ComponentType<{ className?: string }>
   activeUrls?: (LinkProps['to'] | (string & {}))[]
   configUrls?: (LinkProps['to'] | (string & {}))[]
   /**

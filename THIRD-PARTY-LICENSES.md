@@ -83,6 +83,8 @@ Transitive dependencies should be audited before a final external release.
 | web      | production  | npm       | `@hugeicons/react`                                    | `1.1.9`                              | MIT                                                |
 | web      | production  | npm       | `@lezer/highlight`                                    | `1.2.3`                              | MIT                                                |
 | web      | production  | npm       | `@lobehub/icons`                                      | `5.14.0`                             | MIT                                                |
+| web      | production  | npm       | `@react-three/drei`                                   | `10.7.9`                             | MIT                                                |
+| web      | production  | npm       | `@react-three/fiber`                                  | `9.8.1`                              | MIT                                                |
 | web      | production  | npm       | `@tanstack/react-query`                               | `5.101.2`                            | MIT                                                |
 | web      | production  | npm       | `@tanstack/react-router`                              | `1.170.18`                           | MIT                                                |
 | web      | production  | npm       | `@tanstack/react-table`                               | `8.21.3`                             | MIT                                                |
@@ -122,6 +124,7 @@ Transitive dependencies should be audited before a final external release.
 | web      | production  | npm       | `stream-markdown-parser`                              | `1.1.3`                              | MIT                                                |
 | web      | production  | npm       | `tailwind-merge`                                      | `3.6.0`                              | MIT                                                |
 | web      | production  | npm       | `tailwindcss`                                         | `4.3.3`                              | MIT                                                |
+| web      | production  | npm       | `three`                                               | `0.186.1`                            | MIT                                                |
 | web      | production  | npm       | `tokenlens`                                           | `1.3.1`                              | MIT                                                |
 | web      | production  | npm       | `tw-animate-css`                                      | `1.4.0`                              | MIT                                                |
 | web      | production  | npm       | `use-stick-to-bottom`                                 | `1.1.6`                              | MIT                                                |
@@ -137,6 +140,7 @@ Transitive dependencies should be audited before a final external release.
 | web      | development | npm       | `@types/node`                                         | `26.1.1`                             | MIT                                                |
 | web      | development | npm       | `@types/react`                                        | `19.2.17`                            | MIT                                                |
 | web      | development | npm       | `@types/react-dom`                                    | `19.2.3`                             | MIT                                                |
+| web      | development | npm       | `@types/three`                                        | `0.186.0`                            | MIT                                                |
 | web      | development | npm       | `@typescript/native-preview`                          | `7.0.0-dev.20260707.2`               | Apache-2.0                                         |
 | web      | development | npm       | `@xyflow/react`                                       | `12.11.2`                            | MIT                                                |
 | web      | development | npm       | `embla-carousel-react`                                | `8.6.0`                              | MIT                                                |

@@ -89,6 +89,7 @@ For commercial licensing, please contact support@quantumnous.com
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-void: var(--void);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -154,6 +155,9 @@ For commercial licensing, please contact support@quantumnous.com
   --overview-accent-1: oklch(0.72 0.18 250);
   --overview-accent-2: oklch(0.65 0.15 200);
   --overview-accent-3: oklch(0.7 0.12 280);
+  /* Intro-reveal backdrop: Vantablack-style fixed brand black. Independent
+     of preset and mode — the opening scene is always a black void. */
+  --void: oklch(0.03 0 0);
   --sidebar: color-mix(in oklch, var(--foreground) 0.5%, var(--background));
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.64 0.197 253.892);
