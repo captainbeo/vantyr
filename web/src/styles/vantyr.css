@@ -178,52 +178,8 @@ For commercial licensing, please contact support@quantumnous.com
   [data-slot='sidebar-menu-button']::before {
   display: none;
 }
-
-/* ---- Logo visibility (owner request 2026-10-06) ----
- * The brand artwork is a wide transparent wordmark, but the stock containers
- * are small squares (20–32px) and two of them crop with object-cover; the
- * dark wordmark is also nearly invisible on the dark Control Room background.
- * Scoped fixes: enlarge the boxes, switch cropping to contain, and invert the
- * wordmark in dark mode (single artwork serves both themes). */
-
-/* Public header (homepage) logo: 28px square -> taller box that fits the 2:1
- * wordmark without letterboxing it into invisibility. Scoped to the header
- * brand link so the footer's size-7 is untouched. */
-header .group > div.size-7:has(> img) {
-  width: 3.25rem;
-  height: 2.25rem;
-  flex: none;
-}
-
-/* Top app bar (SystemBrand inline): 20px + object-cover crops the wordmark
- * to its middle letters. Give it width and stop cropping. */
-a:has(> div.size-5) > div.size-5:has(> img) {
-  width: 2rem;
-  height: 1.5rem;
-}
-a:has(> div.size-5) > div.size-5 > img {
-  object-fit: contain;
-}
-
-/* Sidebar brand (SystemBrand sidebar variant): 32px square, object-cover. */
-div.aspect-square.size-8:has(> img) {
-  aspect-ratio: auto;
-  width: 2.5rem;
-  height: 1.875rem;
-}
-div.aspect-square.size-8 > img {
-  object-fit: contain;
-}
-
-/* Footer logo: modest bump, no crop. */
-img.size-7.rounded-lg.object-contain[src*='logo'] {
-  width: 2.5rem;
-  height: 1.75rem;
-}
-
-/* Dark mode: invert the dark wordmark to bright (contrast ~11:1 on the
- * Control Room background); light mode keeps the original dark artwork.
- * Scoped to logo-named images only (the brand wordmark). */
-.dark img[src*='logo'] {
-  filter: invert(1);
-}
+/* ---- Brand artwork (updated 2026-10-07) ----
+ * The square 3D faceted mark carries its own safe margins and reads in the
+ * stock 20-32px containers with object-contain in both themes, so the old
+ * wide-wordmark widening + dark-mode invert rules were retired with the
+ * artwork swap (inverting would also shift the orange shard to cyan). */
