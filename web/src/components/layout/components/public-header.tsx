@@ -112,7 +112,7 @@ export function PublicHeader(props: PublicHeaderProps) {
         aria-hidden='true'
         className={cn(
           'hidden overflow-hidden transition-all duration-500 dark:flex',
-          scrolled ? 'max-w-0 opacity-0' : 'max-w-24 opacity-100'
+          scrolled ? 'max-w-0 opacity-0' : 'max-w-44 opacity-100'
         )}
       >
         <img src={wordmarkWhite} alt='' className='h-5 w-auto object-contain' />
@@ -121,7 +121,7 @@ export function PublicHeader(props: PublicHeaderProps) {
         aria-hidden='true'
         className={cn(
           'flex overflow-hidden transition-all duration-500 dark:hidden',
-          scrolled ? 'max-w-0 opacity-0' : 'max-w-24 opacity-100'
+          scrolled ? 'max-w-0 opacity-0' : 'max-w-44 opacity-100'
         )}
       >
         <img src={wordmarkDark} alt='' className='h-5 w-auto object-contain' />
