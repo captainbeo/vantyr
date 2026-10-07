@@ -27,54 +27,41 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 
 /**
- * Fully 3D Vantyr mark: a faceted navy V body with the orange shard
- * cutting across it, extruded with bevels so it reads from every angle.
- * Outline points are traced from the 2026-10-07 3D mark artwork (512px
- * space, y down). The material colors are fixed brand artwork (navy
- * metal + signal orange, sampled from the artwork), deliberately not
+ * Fully 3D Vantyr mark: two faceted navy arms forming the V plus the
+ * orange lightning shard, extruded with bevels so it reads from every
+ * angle. Outline points are traced from the 2D mark (512px space, y
+ * down). Ported from the Lovable brand design; the material colors are
+ * fixed brand artwork (navy metal + signal orange), deliberately not
  * theme tokens — the mark must read identically under every preset,
  * like the flat PNG it replaces.
  */
 type Pt = [number, number]
 
-/**
- * Outline points traced from the 2026-10-07 3D mark artwork (512px space,
- * y down). The new silhouette is a single faceted V body (the old artwork
- * kept a visible gap between the arms; the new one merges them at the
- * bottom), one wide orange shard cutting across the V's right arm, and a
- * small detached navy facet chip at the top right.
- */
-const V_BODY: Pt[] = [
-  [0, 60],
-  [222, 148],
-  [264, 269],
-  [350, 215],
-  [449, 188],
-  [241, 458],
-  [224, 371],
-  [192, 326],
-  [160, 281],
-  [128, 236],
-  [96, 163],
+const LEFT_ARM: Pt[] = [
+  [20, 5],
+  [205, 125],
+  [268, 290],
+  [265, 440],
+]
+const RIGHT_ARM: Pt[] = [
+  [265, 440],
+  [268, 290],
+  [312, 142],
+  [482, 122],
 ]
 const SHARD: Pt[] = [
-  [496, 51],
-  [397, 199],
-  [343, 211],
-  [285, 238],
-  [337, 137],
-]
-const FACET: Pt[] = [
-  [505, 44],
-  [511, 50],
-  [466, 99],
+  [312, 246],
+  [352, 112],
+  [506, 4],
+  [440, 132],
+  [480, 120],
 ]
 
 function toShape(pts: Pt[]) {
   const s = new THREE.Shape()
   pts.forEach(([x, y], i) => {
-    const X = (x - 256) / 100
-    const Y = -(y - 256) / 100
+    const X = (x - 262) / 100
+    const Y = -(y - 222) / 100
     if (i === 0) s.moveTo(X, Y)
     else s.lineTo(X, Y)
   })
@@ -108,7 +95,7 @@ function Mark() {
   const navy = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: '#2e3a49',
+        color: '#33445f',
         metalness: 0.45,
         roughness: 0.32,
         clearcoat: 1,
@@ -120,8 +107,8 @@ function Mark() {
   const orange = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: '#d2530f',
-        emissive: '#b03a00',
+        color: '#ff6a1a',
+        emissive: '#ff4a00',
         emissiveIntensity: 0.45,
         metalness: 0.2,
         roughness: 0.2,
@@ -132,9 +119,9 @@ function Mark() {
   )
   return (
     <group scale={1}>
-      <Piece pts={V_BODY} depth={0.42} z={0} material={navy} />
-      <Piece pts={FACET} depth={0.42} z={0} material={navy} />
-      <Piece pts={SHARD} depth={0.62} z={0.1} material={orange} />
+      <Piece pts={LEFT_ARM} depth={0.42} z={0} material={navy} />
+      <Piece pts={RIGHT_ARM} depth={0.42} z={0} material={navy} />
+      <Piece pts={SHARD} depth={0.62} z={0} material={orange} />
     </group>
   )
 }
