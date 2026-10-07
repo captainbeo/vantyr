@@ -1117,3 +1117,43 @@ pinned-next10 shipped — is back on every surface.
   `/opt/vantyr/backups/revert-2026-10-07/` before the static swap.
   The local sandbox image was rebuilt from f933a8fa0 in the same
   pass (image `vantyr/new-api:pinned`, marker-verified).
+
+
+**Gunmetal 3D mark deploy (2026-10-07, pinned-next13).** The owner
+reviewed the local render and confirmed it as the correct logo:
+the rotating 3D mark now uses the Lovable "gunmetal blades"
+reference (owner-supplied
+`vantyr-rotating-logo-claude-update.md`). Only the logo
+implementation changed — commit `2d72ca269` on
+`web/src/features/home/components/brand/vantyr-logo-3d.tsx`:
+custom `bladeGeometry` (outline at ±depth/2, both faces rising to a
+ridge point at the centroid — every edge gets its own angled facet),
+two long gunmetal blades (`#3a475c`, metalness 0.55, DoubleSide),
+orange shard set into the right blade (z +0.14, emissiveIntensity
+0.7), camera at [0, 0.2, 11]. The intro overlay, scroll transition,
+once-per-load behavior, lazy loading, and the `VantyrLogo3D` props
+API are unchanged; the flat PNG brand surfaces (header/footer logo,
+favicon, fallback mark, docs) still carry the original zip artwork.
+
+- Pre-deploy verification: tsgo typecheck clean, format check clean
+  on the file, intro-reveal tests 2/2, browser-verified locally
+  (desktop + 375x812 mobile: mark renders, rotates 360°, fits the
+  intro; intro stays gone after scrolling past and back).
+- Deployed as `vantyr/new-api:pinned-next13` (fc18d033ff2a, a
+  genuine rebuild — new image ID, unlike pinned-next12 which hit the
+  layer cache). AGPL protocol in full: `vantyr/main` → public `main`
+  (2d72ca269), tag `deploy/2026-10-07-gunmetal-3d` pushed, source
+  archive `vantyr-source-2026-10-07-gunmetal-3d.tar.gz` (sha256
+  585295f7…6925; 2590 files sha256-verified on-server before the
+  build) published, `Footer` option updated.
+- Live verification: gateway healthy; running binary carries the new
+  markers (`3a475c`, `585,540`, camera `0.2,11`) and zero old
+  markers (`33445f`/`268,290` absent); new SPA bundle
+  `index.5947840565.js`; brand logo PNG unchanged (7943154b…, the
+  original artwork — only the 3D mark changed); home/status/docs 200;
+  relay 401 unauthenticated; pay.vantyr.xyz 200; archive 200 with the
+  notice carrying the new tag/sha; footer links the new tag; zero
+  errors in gateway logs. `pinned-next12` (47eaaad68e52) retained for
+  rollback (repoint compose.yaml, `docker compose up -d --no-build
+  gateway`). The local sandbox image is rebuilt from 2d72ca269 in
+  the same pass.
