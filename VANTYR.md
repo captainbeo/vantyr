@@ -1007,3 +1007,26 @@ scene was ported into `web/src/features/home/components/brand/`:
   all 7 locales.
 - The overlay renders only on the built-in Control Room landing; admin
   `HomePageContent` overrides (URL/HTML/markdown) still bypass it.
+
+**3D intro reveal deployed (2026-10-07):** shipped as image
+`vantyr/new-api:pinned-next10` (47eaaad68e52, built on-server from the
+tree synced via git archive; 2588 files sha256-verified against the tag
+manifest before build, Caddyfile/compose excluded from extraction).
+Feature markers grep-verified in the binary (ExtrudeGeometry, 90svh,
+bg-void, tagline, react-three all present). AGPL protocol repeated in
+full: `vantyr/main` → public `main` (ef6d195c5), tag
+`deploy/2026-10-07-intro-reveal` pushed (only PR-triggered ci.yml
+exists), source archive
+`vantyr-source-2026-10-07-intro-reveal.tar.gz`
+(sha256 7d5d1d51…b1d6, see `static/source/source-notice.txt`)
+published, `Footer` option updated to the new tag/archive links.
+Verified live: new index bundle `index.ff544d7038.js` carries the new
+tagline key, CSS `index.eb23f9b3e5.css` carries `--void`, lazy
+three.js async chunk 61892 serves ExtrudeGeometry, home route async
+chunk carries the intro classes, home/status/docs/pay/archive/notice
+all 200, relay fails closed (401 unauthenticated), gateway healthy
+with zero errors in logs, pay.vantyr.xyz unaffected. `pinned-next9`
+(ca5b1100cf08) retained for instant rollback (repoint compose.yaml
+image, `docker compose up -d --no-build gateway`). Note: bun 1.4.0
+(Dockerfile pin) accepts the bun-1.4.2-written lockfile — frozen
+install verified both locally and in the on-server build.
