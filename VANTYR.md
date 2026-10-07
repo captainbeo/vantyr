@@ -1030,3 +1030,45 @@ with zero errors in logs, pay.vantyr.xyz unaffected. `pinned-next9`
 image, `docker compose up -d --no-build gateway`). Note: bun 1.4.0
 (Dockerfile pin) accepts the bun-1.4.2-written lockfile — frozen
 install verified both locally and in the on-server build.
+
+
+**New 3D logo + docs ambient background (2026-10-07).** The owner's
+updated mark artwork (3D faceted navy V with orange shard, from
+`vantyr-logo-3d-v2.png`) replaced the wordmark-era logo on every
+surface, and /docs got the homepage ambient background:
+
+- `static/brand/logo.png` now the padded square mark (same URL, so the
+  `Logo` option, favicon flow, header, and footer all pick it up with
+  no option change); `web/public/logo.png` + `favicon.ico` and
+  `web/src/assets/vantyr-mark.png` refreshed from the same artwork;
+  `static/brand/vantyr-wordmark.png` holds the full lockup backup.
+- `vantyr-logo-3d.tsx` re-traced to the new silhouette: single faceted
+  V body + one wide orange shard + detached top-right facet chip
+  (colors sampled from artwork: navy #2e3a49, orange #d2530f, shard
+  z-lifted 0.1 so it reads as cutting across the arm).
+- Retired the 2026-10-06 wordmark CSS (container widening +
+  `.dark img[src*='logo']` invert): the square mark reads in stock
+  20-32px containers in both themes, and invert would have shifted the
+  orange shard to cyan; the rules also caught the waffo payment logos.
+- `/docs/`: header grid-bg replaced with the homepage ambient
+  background ported as inline CSS + 7 precomputed trace paths (same
+  params/durations as `ambient-background.tsx`, reduced-motion freeze
+  included), and the topnav brand gained the mark image.
+- Verified locally: docs preview screenshots (ambient + mark), SPA
+  preview with the new 3D intro geometry, `tsgo -b` clean, oxlint/oxfmt
+  clean on touched files (the pre-existing Lightformer warnings in
+  HEAD were untouched).
+- Deployed as `vantyr/new-api:pinned-next11` (bc2a16f7d2dc, built
+  on-server; 2590 archive files sha256-verified before build, new
+  SHARD coordinate `496 51` + ExtrudeGeometry grep-verified in the
+  binary). AGPL protocol repeated in full: `vantyr/main` → public
+  `main` (5817f96c2), tag `deploy/2026-10-07-logo-3d` pushed, source
+  archive `vantyr-source-2026-10-07-logo-3d.tar.gz` (sha256
+  023754d0…f7692, see `static/source/source-notice.txt`) published,
+  `Footer` option updated. Live verification: gateway healthy, new
+  bundle `index.5426a2be4e.js`, brand logo 200/90087 bytes (new
+  artwork), /docs serves ambient-bg + topnav mark, footer_html links
+  the new tag, relay 401 unauthenticated, pay.vantyr.xyz unaffected.
+  `pinned-next10` (47eaaad68e52) retained for rollback (repoint
+  compose.yaml, `docker compose up -d --no-build gateway`). The local
+  sandbox image was rebuilt from 5817f96c2 in the same pass.
