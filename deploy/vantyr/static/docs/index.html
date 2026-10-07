@@ -332,7 +332,7 @@ footer .right { margin-left: auto; }
   <h2>Agents<span class="tick">//</span> works with your tool</h2>
   <p class="sec-sub">Guides with copy-paste config for each client. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> lists every model ID you can use.</p>
   <div class="agents">
-    <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Anthropic native</div></a>
+    <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Desktop + CLI</div></a>
     <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses wire</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">via extension</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">via extension</div></a>
@@ -369,7 +369,8 @@ footer .right { margin-left: auto; }
         <button class="tab" data-panel="t-other">Something else</button>
       </div>
       <div class="tabpanel active" id="t-claude"><div class="panel-box">
-        <div class="copy-hint">~/.claude/settings.json (or PowerShell env vars)</div>
+        <p><strong>Claude Desktop app (recommended):</strong> enable Developer Mode (<span class="mono">Help → Troubleshooting</span>), then <span class="mono">Developer → Configure Third-Party Inference…</span>, set provider to <strong>Gateway</strong>, and enter base URL <span class="mono">https://vantyr.xyz</span> + your key. The window tests the connection and auto-discovers your models. Full steps in the <a href="#agent-claude-code">Claude guide</a>.</p>
+        <div class="copy-hint">Claude Code CLI — ~/.claude/settings.json</div>
         <pre>{
   "env": {
     "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
@@ -443,21 +444,43 @@ codex</pre>
 
   <div id="agent-claude-code">
     <h3>Claude Code</h3>
-    <p>Anthropic's terminal coding agent. Vantyr serves the native Anthropic protocol, so Claude Code needs only environment settings.</p>
-    <div class="copy-hint">Install (Node 18+)</div>
-    <pre>npm install -g @anthropic-ai/claude-code</pre>
-    <div class="copy-hint">Global config — ~/.claude/settings.json (applies to every project)</div>
-    <pre>{
+    <p>Vantyr serves the native Anthropic protocol, so Claude works with no code changes. There are two surfaces — the <strong>Claude Desktop app</strong> (recommended: guided setup with connection test and automatic model discovery) and the <strong>Claude Code terminal CLI</strong> (environment variables).</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-cd-desktop">Claude Desktop app (recommended)</button>
+      <button class="tab" data-panel="t-cd-cli">Claude Code CLI</button>
+    </div>
+    <div class="tabpanel active" id="t-cd-desktop"><div class="panel-box">
+      <p><strong>1. Enable Developer Mode.</strong> In the app menu: <span class="mono">Help → Troubleshooting → Enable Developer Mode</span>. The app restarts with a <strong>Developer</strong> menu.</p>
+      <p><strong>2. Open the inference configuration.</strong> <span class="mono">Developer → Configure Third-Party Inference…</span></p>
+      <p><strong>3. Enter the gateway credentials.</strong> In the <em>Connection</em> section, set <em>Inference provider</em> to <strong>Gateway</strong>, then in the Gateway credentials card:</p>
+      <div class="kv">
+        <div class="k">Inference provider</div><div class="v">Gateway</div>
+        <div class="k">Gateway base URL</div><div class="v">https://vantyr.xyz</div>
+        <div class="k">Gateway API key</div><div class="v">sk-your-vantyr-key</div>
+        <div class="k">Credential kind</div><div class="v">Static API key</div>
+        <div class="k">Gateway auth scheme</div><div class="v">Bearer (default)</div>
+      </div>
+      <p><strong>4. Apply.</strong> The window validates the connection as you type — Vantyr implements <span class="mono">GET /v1/models</span>, so your claude-* models are <strong>discovered automatically</strong> in the model picker. Click <strong>Apply Changes</strong> and the app relaunches against Vantyr.</p>
+      <div class="callout"><p>While a gateway is active, the Desktop app runs sessions locally (no SSH or Anthropic-hosted environments), and Remote Control is unavailable. Non-Claude-shaped model IDs (like <span class="mono">gpt-6-astra</span>) don't appear via auto-discovery — you can still list them manually under <span class="mono">inferenceModels</span> in the developer config.</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-cd-cli"><div class="panel-box">
+      <p>The terminal CLI is configured with environment variables (there is no Developer Mode in the CLI).</p>
+      <div class="copy-hint">Install (Node 18+)</div>
+      <pre>npm install -g @anthropic-ai/claude-code</pre>
+      <div class="copy-hint">Global config — ~/.claude/settings.json (applies to every project)</div>
+      <pre>{
   "env": {
     "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
     "ANTHROPIC_AUTH_TOKEN": "sk-your-vantyr-key"
   }
 }</pre>
-    <div class="copy-hint">…or per-shell environment variables</div>
-    <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"      <span class="cm"># no /v1</span>
+      <div class="copy-hint">…or per-shell environment variables</div>
+      <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"      <span class="cm"># no /v1</span>
 export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
-    <p>Run <span class="mono">claude</span> in your project directory. Pick a model with <span class="mono">claude /model claude-sonnet-5</span>.</p>
-    <div class="callout warn"><p>Use <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (bearer), not <span class="mono">ANTHROPIC_API_KEY</span>. The gateway auths with a bearer token, and the AUTH_TOKEN form maps directly onto it.</p></div>
+      <p>Run <span class="mono">claude</span> in your project directory; check <span class="mono">/status</span> in-session to confirm the base URL is active. Pick a model with <span class="mono">claude /model claude-sonnet-5</span>.</p>
+      <div class="callout warn"><p>Use <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (Bearer header) — Vantyr accepts Bearer on the Anthropic endpoint too, and the AUTH_TOKEN form maps directly onto it. If you use <span class="mono">ANTHROPIC_API_KEY</span> instead, it sends <span class="mono">x-api-key</span>, which also works; just don't mix them up in one shell.</p></div>
+    </div></div>
   </div>
 
   <div id="agent-codex">
