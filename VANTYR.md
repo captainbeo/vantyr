@@ -1211,3 +1211,55 @@ icon.
   (`/opt/vantyr-backup-tmp`) before the pin swap — future rounds
   should sync only tracked source dirs, not clobber `deploy/vantyr`
   runtime files.
+
+## 2026-10-08 — Referral program (pinned-next15)
+
+`feat: implement referral program (TG registration + top-up bonus)`
+(commit 236f50047, tag `deploy/2026-10-08-referral-program`).
+
+- Scope: password registration no longer resolves affiliate codes
+  (inviter reward only on Telegram/Discord OAuth registrations — email
+  registration is farmable); Telegram widget login now registers
+  unknown accounts in one transaction (assertion claim + user +
+  identity claim + $5 trial credit, inviter $3 post-commit via the
+  compliance-gated path); OAuth creation persists `inviter_id` (was
+  never persisted — the top-up bonus depends on it); referral top-up
+  bonus `maybeGrantAffTopUpBonus` inside the row-locked recharge
+  transactions of RechargeEpay (GM Pay), Stripe Recharge, and
+  ManualCompleteTopUp — one-shot per referred user via
+  `users.aff_topup_credited` (bool, AutoMigrate-added on startup), $3
+  when the first top-up credits ≥ $20 (options `AffTopUpMinAmount=20`,
+  `QuotaForInviterTopUp=1500000`, `QuotaForInviter=1500000` set via
+  options table after deploy). Affiliate code travels in the
+  `X-Affiliate-Code` request header on GET /api/oauth/telegram/login —
+  the widget HMAC covers every URL query param, so a query param would
+  break the signature. Admin UI: two new quota-settings fields + en/zh
+  strings.
+- Verification: go build + full model + FULL controller suites green
+  on the VPS golang:1.26.1-alpine (vantyr-gomod/gobuild volumes);
+  web typecheck + auth/settings vitest green locally. Patch applied to
+  the server tree (docs base file created first — the design commit
+  f356cdb92 was never synced to the server), 13-file md5
+  byte-verification against the commit; image `pinned-next15`
+  (3b17a60d85a6) built on-server, compose pin swapped with backup at
+  `/tmp/compose-pre-referral.yaml`.
+- Live verification: gateway healthy; /api/status 200 with
+  telegram_oauth/register/turnstile flags on; users.aff_topup_credited
+  column present post-AutoMigrate; options synced (60s poll observed);
+  new SPA bundle `index.90b85e4d5f.js` served and embedded in the
+  binary (X-Affiliate-Code present in the embedded dist; served-bundle
+  name matches embed); relay 401 unauthenticated; pay/docs/sign-up
+  200; zero errors in gateway logs. End-to-end Telegram registration
+  and bonus payout verified by the on-VPS test suites (live probe
+  would need a real Telegram assertion and a paid GM Pay callback —
+  first real referred signup is the standing production proof).
+- AGPL: tag `deploy/2026-10-08-referral-program` pushed to public
+  (rode along: d7002bbfc branding commit from the shared worktree —
+  scanned, no secrets); archive
+  `vantyr-source-2026-10-08-referral-program.tar.gz` (sha256
+  26b35aa1…cd8a4) served 200 from /static/source/; footer option
+  updated to the new tag (live via 60s sync).
+- Rollback: `pinned-next14` (050811f8b976) retained — repoint
+  compose.yaml, `docker compose up -d --no-build gateway`; options
+  rows are additive (QuotaForInviter was previously absent, column is
+  default-false) so rollback needs no DB action.
