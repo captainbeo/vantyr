@@ -1289,3 +1289,39 @@ this image adds the two frontend reworks on top).
   (sha256 409d6fe9…c06a4); zero gateway errors.
 - Rollback: pinned-next15 retained — repoint compose.yaml + `docker
   compose up -d --no-build gateway`.
+
+## 2026-10-08 — About page (pinned-next17)
+
+`feat(about): dedicated Vantyr about page with savings emphasis`
+(commit 11f5db210, tag `deploy/2026-10-08-about-page`), frontend-only.
+
+- Scope: default about fallback (previously the standard New API
+  attribution block) replaced with a dedicated Vantyr page — what
+  Vantyr is, the problems with Claude/ChatGPT subscriptions, the
+  Vantyr solutions, and a pricing section emphasizing up to 97% below
+  official Claude and Codex rates plus the same-budget-goes-further
+  message. Hero and bottom CTAs auth-aware (dashboard for signed-in).
+  AGPL attribution preserved verbatim; admin-configured about content
+  (URL/HTML/markdown) still overrides. New copy synced across all 7
+  locales (57 keys verified present in every locale file).
+- Verification: about vitest 3/3, tsgo -b clean, scoped oxlint clean,
+  oxfmt clean; local browser verification desktop + mobile before
+  commit. Server web tree synced from the tag archive with rsync
+  (node_modules/dist excluded, 3-file md5 verified); image
+  pinned-next17 (2ffd042b364a) built on-server; compose pin swapped
+  with backup `/tmp/compose-pre-about.yaml`. New API `/api/about`
+  200; relay 401 unauthenticated; zero gateway errors.
+- Live verification (Playwright, real browser): new hero
+  "The real models. 97% less than official rates.", budget section,
+  problem/solution copy, attribution present; old fallback absent;
+  h1 visible at 375x812; zero page errors. Binary grep: new copy 2
+  hits; "No About Content Set" survives only as locale-JSON strings
+  (the old UI branch was removed).
+- AGPL: tag `deploy/2026-10-08-about-page` pushed to public repo;
+  archive `vantyr-source-2026-10-08-about-page.tar.gz` (sha256
+  87876769…3fcf814, byte size 7084166 verified equal local/remote)
+  served 200 from /static/source/; `Footer` option updated to the new
+  tag (observed live via /api/status within 60s).
+- Rollback: pinned-next16 (0363da127464) retained — repoint
+  compose.yaml + `docker compose up -d --no-build gateway`; no DB or
+  options changes beyond the Footer text.
