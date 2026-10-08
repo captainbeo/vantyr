@@ -1157,3 +1157,57 @@ favicon, fallback mark, docs) still carry the original zip artwork.
   rollback (repoint compose.yaml, `docker compose up -d --no-build
   gateway`). The local sandbox image is rebuilt from 2d72ca269 in
   the same pass.
+
+**Header wordmark lockup deploy (2026-10-08, pinned-next14).** Owner
+reviewed the local render across three rounds ("go live" after seeing
+the full VANTYR letters). The public header now shows the 3D icon
+(256px, gunmetal artwork from the owner's `vantyr-icon-3d.zip`)
+beside the full VANTYR letters (white in dark mode, inverted dark in
+light mode; letters-only assets 2313×292 cropped from the owner's
+wordmark lockup). On scroll the letters collapse to zero width
+(icon stays) so nav labels stay whole; system name moved to the link
+title. Commits `f218b0f57` → `9f1beb824` → `71e3761a9` (the round-2
+fix: the first letters crop had started at x=1324 so only "TYR"
+rendered, and max-w-24 clipped the ~158px word; re-crop all six
+glyph runs, clamp raised to max-w-44). The 2026-10-06 wordmark
+widening + dark invert CSS rules retired. Riding along: the Discord
+ticket bot (`1c902878c`) + #pricing sync (`a63a8bd5f`) + docs price
+refresh (`3aa73e460`) from the support session, already live on the
+VPS as the `vantyr-discord-ticket-bot` container. Changed brand
+statics: `static/brand/logo.png` 35321 bytes (256px icon),
+`static/brand/vantyr-wordmark.png` 26162 bytes (owner's white
+lockup, the crop source), `web/public/favicon.ico` 4941 bytes,
+`web/public/logo.png` + `web/src/assets/vantyr-mark.png` = the
+icon.
+
+- Pre-deploy verification: typecheck/format/lint clean; production
+  web build green with all three brand assets hashed into the bundle
+  (`vantyr-mark.2617e48e5f.png`, `vantyr-wordmark-white.85945c3d7d.png`,
+  `vantyr-wordmark-dark.feb78165f5.png`); browser-verified dark/light
+  × desktop/mobile × unscrolled/scrolled (letters 158×20 whole,
+  collapse maxW 0, nav labels untruncated).
+- Deployed as `vantyr/new-api:pinned-next14` from commit `3aa73e460`
+  (tag `deploy/2026-10-08-header-wordmark`). AGPL protocol in full:
+  public `main` pushed (3aa73e460), source archive
+  `vantyr-source-2026-10-08-header-wordmark.tar.gz` (sha256
+  549864a0…037bb; 2594 files sha256-verified on-server, 0
+  mismatches) published, `Footer` option updated to the new tag.
+  Server tree synced from the verified extract (old tree backed up
+  at `/opt/vantyr-backup-tmp` for this round).
+- Live verification: gateway healthy on `pinned-next14`
+  (050811f8b976); SPA bundle `index.02d462844c.js` served (200,
+  4796725B) with all three brand assets in chunk `21772.0095d73609.js`
+  (`vantyr-mark.2617e48e5f`, `vantyr-wordmark-white.85945c3d7d`,
+  `vantyr-wordmark-dark.feb78165f5`) and `max-w-44` present, no
+  `max-w-24`; brand statics updated (logo.png 35321B = 256px icon,
+  wordmark 26162B = owner's lockup, favicon 4941B); relay 401
+  unauthenticated; pay 200; archive 200 with notice carrying the new
+  tag/sha; footer links the new tag; zero errors in gateway logs.
+  `pinned-next13` (fc18d033ff2a) retained for rollback (repoint
+  compose.yaml, `docker compose up -d --no-build gateway`).
+  Post-deploy note: the full-tree sync overwrote the server-local
+  `compose.yaml` pin and `Caddyfile` (server copy has comment drift
+  vs repo); both were restored from the pre-sync backup
+  (`/opt/vantyr-backup-tmp`) before the pin swap — future rounds
+  should sync only tracked source dirs, not clobber `deploy/vantyr`
+  runtime files.
