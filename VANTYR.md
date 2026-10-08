@@ -1263,3 +1263,29 @@ icon.
   compose.yaml, `docker compose up -d --no-build gateway`; options
   rows are additive (QuotaForInviter was previously absent, column is
   default-false) so rollback needs no DB action.
+
+## 2026-10-08 — Liquid glass + brand + referral combined (pinned-next16)
+
+`feat: add liquid glass Vantyr styling` (ba1504617, tag
+`deploy/2026-10-08-liquid-glass`), riding `feat(brand)` d7002bbfc and
+the referral program 236f50047 (both already live via pinned-next15;
+this image adds the two frontend reworks on top).
+
+- Scope: `web/src/styles/vantyr-glass.css` (496 lines, scoped to the
+  `vantyr` preset) + 10 component hook files; branding commit removed
+  public-header chrome, New API naming from customer surfaces, VERSION
+  stamped v1.0.0-rc.41. Unrelated worktree files (about page, locale
+  experiments, .tmp patches) intentionally excluded from this release.
+- Verification: web typecheck + 29 focused vitest (landing, data-table,
+  settings, auth); full backend model+controller suites green on the
+  VPS pre-build; combined patch (VANTYR.md excluded — server copy
+  diverged) md5-verified on 5 key files; image pinned-next16
+  (0363da127464) built on-server; compose pin swapped with backup
+  `/tmp/compose-pre-liquid-glass.yaml`.
+- Live verification: gateway healthy; status/pricing/docs/sign-up 200;
+  relay 401; new CSS bundle `index.bbffe01abe.css` serving 45
+  backdrop-filter declarations + reduced-transparency fallback; binary
+  retains referral markers; footer + archive served 200
+  (sha256 409d6fe9…c06a4); zero gateway errors.
+- Rollback: pinned-next15 retained — repoint compose.yaml + `docker
+  compose up -d --no-build gateway`.
