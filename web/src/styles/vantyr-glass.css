@@ -1,0 +1,496 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+/*
+ * Vantyr "liquid glass" surface layer.
+ *
+ * Everything here is scoped to [data-theme-preset='vantyr'] (the attribute
+ * lives on <body>), so no other preset is affected. The layer composes
+ * three things:
+ *
+ *   1. An ambient glow canvas painted on body::before — glass needs
+ *      something colored behind it to refract, otherwise blur is invisible.
+ *      The page background tokens stay OPAQUE (they are the canvas);
+ *      translucency comes only from the surface rules below.
+ *   2. Glass fill tokens (--glass-*): translucent oklch colors plus a
+ *      backdrop-filter recipe, with light values on
+ *      [data-theme-preset='vantyr'] and dark values on
+ *      .dark [data-theme-preset='vantyr'] (same structure as the preset
+ *      file). A few preset tokens (card/popover/muted/secondary/accent/
+ *      border/input/sidebar-accent + the --table-* row family) get alpha
+ *      here too, so ad-hoc bg-card boxes and row states that never pass
+ *      through a data-slot still layer like glass instead of sitting
+ *      opaque.
+ *   3. Slot rules that apply fill + backdrop-filter + specular edge to the
+ *      surface families: app frame (header/sidebar/inset/page footer),
+ *      boxes (cards, panels, table boxes, tabs), fields (inputs/selects/
+ *      textareas), floating layers (dialogs/popovers/menus/sheets), and
+ *      table internals (sticky header, rows, pinned cells).
+ *
+ * These rules are intentionally UNLAYERED author CSS: they must override
+ * Tailwind's layered background / border / ring / shadow utilities on the
+ * same elements, which is exactly what replaces each surface's ring and
+ * shadow with the glass edge. Do not wrap them in @layer. Box-shadow is
+ * only set on box and floating surfaces — never on fields or buttons —
+ * so focus rings and state shadows from utilities keep working.
+ *
+ * PIPELINE GOTCHA (measured 2026-10-08): the Tailwind v4 / Lightning CSS
+ * pass in both dev and prod treats -webkit-backdrop-filter and
+ * backdrop-filter as aliases and emits ONLY the last-declared one.
+ * Current Chrome then drops the -webkit- form at parse time. So every
+ * backdrop-filter declaration here MUST be written prefixed-first,
+ * unprefixed-last. Never reorder them.
+ *
+ * Layout note: backdrop-filter makes an element a containing block for
+ * fixed-position descendants. All floating UI here portals to <body>, so
+ * only the fixed bulk-action bar inside the content pane is affected (it
+ * anchors to the pane's box instead of the viewport — visually a few px).
+ */
+
+/* ── Glass tokens ────────────────────────────────────────────────────── */
+/* Light: bright white glass over the cool paper canvas. */
+[data-theme-preset='vantyr'] {
+  --glass-filter: blur(16px) saturate(1.4);
+  --glass-filter-soft: blur(9px) saturate(1.3);
+  --glass-sheen: linear-gradient(
+    180deg,
+    oklch(1 0 0 / 42%),
+    transparent 46%
+  );
+  --glass-box: oklch(0.995 0.002 255 / 52%);
+  --glass-box-strong: oklch(0.99 0.003 255 / 68%);
+  --glass-app: oklch(0.988 0.004 255 / 58%);
+  --glass-floating: oklch(0.995 0.002 255 / 86%);
+  --glass-field: oklch(0.99 0.003 255 / 42%);
+  --glass-field-strong: oklch(0.982 0.004 255 / 64%);
+  --glass-edge: oklch(0.45 0.03 255 / 24%);
+  --glass-highlight: oklch(1 0 0 / 65%);
+  --glass-row-hover: oklch(0.5 0.03 252 / 8%);
+  --glass-row-selected: oklch(0.62 0.12 45 / 14%);
+  --glass-shadow:
+    0 12px 32px -12px oklch(0.55 0.04 255 / 28%), 0 2px 8px -4px
+    oklch(0.55 0.04 255 / 18%);
+
+  /* Alpha-adjusted preset tokens (canvas tokens stay opaque). */
+  --card: oklch(0.996 0.002 255 / 58%);
+  --popover: oklch(0.996 0.002 255 / 88%);
+  --muted: oklch(0.955 0.004 255 / 62%);
+  --secondary: oklch(0.945 0.005 255 / 66%);
+  --accent: oklch(0.94 0.008 255 / 70%);
+  --border: oklch(0.55 0.03 255 / 20%);
+  --input: oklch(0.55 0.03 255 / 24%);
+
+  /* Sidebar hover/active fills must be translucent too, or they read as
+   * opaque squares clipped inside the glass sidebar. --sidebar itself
+   * stays opaque: it is the body canvas color for inset layouts. */
+  --sidebar-accent: oklch(0.93 0.006 255 / 70%);
+  --sidebar-border: oklch(0.55 0.03 255 / 22%);
+
+  /* Table family — translucent so card rows, sticky headers and disabled
+   * bands layer like glass over the canvas glow. */
+  --table-row: oklch(0.992 0.002 255 / 48%);
+  --table-header: oklch(0.988 0.003 255 / 66%);
+  --table-header-hover: oklch(0.98 0.004 255 / 78%);
+  --table-disabled: oklch(0.965 0.004 255 / 46%);
+  --table-disabled-hover: oklch(0.955 0.005 255 / 56%);
+  --table-disabled-border: oklch(0.6 0.03 255 / 30%);
+
+  --skeleton-base: oklch(0.945 0.004 255 / 72%);
+  --skeleton-highlight: oklch(0.975 0.002 255 / 72%);
+}
+
+/* Dark: deep navy glass over the console canvas — the Control Room pour. */
+.dark [data-theme-preset='vantyr'] {
+  --glass-filter: blur(18px) saturate(1.5);
+  --glass-filter-soft: blur(10px) saturate(1.35);
+  --glass-sheen: linear-gradient(
+    180deg,
+    oklch(0.97 0.01 255 / 7%),
+    transparent 46%
+  );
+  --glass-box: oklch(0.205 0.022 255 / 52%);
+  --glass-box-strong: oklch(0.225 0.022 255 / 66%);
+  --glass-app: oklch(0.19 0.02 255 / 55%);
+  --glass-floating: oklch(0.225 0.024 255 / 84%);
+  --glass-field: oklch(0.25 0.024 255 / 34%);
+  --glass-field-strong: oklch(0.27 0.026 255 / 52%);
+  --glass-edge: oklch(0.72 0.03 255 / 26%);
+  --glass-highlight: oklch(0.95 0.01 255 / 13%);
+  --glass-row-hover: oklch(0.55 0.03 252 / 12%);
+  --glass-row-selected: oklch(0.62 0.12 45 / 16%);
+  --glass-shadow:
+    0 12px 32px -12px oklch(0.06 0.02 255 / 50%), 0 2px 8px -4px
+    oklch(0.06 0.02 255 / 35%);
+
+  --card: oklch(0.215 0.022 255 / 58%);
+  --popover: oklch(0.23 0.024 255 / 86%);
+  --muted: oklch(0.26 0.024 255 / 55%);
+  --secondary: oklch(0.28 0.026 255 / 60%);
+  --accent: oklch(0.3 0.03 255 / 62%);
+  --border: oklch(0.68 0.03 255 / 22%);
+  --input: oklch(0.68 0.03 255 / 24%);
+
+  --sidebar-accent: oklch(0.3 0.03 255 / 55%);
+  --sidebar-border: oklch(0.68 0.03 255 / 24%);
+
+  --table-row: oklch(0.21 0.022 255 / 46%);
+  --table-header: oklch(0.235 0.024 255 / 62%);
+  --table-header-hover: oklch(0.26 0.026 255 / 72%);
+  --table-disabled: oklch(0.185 0.02 255 / 42%);
+  --table-disabled-hover: oklch(0.21 0.022 255 / 50%);
+  --table-disabled-border: oklch(0.55 0.03 255 / 30%);
+
+  --skeleton-base: oklch(0.28 0.022 255 / 62%);
+  --skeleton-highlight: oklch(0.36 0.024 255 / 62%);
+}
+
+/* ── Ambient glow canvas ─────────────────────────────────────────────── */
+/* body paints an opaque background, and a z-index:-1 pseudo of a
+ * NON-stacking-context body would land behind that background (invisible).
+ * `isolation: isolate` makes body its own stacking context, so the glow
+ * pseudo layers above body's background but below page content. It creates
+ * no containing block for fixed children, so portals are unaffected. */
+[data-theme-preset='vantyr'] {
+  isolation: isolate;
+}
+
+/* Painted behind everything (above the body color, below content) so the
+ * translucent surfaces have colored light to refract. Static by design:
+ * no animation cost, and the marketing pages keep their own
+ * ambient-background traces on top of this. */
+[data-theme-preset='vantyr']::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      58% 42% at 12% -4%,
+      oklch(0.9 0.045 70 / 40%),
+      transparent 62%
+    ),
+    radial-gradient(
+      50% 38% at 88% 8%,
+      oklch(0.88 0.03 250 / 36%),
+      transparent 64%
+    ),
+    radial-gradient(
+      70% 55% at 55% 108%,
+      oklch(0.92 0.02 275 / 40%),
+      transparent 68%
+    );
+}
+.dark [data-theme-preset='vantyr']::before {
+  background:
+    radial-gradient(
+      58% 42% at 12% -4%,
+      oklch(0.38 0.11 48 / 22%),
+      transparent 62%
+    ),
+    radial-gradient(
+      50% 38% at 88% 8%,
+      oklch(0.3 0.06 258 / 24%),
+      transparent 64%
+    ),
+    radial-gradient(
+      70% 55% at 55% 108%,
+      oklch(0.26 0.04 275 / 22%),
+      transparent 68%
+    );
+}
+
+/* ── App frame ───────────────────────────────────────────────────────── */
+/* Header bar: translucent glass strip with a bottom hairline. */
+[data-theme-preset='vantyr'] [data-slot='app-header'] {
+  background-color: var(--glass-app);
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow: inset 0 -1px 0 var(--glass-edge);
+}
+
+/* Sidebar panel: rounded glass slab. overflow-hidden clips menu corners
+ * to the new radius; dropdowns portal to body so they are unaffected. */
+[data-theme-preset='vantyr'] [data-slot='sidebar-inner'] {
+  background-color: var(--glass-app);
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    var(--glass-shadow);
+  overflow: hidden;
+}
+
+/* Main content island (inset variant): the big glass pane. The ring in
+ * the shadow follows the element's own border-radius, so it tracks the
+ * inset rounding at md+ and stays square on mobile full-bleed. */
+[data-theme-preset='vantyr'] [data-slot='sidebar-inset'] {
+  background-color: var(--glass-app);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    var(--glass-shadow);
+}
+
+/* Page footer bar (pagination strip pinned at the content bottom). */
+[data-theme-preset='vantyr'] [data-slot='page-footer-bar'] {
+  background-color: var(--glass-app);
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+  border-color: var(--glass-edge);
+}
+
+/* ── Boxes ───────────────────────────────────────────────────────────── */
+/* Ringed boxes (the shadcn ring edge is replaced wholesale by the glass
+ * edge inside box-shadow — box-shadow is one property, so declaring it
+ * here removes the ring and the utility shadow in one step). */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='card'],
+  [data-slot='tabs-list'][data-variant='default']
+) {
+  background-color: var(--glass-box);
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    var(--glass-shadow);
+}
+
+/* The card hover micro-interaction in index.css raises a plain drop
+ * shadow, which would flicker away the glass edge; restate it WITH the
+ * glass edge so the lift keeps the border. */
+[data-theme-preset='vantyr']
+  [data-slot='card']:not([data-card-hover='false']):hover {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    0 4px 12px oklch(0 0 0 / 8%);
+}
+.dark [data-theme-preset='vantyr']
+  [data-slot='card']:not([data-card-hover='false']):hover {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    0 4px 12px oklch(0 0 0 / 30%);
+}
+
+/* Bordered boxes (they already carry a border; only the colors change —
+ * alert belongs here, not with the ringed boxes, because it carries a
+ * real border; adding the edge ring too would double the border). */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='data-table-box'],
+  [data-slot='mobile-card-list'],
+  [data-slot='alert'],
+  [data-slot='control-room-panel']
+) {
+  background-color: var(--glass-box);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-color: var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    var(--glass-shadow);
+}
+
+/* Card-view tiles (card-grid): fill comes through the
+ * --data-table-card-bg/--table-row chain, edge via their own border. */
+[data-theme-preset='vantyr'] [data-slot='data-table-card'] {
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+  border-color: var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Active tab pill: a brighter glass tile on the glass track. */
+[data-theme-preset='vantyr'] [data-slot='tabs-trigger'][data-active] {
+  background-color: var(--glass-field-strong);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge);
+}
+
+/* Hairline tile grids (landing): `grid gap-px bg-border` with tile
+ * children. The container's own background IS the gap color, so it takes
+ * the edge color; children carry opaque bg-background utilities that the
+ * `> *` rule restyles as glass. No blur per tile — there can be dozens,
+ * and the page glow already sits behind them. */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='stat-tile-grid'],
+  [data-slot='tile-grid']
+) {
+  background-color: var(--glass-edge);
+  border-color: var(--glass-edge);
+}
+[data-theme-preset='vantyr'] :is(
+  [data-slot='stat-tile-grid'],
+  [data-slot='tile-grid']
+) > * {
+  background-color: var(--glass-box);
+  background-image: var(--glass-sheen);
+}
+
+/* ── Fields ──────────────────────────────────────────────────────────── */
+/* Fill + edge + soft blur only. Box-shadow is deliberately NOT set so
+ * focus/invalid ring utilities keep working; state borders from
+ * focus-visible:border-ring are superseded by the edge color, but the
+ * rings remain the visible focus indicator. */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='select-trigger'],
+  [data-slot='native-select'],
+  [data-slot='input-group'],
+  /* React Hook Form fields: FormControl (ui/form.tsx) merges
+   * data-slot='form-control' onto the wrapped control, OVERRIDING the
+   * component's own slot. Restrict to the text-entry controls it wraps —
+   * Switch/Combobox/Editors also carry the slot and must not get a
+   * boxed field treatment. */
+  [data-slot='form-control']:is(input, textarea)
+) {
+  background-color: var(--glass-field);
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+  border-color: var(--glass-edge);
+}
+
+[data-theme-preset='vantyr'] :is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='select-trigger'],
+  [data-slot='native-select'],
+  [data-slot='form-control']:is(input, textarea)
+):focus-visible {
+  background-color: var(--glass-field-strong);
+}
+
+/* ── Floating layers ─────────────────────────────────────────────────── */
+/* The most opaque glass in the system: menus and dialogs must stay
+ * readable over arbitrary content. Their ring/shadow utilities are
+ * replaced wholesale by the edge + drop combo. */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-sub-content'],
+  [data-slot='select-content'],
+  [data-slot='combobox-content'],
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'],
+  [data-slot='sheet-content'],
+  [data-slot='drawer-content'],
+  [data-slot='hover-card-content'],
+  [data-slot='context-menu-content'],
+  [data-slot='menubar-content'],
+  [data-slot='navigation-menu-content'],
+  [data-slot='chart-tooltip']
+) {
+  background-color: var(--glass-floating);
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-color: var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 0 1px var(--glass-edge),
+    var(--glass-shadow);
+}
+
+/* Toasts (sonner portals under <body>, which carries the preset attr). */
+[data-theme-preset='vantyr'] [data-sonner-toast] {
+  background: var(--glass-floating);
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+}
+
+/* ── Table internals ─────────────────────────────────────────────────── */
+/* Sticky header floats over scrolling rows, so it gets its own blur. */
+[data-theme-preset='vantyr'] [data-slot='table-header'] {
+  background-color: var(--glass-box-strong);
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+}
+
+/* Rows: translucent hover/selected washes instead of the opaque
+ * muted color-mix the base table applies. */
+[data-theme-preset='vantyr'] [data-slot='table-row']:hover {
+  background-color: var(--glass-row-hover);
+}
+[data-theme-preset='vantyr'] [data-slot='table-row'][data-state='selected'] {
+  background-color: var(--glass-row-selected);
+}
+
+/* Pinned cells must occlude content sliding beneath them, so they get the
+ * stronger fill + blur. Pinned state is only expressed as Tailwind's
+ * `sticky` class on the td/th (see column-pinning.ts), so this matches on
+ * the class string — if pinning ever switches to a data attribute, update
+ * this selector. */
+[data-theme-preset='vantyr'] :is(
+  [data-slot='table-head'],
+  [data-slot='table-cell']
+)[class*='sticky'] {
+  background-color: var(--glass-box-strong);
+  -webkit-backdrop-filter: var(--glass-filter-soft);
+  backdrop-filter: var(--glass-filter-soft);
+}
+
+/* ── Fallbacks ───────────────────────────────────────────────────────── */
+/* Without backdrop-filter support, translucent fills would sit over raw
+ * unblurred content: raise alpha to near-opaque instead. Same treatment
+ * for users who prefer reduced transparency. */
+@supports not (
+  (backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))
+) {
+  [data-theme-preset='vantyr'] {
+    --glass-box: oklch(0.995 0.002 255 / 97%);
+    --glass-box-strong: oklch(0.99 0.003 255 / 98%);
+    --glass-app: oklch(0.988 0.004 255 / 98%);
+    --glass-floating: oklch(0.995 0.002 255 / 99%);
+    --glass-field: oklch(0.99 0.003 255 / 97%);
+    --glass-field-strong: oklch(0.982 0.004 255 / 98%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme-preset='vantyr'] {
+    --glass-box: oklch(0.995 0.002 255 / 97%);
+    --glass-box-strong: oklch(0.99 0.003 255 / 98%);
+    --glass-app: oklch(0.988 0.004 255 / 98%);
+    --glass-floating: oklch(0.995 0.002 255 / 99%);
+    --glass-field: oklch(0.99 0.003 255 / 97%);
+    --glass-field-strong: oklch(0.982 0.004 255 / 98%);
+  }
+  .dark [data-theme-preset='vantyr'] {
+    --glass-box: oklch(0.205 0.022 255 / 97%);
+    --glass-box-strong: oklch(0.225 0.022 255 / 98%);
+    --glass-app: oklch(0.19 0.02 255 / 98%);
+    --glass-floating: oklch(0.225 0.024 255 / 99%);
+    --glass-field: oklch(0.25 0.024 255 / 97%);
+    --glass-field-strong: oklch(0.27 0.026 255 / 98%);
+  }
+  /* Calm canvas: no glow washes behind the now-opaque surfaces. */
+  [data-theme-preset='vantyr']::before {
+    content: none;
+  }
+}

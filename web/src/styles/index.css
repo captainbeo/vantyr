@@ -34,6 +34,9 @@ For commercial licensing, please contact support@quantumnous.com
 @import './theme-presets.css';
 /* Control Room utilities (labels, grid, ambient background, sidebar marker) */
 @import './vantyr.css';
+/* Liquid-glass surfaces for the vantyr preset. Unlayered by design (see
+ * the file header) — must load after vantyr.css. */
+@import './vantyr-glass.css';
 
 @layer base {
   :root {

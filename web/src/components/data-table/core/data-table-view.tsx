@@ -61,6 +61,7 @@ export function DataTableView<TData>(props: DataTableViewProps<TData>) {
 
   return (
     <div
+      data-slot='data-table-box'
       className={cn(
         'overflow-hidden rounded-lg border',
         props.containerClassName

@@ -51,6 +51,7 @@ export function StatTileGrid(props: {
 }) {
   return (
     <div
+      data-slot='stat-tile-grid'
       className={cn(
         'grid grid-cols-2 gap-px overflow-hidden rounded-sm border bg-border lg:grid-cols-4',
         props.className
@@ -70,7 +71,10 @@ export function ControlRoomPanel(props: {
   bodyClassName?: string
 }) {
   return (
-    <section className={cn('rounded-sm border bg-card', props.className)}>
+    <section
+      data-slot='control-room-panel'
+      className={cn('rounded-sm border bg-card', props.className)}
+    >
       <header className='flex items-center justify-between gap-3 border-b px-4 py-2.5'>
         <span className='label-mono truncate'>{props.title}</span>
         {props.right}

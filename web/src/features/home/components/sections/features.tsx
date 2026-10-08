@@ -143,7 +143,10 @@ export function Features(_props: FeaturesProps) {
           <span className='text-primary'>{t('Vantyr removes all three.')}</span>
         </h2>
 
-        <div className='mt-12 grid gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-2 lg:grid-cols-3'>
+        <div
+          data-slot='tile-grid'
+          className='mt-12 grid gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-2 lg:grid-cols-3'
+        >
           {problems.map((p) => (
             <div key={p.tag} className='bg-background p-6'>
               <div className='flex items-center justify-between'>

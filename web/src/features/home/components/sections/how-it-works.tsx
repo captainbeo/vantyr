@@ -64,7 +64,10 @@ export function HowItWorks(_props: HowItWorksProps) {
         <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
           {t('Three steps. No rewrite.')}
         </h2>
-        <ol className='mt-10 grid list-none gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-3'>
+        <ol
+          data-slot='tile-grid'
+          className='mt-10 grid list-none gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-3'
+        >
           {steps.map((s) => (
             <li key={s.num} className='bg-background p-6'>
               <div className='font-mono text-sm text-primary'>{s.num}</div>

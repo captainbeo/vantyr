@@ -160,7 +160,10 @@ export function MobileCardList<TData>(props: MobileCardListProps<TData>) {
   }
 
   return (
-    <div className='divide-y overflow-hidden rounded-lg border'>
+    <div
+      data-slot='mobile-card-list'
+      className='divide-y overflow-hidden rounded-lg border'
+    >
       {enableRowSelection && (
         <label className='flex items-center gap-2 px-3 py-2 text-xs'>
           <Checkbox

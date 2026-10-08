@@ -416,7 +416,9 @@ For commercial licensing, please contact support@quantumnous.com
  * semantic surface bridge below exactly like `anthropic`.
  */
 [data-theme-preset='vantyr'] {
-  --radius: 0.25rem;
+  /* 2026-10-08: 0.25rem → 0.75rem for the liquid-glass surface layer
+   * (vantyr-glass.css) — soft corners are part of the glass read. */
+  --radius: 0.75rem;
 
   --font-sans:
     'IBM Plex Sans', 'Public Sans', ui-sans-serif, system-ui, 'PingFang SC',
