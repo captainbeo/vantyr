@@ -30,7 +30,6 @@ import { getAboutContent } from './api'
 
 function EmptyAboutState() {
   const { t } = useTranslation()
-  const currentYear = new Date().getFullYear()
 
   return (
     <div className='flex min-h-[60vh] items-center justify-center p-8'>
@@ -46,56 +45,20 @@ function EmptyAboutState() {
             )}
           </p>
         </div>
-        <div className='space-y-4 text-sm'>
+        <div className='text-muted-foreground space-y-2 text-sm'>
+          {/* AGPL §7: upstream attribution and project link must stay. */}
           <p>
-            {t('New API Project Repository:')}{' '}
+            {t('Frontend design and development by New API contributors.')}{' '}
             <a
               href='https://github.com/QuantumNous/new-api'
               target='_blank'
               rel='noopener noreferrer'
               className='text-primary hover:underline'
             >
-              {t('https://github.com/QuantumNous/new-api')}
+              https://github.com/QuantumNous/new-api
             </a>
           </p>
-          <p className='text-muted-foreground'>
-            <a
-              href='https://github.com/QuantumNous/new-api'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('NewAPI')}
-            </a>{' '}
-            © {currentYear}{' '}
-            <a
-              href='https://github.com/QuantumNous'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('QuantumNous')}
-            </a>{' '}
-            {t('| Based on')}{' '}
-            <a
-              href='https://github.com/songquanpeng/one-api'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('One API')}
-            </a>{' '}
-            © 2023{' '}
-            <a
-              href='https://github.com/songquanpeng'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-primary hover:underline'
-            >
-              {t('JustSong')}
-            </a>
-          </p>
-          <p className='text-muted-foreground'>
+          <p>
             {t('This project must be used in compliance with the')}{' '}
             <a
               href='https://github.com/QuantumNous/new-api/blob/main/LICENSE'

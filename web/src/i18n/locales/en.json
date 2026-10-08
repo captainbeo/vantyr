@@ -2047,7 +2047,6 @@
     "e.g. llama3.1:8b": "e.g. llama3.1:8b",
     "e.g. My GitLab": "e.g. My GitLab",
     "e.g. my-gitlab": "e.g. my-gitlab",
-    "e.g. New API Console": "e.g. New API Console",
     "e.g. openid profile email": "e.g. openid profile email",
     "e.g. Requires level {{required}}; your current level is {{current}}": "e.g. Requires level {{required}}; your current level is {{current}}",
     "e.g. Suitable for light usage": "e.g. Suitable for light usage",
@@ -2735,7 +2734,6 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Related Projects",
     "footer.defaultCopyright": "All rights reserved.",
-    "footer.newapi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment",
     "For private deployments, format: https://fastgpt.run/api/openapi": "For private deployments, format: https://fastgpt.run/api/openapi",
@@ -3726,8 +3724,7 @@
     "Never used": "Never used",
     "Never used an API Gateway?": "Never used an API Gateway?",
     "NEW": "NEW",
-    "New API": "New API",
-    "New API &lt;noreply@example.com&gt;": "New API &lt;noreply@example.com&gt;",
+    "New API": "Vantyr",
     "New API Project Repository:": "New API Project Repository:",
     "New API's flexible channel lets you configure upstream addresses and authentication per endpoint, choose native forwarding or supported protocol conversions, and configure model listing and balance queries independently": "New API's flexible channel lets you configure upstream addresses and authentication per endpoint, choose native forwarding or supported protocol conversions, and configure model listing and balance queries independently",
     "New domain: {{domain}}": "New domain: {{domain}}",
@@ -6833,7 +6830,6 @@
     "Weight": "Weight",
     "Weighted by request count": "Weighted by request count",
     "Welcome back!": "Welcome back!",
-    "Welcome to our New API...": "Welcome to our New API...",
     "Well-Known URL": "Well-Known URL",
     "Well-Known URL must start with http:// or https://": "Well-Known URL must start with http:// or https://",
     "What do you want to change?": "What do you want to change?",
@@ -6941,6 +6937,10 @@
     "Inviter Top-Up Bonus": "Inviter Top-Up Bonus",
     "Quota paid to the inviter on the referred user first qualifying top-up ({{formattedQuota}})": "Quota paid to the inviter on the referred user's first qualifying top-up ({{formattedQuota}})",
     "Referral Top-Up Bonus Threshold (USD)": "Referral Top-Up Bonus Threshold (USD)",
-    "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.": "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus."
+    "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.": "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.",
+    "e.g. Vantyr Console": "e.g. Vantyr Console",
+    "Welcome to Vantyr...": "Welcome to Vantyr...",
+    "Vantyr &lt;noreply@example.com&gt;": "Vantyr &lt;noreply@example.com&gt;",
+    "Frontend design and development by New API contributors.": "Frontend design and development by New API contributors."
   }
 }

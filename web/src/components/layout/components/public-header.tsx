@@ -25,13 +25,10 @@ import wordmarkDark from '@/assets/vantyr-wordmark-dark.png'
 import wordmarkWhite from '@/assets/vantyr-wordmark-white.png'
 import { Dialog } from '@/components/dialog'
 import { LanguageSwitcher } from '@/components/language-switcher'
-import { NotificationPopover } from '@/components/notification-popover'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { SystemUpdateAction } from '@/features/system-update/system-update-action'
-import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { cn } from '@/lib/utils'
@@ -60,7 +57,6 @@ export interface PublicHeaderProps {
   rightContent?: React.ReactNode
   showNavigation?: boolean
   showAuthButtons?: boolean
-  showNotifications?: boolean
   className?: string
 }
 
@@ -73,7 +69,6 @@ export function PublicHeader(props: PublicHeaderProps) {
     siteName: customSiteName,
     homeUrl = '/',
     showAuthButtons = true,
-    showNotifications = true,
   } = props
 
   const { t } = useTranslation()
@@ -87,7 +82,6 @@ export function PublicHeader(props: PublicHeaderProps) {
   const { auth } = useAuthStore()
   const { systemName, loading } = useSystemConfig()
   const dynamicLinks = useTopNavLinks()
-  const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
 
@@ -246,7 +240,6 @@ export function PublicHeader(props: PublicHeaderProps) {
                   {logoContent}
                 </div>
               </Link>
-              <SystemUpdateAction presentation='version' />
             </div>
 
             {/* Desktop nav */}
@@ -293,26 +286,12 @@ export function PublicHeader(props: PublicHeaderProps) {
                 )
               })}
 
-              {(showLanguageSwitcher ||
-                showThemeSwitch ||
-                showNotifications) && (
+              {(showLanguageSwitcher || showThemeSwitch) && (
                 <div className='bg-border/40 mx-2 h-4 w-px' />
               )}
 
               {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
-              {showNotifications && (
-                <NotificationPopover
-                  open={notifications.popoverOpen}
-                  onOpenChange={notifications.setPopoverOpen}
-                  unreadCount={notifications.unreadCount}
-                  activeTab={notifications.activeTab}
-                  onTabChange={notifications.setActiveTab}
-                  notice={notifications.notice}
-                  announcements={notifications.announcements}
-                  loading={notifications.loading}
-                />
-              )}
 
               {showAuthButtons && (
                 <>

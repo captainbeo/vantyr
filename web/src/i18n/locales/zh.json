@@ -2047,7 +2047,6 @@
     "e.g. llama3.1:8b": "例如 llama3.1:8b",
     "e.g. My GitLab": "例如：My GitLab",
     "e.g. my-gitlab": "例如：my-gitlab",
-    "e.g. New API Console": "例如，New API 控制台",
     "e.g. openid profile email": "例如：openid profile email",
     "e.g. Requires level {{required}}; your current level is {{current}}": "例如：需要等级 {{required}}；你当前的等级是 {{current}}",
     "e.g. Suitable for light usage": "例如：适合轻度使用",
@@ -2735,7 +2734,6 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "高级自定义渠道仅对 /v1/responses 且不做协议转换的路由生效。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
@@ -3726,8 +3724,7 @@
     "Never used": "从未使用",
     "Never used an API Gateway?": "从未使用过 API 网关/中转 API？",
     "NEW": "新",
-    "New API": "New API",
-    "New API &lt;noreply@example.com&gt;": "New API &lt;noreply@example.com&gt;",
+    "New API": "Vantyr",
     "New API Project Repository:": "New API 项目仓库：",
     "New API's flexible channel lets you configure upstream addresses and authentication per endpoint, choose native forwarding or supported protocol conversions, and configure model listing and balance queries independently": "New API 的灵活接入渠道，可按接口配置上游地址与认证方式，选择原生转发或项目支持的协议转换，并独立配置模型列表和余额查询",
     "New domain: {{domain}}": "新域名：{{domain}}",
@@ -6833,7 +6830,6 @@
     "Weight": "权重",
     "Weighted by request count": "按请求数加权",
     "Welcome back!": "欢迎回来！",
-    "Welcome to our New API...": "欢迎使用我们的 New API...",
     "Well-Known URL": "Well-Known URL",
     "Well-Known URL must start with http:// or https://": "Well-Known URL 必须以 http:// 或 https:// 开头",
     "What do you want to change?": "你想修改什么？",
@@ -6941,6 +6937,9 @@
     "Inviter Top-Up Bonus": "邀请者充值奖励",
     "Quota paid to the inviter on the referred user first qualifying top-up ({{formattedQuota}})": "被邀请用户首次达到条件的充值后，邀请者获得的额度（{{formattedQuota}}）",
     "Referral Top-Up Bonus Threshold (USD)": "邀请充值奖励门槛（美元）",
-    "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.": "被邀请用户首次充值计入额度达到该金额时向邀请者发放奖励。0 表示禁用。"
+    "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.": "被邀请用户首次充值计入额度达到该金额时向邀请者发放奖励。0 表示禁用。",
+    "e.g. Vantyr Console": "例如 Vantyr 控制台",
+    "Welcome to Vantyr...": "欢迎来到 Vantyr...",
+    "Vantyr &lt;noreply@example.com&gt;": "Vantyr &lt;noreply@example.com&gt;"
   }
 }

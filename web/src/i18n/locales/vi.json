@@ -2047,7 +2047,6 @@
     "e.g. llama3.1:8b": "ví dụ: llama3.1:8b",
     "e.g. My GitLab": "ví dụ: GitLab của tôi",
     "e.g. my-gitlab": "ví dụ: my-gitlab",
-    "e.g. New API Console": "Ví dụ: Bảng điều khiển API mới",
     "e.g. openid profile email": "ví dụ: openid profile email",
     "e.g. Requires level {{required}}; your current level is {{current}}": "ví dụ: Yêu cầu cấp độ {{required}}; cấp độ hiện tại của bạn là {{current}}",
     "e.g. Suitable for light usage": "ví dụ: Phù hợp cho sử dụng nhẹ",
@@ -2735,7 +2734,6 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Các Dự Án Liên Quan",
     "footer.defaultCopyright": "Bản quyền được bảo lưu.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Bản quyền được bảo lưu. Được thiết kế và phát triển bởi các cộng tác viên dự án.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "Với kênh tùy chỉnh nâng cao, thiết lập này chỉ áp dụng cho các route /v1/responses không chuyển đổi giao thức.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Đối với các kênh được thêm sau ngày 10 tháng 5 năm 2025, không cần loại bỏ \".\" khỏi tên mô hình trong quá trình triển khai",
     "For private deployments, format: https://fastgpt.run/api/openapi": "Đối với các triển khai riêng tư, định dạng: https://fastgpt.run/api/openapi",
@@ -3727,7 +3725,6 @@
     "Never used an API Gateway?": "Chưa bao giờ sử dụng API Gateway?",
     "NEW": "MỚI",
     "New API": "API mới",
-    "New API &lt;noreply@example.com&gt;": "API mới &lt;noreply@example.com&gt;",
     "New API Project Repository:": "Kho lưu trữ Dự án API Mới:",
     "New API's flexible channel lets you configure upstream addresses and authentication per endpoint, choose native forwarding or supported protocol conversions, and configure model listing and balance queries independently": "Kênh kết nối linh hoạt của New API cho phép cấu hình địa chỉ thượng nguồn và xác thực theo từng điểm cuối, chọn chuyển tiếp nguyên bản hoặc chuyển đổi giao thức được hỗ trợ, đồng thời cấu hình riêng danh sách mô hình và truy vấn số dư",
     "New domain: {{domain}}": "Tên miền mới: {{domain}}",
@@ -6833,7 +6830,6 @@
     "Weight": "Trọng lượng",
     "Weighted by request count": "Có trọng số theo số yêu cầu",
     "Welcome back!": "Chào mừng trở lại!",
-    "Welcome to our New API...": "Chào mừng bạn đến với API mới của chúng tôi...",
     "Well-Known URL": "URL Well-Known",
     "Well-Known URL must start with http:// or https://": "URL Well-Known phải bắt đầu bằng http:// hoặc https://",
     "What do you want to change?": "Bạn muốn thay đổi gì?",
@@ -6937,6 +6933,9 @@
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom",
     "Official API price": "Official API price",
-    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official",
+    "e.g. Vantyr Console": "Ví dụ: Bảng điều khiển Vantyr",
+    "Welcome to Vantyr...": "Chào mừng bạn đến với Vantyr...",
+    "Vantyr &lt;noreply@example.com&gt;": "API mới &lt;noreply@example.com&gt;"
   }
 }
