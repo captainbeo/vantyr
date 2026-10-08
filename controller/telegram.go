@@ -273,22 +273,117 @@ func TelegramLogin(c *gin.Context) {
 	}
 
 	user := model.User{TelegramId: telegramId}
-	if err := user.FillUserByTelegramId(); err != nil {
-		c.JSON(200, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
-		return
-	}
-	if err := claimTelegramAuthorization(params, time.Now()); err != nil {
-		common.SysLog("TelegramLogin assertion replay rejected: " + err.Error())
-		c.JSON(http.StatusForbidden, gin.H{
-			"message": "该登录凭据已被使用",
-			"success": false,
-		})
-		return
+	stored, err := model.GetUserByTelegramID(telegramId)
+	if err != nil {
+		// Vantyr: an unknown Telegram account registers directly from the
+		// verified widget assertion, mirroring OAuth registration. The
+		// assertion claim runs inside the creation transaction, so a replayed
+		// callback can never create two accounts.
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(200, gin.H{
+				"message": err.Error(),
+				"success": false,
+			})
+			return
+		}
+		if !common.RegisterEnabled {
+			c.JSON(200, gin.H{
+				"message": "该 Telegram 账户未绑定",
+				"success": false,
+			})
+			return
+		}
+		created, credit, err := createTelegramLoginUser(params, telegramId, c)
+		if err != nil {
+			common.SysError("TelegramLogin registration failed: " + err.Error())
+			c.JSON(200, gin.H{
+				"message": "注册失败，请稍后重试",
+				"success": false,
+			})
+			return
+		}
+		user = *created
+		if credit > 0 {
+			// The cache sync runs only after the creation transaction has
+			// committed; a pre-commit sync would expose credit that could
+			// still roll back (fail-open on a money path).
+			model.SyncCreditUserQuotaCache(user.Id, credit, "telegram verification")
+			model.RecordLog(user.Id, model.LogTypeSystem,
+				fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
+		}
+	} else {
+		user = *stored
+		if err := claimTelegramAuthorization(params, time.Now()); err != nil {
+			common.SysLog("TelegramLogin assertion replay rejected: " + err.Error())
+			c.JSON(http.StatusForbidden, gin.H{
+				"message": "该登录凭据已被使用",
+				"success": false,
+			})
+			return
+		}
 	}
 	setupLogin(&user, nil, c)
+}
+
+// createTelegramLoginUser resolves the inviter from the affiliate header and
+// registers the Telegram account in one transaction with the assertion claim,
+// the identity claim, and the trial credit. It returns the created user and
+// the granted trial credit for post-commit cache sync.
+func createTelegramLoginUser(params url.Values, telegramId string, c *gin.Context) (*model.User, int, error) {
+	// The widget signature covers the URL query, so the affiliate code travels
+	// in a header instead — it is referral attribution chosen by the client,
+	// not part of the Telegram assertion.
+	affCode := strings.TrimSpace(c.GetHeader("X-Affiliate-Code"))
+	if len(affCode) > 32 {
+		affCode = ""
+	}
+	inviterId := 0
+	if affCode != "" {
+		inviterId, _ = model.GetUserIdByAffCode(affCode)
+	}
+
+	username := ""
+	if widgetUsername := strings.TrimSpace(params.Get("username")); widgetUsername != "" &&
+		len(widgetUsername) <= model.UserNameMaxLength {
+		if exists, err := model.CheckUserExistOrDeleted(widgetUsername, ""); err == nil && !exists {
+			username = widgetUsername
+		}
+	}
+	if username == "" {
+		username = "telegram_" + strconv.Itoa(model.GetMaxUserId()+1)
+	}
+	displayName := strings.TrimSpace(params.Get("first_name"))
+	if lastName := strings.TrimSpace(params.Get("last_name")); lastName != "" {
+		displayName = strings.TrimSpace(displayName + " " + lastName)
+	}
+	if displayName == "" {
+		displayName = username
+	}
+	if len(displayName) > model.UserNameMaxLength {
+		displayName = displayName[:model.UserNameMaxLength]
+	}
+
+	assertion, assertionExpiresAt, err := telegramAuthorizationClaim(params, time.Now())
+	if err != nil {
+		return nil, 0, err
+	}
+	var user *model.User
+	var credit int
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := model.ClaimExternalAuthAssertionWithTx(tx, model.AuthFlowPurposeTelegramAssertion, assertion, assertionExpiresAt); err != nil {
+			return err
+		}
+		var err error
+		user, credit, err = model.CreateTelegramUserWithTx(tx, telegramId, username, displayName, inviterId)
+		return err
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	// Inviter reward and sidebar config run post-commit, as for other OAuth
+	// registrations. It is compliance- and option-gated inside.
+	user.FinalizeOAuthUserCreation(inviterId)
+	return user, credit, nil
 }
 
 func claimTelegramAuthorization(params url.Values, now time.Time) error {

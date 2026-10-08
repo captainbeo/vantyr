@@ -229,8 +229,15 @@ export async function wechatLoginByCode(code: string): Promise<ApiResponse> {
 export async function telegramLogin(
   authorization: TelegramAuthorization
 ): Promise<ApiResponse> {
+  // The affiliate code rides in a header: the backend verifies the Telegram
+  // widget HMAC over the URL query, so an extra query param would break it.
+  // It is client-chosen referral attribution, not part of the assertion.
+  const aff = getAffiliateCode().trim()
+  const headers =
+    aff.length > 0 && aff.length <= 32 ? { 'X-Affiliate-Code': aff } : {}
   const res = await api.get('/api/oauth/telegram/login', {
     params: authorization,
+    headers,
     disableDuplicate: true,
     skipAuthRefresh: true,
     skipBusinessError: true,

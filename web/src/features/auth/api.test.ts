@@ -158,3 +158,41 @@ describe('logout coordination', () => {
     ).rejects.toBe(originalError)
   })
 })
+
+describe('telegramLogin affiliate header', () => {
+  const authorization = {
+    id: '700111',
+    auth_date: 1900000000,
+    hash: 'a'.repeat(64),
+    username: 'tg_widget_user',
+  }
+
+  test('sends the stored affiliate code in the X-Affiliate-Code header', async () => {
+    window.localStorage.setItem('aff', 'widge')
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, message: '' },
+    })
+    const { telegramLogin } = await import('./api')
+    await telegramLogin(authorization)
+    expect(get).toHaveBeenCalledWith(
+      '/api/oauth/telegram/login',
+      expect.objectContaining({
+        headers: { 'X-Affiliate-Code': 'widge' },
+      })
+    )
+    window.localStorage.removeItem('aff')
+  })
+
+  test('omits the header when no affiliate code is stored', async () => {
+    window.localStorage.removeItem('aff')
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, message: '' },
+    })
+    const { telegramLogin } = await import('./api')
+    await telegramLogin(authorization)
+    const call = get.mock.calls[0]
+    expect(call?.[1]).toBeDefined()
+    expect(call?.[1]?.headers).toEqual({})
+    window.localStorage.removeItem('aff')
+  })
+})

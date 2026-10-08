@@ -124,6 +124,39 @@ func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, tel
 	return 0, nil
 }
 
+// CreateTelegramUserWithTx registers a new account directly from a verified
+// Telegram widget assertion (Vantyr: Telegram login doubles as registration).
+// User creation, the Telegram identity claim, and the trial credit are one
+// transaction, so the credit can never land on a user that failed to bind.
+// The trial grant mirrors BindTelegramForSessionWithTx: exactly once per
+// Telegram account (the claim above is the dedup), bounded by MaxWalletQuota.
+// inviterId must already be resolved by the caller; the inviter reward itself
+// is paid post-commit by FinalizeOAuthUserCreation, as for other OAuth signups.
+func CreateTelegramUserWithTx(tx *gorm.DB, telegramID, username, displayName string, inviterId int) (*User, int, error) {
+	user := &User{
+		Username:    username,
+		DisplayName: displayName,
+		TelegramId:  telegramID,
+		InviterId:   inviterId,
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusEnabled,
+	}
+	if err := user.InsertWithTx(tx, inviterId); err != nil {
+		return nil, 0, err
+	}
+	if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegramID, user.Id); err != nil {
+		return nil, 0, err
+	}
+	credit := common.QuotaForNewUser
+	if credit > 0 && user.Quota <= common.MaxWalletQuota-credit {
+		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
+			return nil, 0, err
+		}
+		return user, credit, nil
+	}
+	return user, 0, nil
+}
+
 func releaseAllExternalIdentitiesWithTx(tx *gorm.DB, userId int) error {
 	if tx == nil || userId == 0 {
 		return errors.New("external identity release is invalid")

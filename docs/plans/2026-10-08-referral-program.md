@@ -1,5 +1,11 @@
 # Referral Program — Design (2026-10-08)
 
+Implementation status (2026-10-08): Parts 2.1–2.3 implemented on `vantyr/main`
+with focused tests (model: Telegram registration + top-up bonus; controller:
+widget login registration, replay/tamper rejection, password-register no-credit;
+frontend: affiliate header, admin settings fields, i18n). Deploy and the
+Part 1 owner configuration remain.
+
 Owner-locked rules:
 
 1. Inviter earns **$3** when a referred user registers with a **Telegram or Discord account** (once per referred user).
@@ -41,7 +47,7 @@ Rationale: rule 1 says Telegram/Discord registrations, and email registration ha
 1. Verify the widget assertion (existing HMAC check, 5-min validity, one-time `ClaimExternalAuthAssertion` — unchanged).
 2. If the Telegram ID is unknown and `common.RegisterEnabled` is true, create the user in one transaction:
    - username: the widget's `username` if unused and within the length limit, else `telegram_<id>`; display name from `first_name`/`last_name`; empty password and email (same as OAuth-created users).
-   - `InsertWithTx(tx, inviterId)` where `inviterId` comes from a new `aff` query parameter (trimmed, ≤ 32 chars, resolved via `GetUserIdByAffCode` before the transaction; ignore on error). The frontend adds the stored affiliate code (localStorage, saved from `?aff=` landing) to the existing GET `/api/oauth/telegram/login` call.
+   - `InsertWithTx(tx, inviterId)` where `inviterId` comes from an `X-Affiliate-Code` request header (trimmed, ≤ 32 chars, resolved via `GetUserIdByAffCode` before the transaction; ignore on error). **Deviation from the original design:** the affiliate code cannot ride as a query parameter — `verifyTelegramAuthorization` computes the widget HMAC over every query param, so an extra one would invalidate the signature. A header is out of the signed set and is client-chosen referral attribution, not part of the Telegram assertion. The frontend `telegramLogin` sends the stored code (localStorage, saved from `?aff=` landing) in that header.
    - `ClaimExternalIdentityWithTx(tx, "telegram", telegramId, user.Id)` in the same transaction — preserves the one-account-per-Telegram-ID invariant.
    - Grant the trial credit in the same transaction, same shape as `BindTelegramForSessionWithTx`: `QuotaForNewUser` bounded by `MaxWalletQuota`. Exactly-once is guaranteed by claim uniqueness: a Telegram-login-created user can never pass the bind flow (their `telegram_id` is already set), and an email-created user gets the grant only at bind. This does not reintroduce the double grant fixed in d80b6056e.
 3. After commit: `FinalizeOAuthUserCreation(inviterId)` (sidebar config, inviter $3 via compliance gate), `SyncCreditUserQuotaCache` for the trial credit, then the existing `setupLogin`.

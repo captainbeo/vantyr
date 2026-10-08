@@ -125,6 +125,11 @@ var TelegramBotName = ""
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
+
+// Vantyr referral top-up bonus: paid to the inviter once, on the referred
+// user's first top-up whose credited quota reaches AffTopUpMinAmount USD.
+var AffTopUpMinAmount = 20
+var QuotaForInviterTopUp = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false

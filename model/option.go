@@ -143,6 +143,8 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["AffTopUpMinAmount"] = strconv.Itoa(common.AffTopUpMinAmount)
+	common.OptionMap["QuotaForInviterTopUp"] = strconv.Itoa(common.QuotaForInviterTopUp)
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
@@ -611,6 +613,16 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaForInviter, _ = strconv.Atoi(value)
 	case "QuotaForInvitee":
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
+	case "AffTopUpMinAmount":
+		common.AffTopUpMinAmount, _ = strconv.Atoi(value)
+		if common.AffTopUpMinAmount < 0 {
+			common.AffTopUpMinAmount = 0
+		}
+	case "QuotaForInviterTopUp":
+		common.QuotaForInviterTopUp, _ = strconv.Atoi(value)
+		if common.QuotaForInviterTopUp < 0 {
+			common.QuotaForInviterTopUp = 0
+		}
 	case "QuotaRemindThreshold":
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
 	case "PreConsumedQuota":

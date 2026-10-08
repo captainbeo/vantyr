@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -116,6 +117,62 @@ func creditTopUpQuota(tx *gorm.DB, userId int, creditedQuota int, updates map[st
 	return ErrTopUpQuotaLimitExceeded
 }
 
+// maybeGrantAffTopUpBonus pays the Vantyr referral top-up bonus to the
+// inviter, once per referred user, when the user's first credited top-up
+// reaches AffTopUpMinAmount USD. It must run inside the recharge transaction
+// after creditTopUpQuota has locked the user row, so the pending→success
+// transition and the one-shot marker commit atomically: a replayed callback
+// finds status=success and never reaches this code.
+// The credited-quota basis (not Money/Amount) keeps Epay and Stripe uniform.
+func maybeGrantAffTopUpBonus(tx *gorm.DB, userId int, creditedQuota int) (inviterId int, bonus int, err error) {
+	if common.QuotaForInviterTopUp <= 0 || common.AffTopUpMinAmount <= 0 {
+		return 0, 0, nil
+	}
+	// Min amount is USD; compare in quota units with the same saturating bound
+	// creditTopUpQuota applies, so a huge option cannot overflow the int.
+	minQuota, quotaErr := common.WalletQuotaFromDecimalStrict(
+		decimal.NewFromInt(int64(common.AffTopUpMinAmount)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
+	)
+	if quotaErr != nil || minQuota <= 0 || creditedQuota < minQuota {
+		return 0, 0, nil
+	}
+	var user User
+	if err := tx.Select("id", "inviter_id", "aff_topup_credited").Where("id = ?", userId).First(&user).Error; err != nil {
+		return 0, 0, err
+	}
+	if user.InviterId == 0 || user.AffTopUpCredited {
+		return 0, 0, nil
+	}
+	if !operation_setting.IsPaymentComplianceConfirmed() {
+		return 0, 0, nil
+	}
+	result := tx.Model(&User{}).Where("id = ? AND aff_topup_credited = ?", userId, false).
+		Update("aff_topup_credited", true)
+	if result.Error != nil {
+		return 0, 0, result.Error
+	}
+	if result.RowsAffected != 1 {
+		// Lost the race or the user vanished inside the transaction; treat as
+		// paid rather than double-crediting.
+		return 0, 0, nil
+	}
+	inviterUpdate := tx.Model(&User{}).Where("id = ?", user.InviterId).Updates(map[string]any{
+		"aff_quota":   gorm.Expr("aff_quota + ?", common.QuotaForInviterTopUp),
+		"aff_history": gorm.Expr("aff_history + ?", common.QuotaForInviterTopUp),
+	})
+	if inviterUpdate.Error != nil {
+		return 0, 0, inviterUpdate.Error
+	}
+	if inviterUpdate.RowsAffected != 1 {
+		// The inviter no longer exists (hard/soft deleted). The paid top-up
+		// must still succeed; the marker stays flipped so the bonus is never
+		// retried against a different inviter row.
+		common.SysLog(fmt.Sprintf("aff topup bonus skipped: inviter %d for user %d not found", user.InviterId, userId))
+		return 0, 0, nil
+	}
+	return user.InviterId, common.QuotaForInviterTopUp, nil
+}
+
 func (topUp *TopUp) Update() error {
 	var err error
 	err = DB.Save(topUp).Error
@@ -184,6 +241,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	}
 
 	var quotaToAdd int
+	var affInviterId, affBonus int
 	topUp := &TopUp{}
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
@@ -214,7 +272,11 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
-		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil)
+		if err := creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil); err != nil {
+			return err
+		}
+		affInviterId, affBonus, err = maybeGrantAffTopUpBonus(tx, topUp.UserId, quotaToAdd)
+		return err
 	})
 	if err != nil {
 		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) && !errors.Is(err, ErrTopUpStatusInvalid) {
@@ -226,6 +288,9 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		return true, nil
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "epay topup")
+	if affInviterId != 0 && affBonus > 0 {
+		RecordLog(affInviterId, LogTypeSystem, fmt.Sprintf("被邀请用户充值赠送 %s", logger.LogQuota(affBonus)))
+	}
 
 	common.SysLog(fmt.Sprintf("易支付充值成功 trade_no=%s user_id=%d quota_to_add=%d money=%.2f", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money))
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentProviderEpay)
@@ -238,6 +303,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	var quota int
+	var affInviterId, affBonus int
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -272,9 +338,13 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		if err != nil || quota <= 0 {
 			return ErrInvalidTopUpQuota
 		}
-		return creditTopUpQuota(tx, topUp.UserId, quota, map[string]any{
+		if err := creditTopUpQuota(tx, topUp.UserId, quota, map[string]any{
 			"stripe_customer": customerId,
-		})
+		}); err != nil {
+			return err
+		}
+		affInviterId, affBonus, err = maybeGrantAffTopUpBonus(tx, topUp.UserId, quota)
+		return err
 	})
 
 	if err != nil {
@@ -282,6 +352,9 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		return errors.New("充值失败，请稍后重试")
 	}
 	syncCreditUserQuotaCache(topUp.UserId, quota, "stripe topup")
+	if affInviterId != 0 && affBonus > 0 {
+		RecordLog(affInviterId, LogTypeSystem, fmt.Sprintf("被邀请用户充值赠送 %s", logger.LogQuota(affBonus)))
+	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(quota), topUp.Amount), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
 
@@ -460,6 +533,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	var quotaToAdd int
 	var payMoney float64
 	var paymentMethod string
+	var affInviterId, affBonus int
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -506,6 +580,12 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return err
 		}
 
+		var err error
+		affInviterId, affBonus, err = maybeGrantAffTopUpBonus(tx, topUp.UserId, quotaToAdd)
+		if err != nil {
+			return err
+		}
+
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
@@ -518,6 +598,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 
 	// 事务外记录日志，避免阻塞
 	syncCreditUserQuotaCache(userId, quotaToAdd, "manual topup")
+	if affInviterId != 0 && affBonus > 0 {
+		RecordLog(affInviterId, LogTypeSystem, fmt.Sprintf("被邀请用户充值赠送 %s", logger.LogQuota(affBonus)))
+	}
 	RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
 	return nil
 }

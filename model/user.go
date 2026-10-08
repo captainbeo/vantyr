@@ -103,6 +103,9 @@ type User struct {
 	AffQuota             int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota      int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId            int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	// Vantyr: one-shot marker for the referral top-up bonus — set when the
+	// inviter has been paid for this user's first qualifying top-up.
+	AffTopUpCredited     bool                       `json:"aff_topup_credited" gorm:"type:boolean;default:false;column:aff_topup_credited"`
 	DeletedAt            gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId            string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting              string                     `json:"setting" gorm:"type:text;column:setting"`

@@ -2735,7 +2735,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Related Projects",
     "footer.defaultCopyright": "All rights reserved.",
-    "footer.new\u0061pi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
+    "footer.newapi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment",
     "For private deployments, format: https://fastgpt.run/api/openapi": "For private deployments, format: https://fastgpt.run/api/openapi",
@@ -6937,6 +6937,10 @@
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom",
     "Official API price": "Official API price",
-    "{{count}}% cheaper than official": "{{count}}% cheaper than official"
+    "{{count}}% cheaper than official": "{{count}}% cheaper than official",
+    "Inviter Top-Up Bonus": "Inviter Top-Up Bonus",
+    "Quota paid to the inviter on the referred user first qualifying top-up ({{formattedQuota}})": "Quota paid to the inviter on the referred user's first qualifying top-up ({{formattedQuota}})",
+    "Referral Top-Up Bonus Threshold (USD)": "Referral Top-Up Bonus Threshold (USD)",
+    "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus.": "First top-up by a referred user must credit at least this amount to pay the inviter bonus. 0 disables the bonus."
   }
 }
