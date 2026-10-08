@@ -86,53 +86,80 @@ func GetUserByTelegramID(telegramID string) (*User, error) {
 
 // BindTelegramForSessionWithTx preserves single ownership and the session that
 // started the binding. The caller consumes its OAuth flow in this transaction.
-// Vantyr: binding a Telegram account grants the trial credit exactly once
-// (single ownership above guarantees one grant per Telegram account).
-// The credit is returned so the caller can sync the quota cache after the
-// transaction commits — a pre-commit sync would expose credit that rolls back
-// on commit failure (fail-open on a money path).
-func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, telegramID string) (int, error) {
+// Vantyr: binding a Telegram account no longer grants the trial credit — the
+// grant moved to the login path so it can require group membership and be
+// retried (GrantTelegramTrialWithTx). Bind only links the identity.
+func BindTelegramForSessionWithTx(tx *gorm.DB, identity AuthSessionIdentity, telegramID string) error {
 	if err := ValidateAuthSessionWithTx(tx, identity); err != nil {
-		return 0, err
+		return err
 	}
 	var user User
 	if err := tx.Select("id", "quota", "telegram_id").First(&user, identity.UserID).Error; err != nil {
-		return 0, err
+		return err
 	}
 	if user.TelegramId != "" {
-		return 0, ErrExternalIdentityAlreadyClaimed
+		return ErrExternalIdentityAlreadyClaimed
 	}
 	if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegramID, user.Id); err != nil {
-		return 0, err
+		return err
 	}
 	result := tx.Model(&User{}).Where("id = ? AND (telegram_id = ? OR telegram_id IS NULL)", user.Id, "").Update("telegram_id", telegramID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrExternalIdentityAlreadyClaimed
+	}
+	return nil
+}
+
+// GrantTelegramTrialWithTx pays the $5 Telegram trial once per user account,
+// inside the caller's transaction. membership is decided by the controller
+// (bot API call) before this runs. The per-user telegram_trial_credited
+// marker is the dedup: it survives Telegram unbind/rebind and replaces the
+// old one-grant-per-Telegram-account guarantee of the bind path, because a
+// user may verify while not yet in the group and claim later. Bounded by
+// MaxWalletQuota like the wallet.
+func GrantTelegramTrialWithTx(tx *gorm.DB, userId int) (int, error) {
+	credit := common.QuotaForNewUser
+	if credit <= 0 {
+		return 0, nil
+	}
+	var user User
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id", "quota", "telegram_trial_credited").First(&user, userId).Error; err != nil {
+		return 0, err
+	}
+	if user.TelegramTrialCredited {
+		return 0, nil
+	}
+	if user.Quota > common.MaxWalletQuota-credit {
+		return 0, nil
+	}
+	result := tx.Model(&User{}).Where("id = ? AND telegram_trial_credited = ?", userId, false).
+		Update("telegram_trial_credited", true)
 	if result.Error != nil {
 		return 0, result.Error
 	}
 	if result.RowsAffected != 1 {
-		return 0, ErrExternalIdentityAlreadyClaimed
+		// Lost the race inside the transaction; treat as already granted.
+		return 0, nil
 	}
-	// Trial credit granted on Telegram verification instead of at registration.
-	// Bounded like the wallet: refuses to push the user over MaxWalletQuota.
-	credit := common.QuotaForNewUser
-	if credit > 0 && user.Quota <= common.MaxWalletQuota-credit {
-		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
-			return 0, err
-		}
-		return credit, nil
+	if err := tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
+		return 0, err
 	}
-	return 0, nil
+	return credit, nil
 }
 
 // CreateTelegramUserWithTx registers a new account directly from a verified
 // Telegram widget assertion (Vantyr: Telegram login doubles as registration).
-// User creation, the Telegram identity claim, and the trial credit are one
-// transaction, so the credit can never land on a user that failed to bind.
-// The trial grant mirrors BindTelegramForSessionWithTx: exactly once per
-// Telegram account (the claim above is the dedup), bounded by MaxWalletQuota.
-// inviterId must already be resolved by the caller; the inviter reward itself
-// is paid post-commit by FinalizeOAuthUserCreation, as for other OAuth signups.
-func CreateTelegramUserWithTx(tx *gorm.DB, telegramID, username, displayName string, inviterId int) (*User, int, error) {
+// User creation and the Telegram identity claim are one transaction; the
+// trial credit is granted in the same transaction only when the controller
+// already confirmed group membership (grantTrial=true), otherwise the user
+// claims it on a later login after joining. inviterId must already be
+// resolved by the caller; the inviter reward itself is paid post-commit by
+// FinalizeOAuthUserCreation, as for other OAuth signups.
+func CreateTelegramUserWithTx(tx *gorm.DB, telegramID, username, displayName string, inviterId int, grantTrial bool) (*User, int, error) {
 	user := &User{
 		Username:    username,
 		DisplayName: displayName,
@@ -147,9 +174,9 @@ func CreateTelegramUserWithTx(tx *gorm.DB, telegramID, username, displayName str
 	if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegramID, user.Id); err != nil {
 		return nil, 0, err
 	}
-	credit := common.QuotaForNewUser
-	if credit > 0 && user.Quota <= common.MaxWalletQuota-credit {
-		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", credit)).Error; err != nil {
+	if grantTrial {
+		credit, err := GrantTelegramTrialWithTx(tx, user.Id)
+		if err != nil {
 			return nil, 0, err
 		}
 		return user, credit, nil

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -57,6 +58,74 @@ var (
 func telegramWidgetBotToken() string {
 	return strings.TrimSpace(system_setting.GetTelegramSettings().ClientSecret)
 }
+
+// telegramTrialGroupChatID returns the configured membership-gate group, or ""
+// when the gate is disabled.
+func telegramTrialGroupChatID() string {
+	return strings.TrimSpace(system_setting.GetTelegramSettings().TrialGroupChatID)
+}
+
+// isTelegramGroupMember reports whether the Telegram account is a member of
+// the trial-gate group, using the bot's API. The call fails closed for the
+// credit: on any API error (bot kicked, network, Telegram outage) the trial
+// is simply not granted now — the user can retry on their next Telegram
+// login, so a transient failure never permanently denies the credit. It must
+// never block login or registration, which proceed regardless of the answer.
+func isTelegramGroupMember(telegramID string) bool {
+	chatID := telegramTrialGroupChatID()
+	if chatID == "" || telegramID == "" {
+		return false
+	}
+	// The bot token is the full "<bot id>:<hash>" used by the widget HMAC;
+	// getChatMember requires the bot to be a member of the group (privacy
+	// mode does not matter for it).
+	token := telegramWidgetBotToken()
+	if token == "" {
+		return false
+	}
+	userID, err := strconv.ParseInt(telegramID, 10, 64)
+	if err != nil {
+		return false
+	}
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://api.telegram.org/bot"+token+"/getChatMember", nil)
+	if err != nil {
+		return false
+	}
+	query := request.URL.Query()
+	query.Set("chat_id", chatID)
+	query.Set("user_id", strconv.FormatInt(userID, 10))
+	request.URL.RawQuery = query.Encode()
+	response, err := telegramBotHTTPClient.Do(request)
+	if err != nil {
+		common.SysLog("telegram group membership check failed: " + err.Error())
+		return false
+	}
+	defer response.Body.Close()
+	var body struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Status string `json:"status"`
+		} `json:"result"`
+	}
+	if err := common.DecodeJson(response.Body, &body); err != nil {
+		common.SysLog("telegram group membership check decode failed: " + err.Error())
+		return false
+	}
+	if !body.OK {
+		// A "left"/"kicked" user is a definitive answer, not an error.
+		return false
+	}
+	switch body.Result.Status {
+	case "creator", "administrator", "member", "restricted":
+		return true
+	default:
+		// "left" and "kicked" are not members.
+		return false
+	}
+}
+
+var telegramBotHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 func TelegramBindStart(c *gin.Context) {
 	if !common.TelegramOAuthEnabled {
@@ -202,20 +271,14 @@ func TelegramBind(c *gin.Context) {
 			UserAuthVersion: user.AuthVersion,
 			SessionVersion:  session.Version,
 		}
-		credit, err := model.BindTelegramForSessionWithTx(tx, bindIdentity, telegramId)
-		if err != nil {
+		// Vantyr: bind only links the identity. The $5 trial is granted on
+		// Telegram login once group membership is confirmed, so a user who
+		// binds here and joins the group later still gets it on next login.
+		if err := model.BindTelegramForSessionWithTx(tx, bindIdentity, telegramId); err != nil {
 			if errors.Is(err, model.ErrExternalIdentityAlreadyClaimed) {
 				return errTelegramAccountAlreadyBound
 			}
 			return err
-		}
-		if credit > 0 {
-			// Cache sync and audit log run only after the transaction commits.
-			defer func() {
-				model.SyncCreditUserQuotaCache(flow.UserId, credit, "telegram verification")
-			}()
-			model.RecordLog(flow.UserId, model.LogTypeSystem,
-				fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
 		}
 		return nil
 	})
@@ -293,7 +356,7 @@ func TelegramLogin(c *gin.Context) {
 			})
 			return
 		}
-		created, credit, err := createTelegramLoginUser(params, telegramId, c)
+		created, err := createTelegramLoginUser(params, telegramId, c)
 		if err != nil {
 			common.SysError("TelegramLogin registration failed: " + err.Error())
 			c.JSON(200, gin.H{
@@ -303,14 +366,6 @@ func TelegramLogin(c *gin.Context) {
 			return
 		}
 		user = *created
-		if credit > 0 {
-			// The cache sync runs only after the creation transaction has
-			// committed; a pre-commit sync would expose credit that could
-			// still roll back (fail-open on a money path).
-			model.SyncCreditUserQuotaCache(user.Id, credit, "telegram verification")
-			model.RecordLog(user.Id, model.LogTypeSystem,
-				fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
-		}
 	} else {
 		user = *stored
 		if err := claimTelegramAuthorization(params, time.Now()); err != nil {
@@ -322,14 +377,48 @@ func TelegramLogin(c *gin.Context) {
 			return
 		}
 	}
+	// Vantyr: the $5 trial is granted on verified Telegram login when the
+	// account is a member of the configured group (and not yet credited).
+	// A transient membership-check failure or a not-yet-joined user simply
+	// gets no credit now and can retry on the next login; login itself
+	// proceeds regardless.
+	if common.QuotaForNewUser > 0 {
+		if credit := grantTelegramTrialOnLogin(telegramId, user.Id); credit > 0 {
+			model.SyncCreditUserQuotaCache(user.Id, credit, "telegram verification")
+			model.RecordLog(user.Id, model.LogTypeSystem,
+				fmt.Sprintf("Telegram 验证赠送 %s", logger.LogQuota(credit)))
+		}
+	}
 	setupLogin(&user, nil, c)
 }
 
+// grantTelegramTrialOnLogin checks group membership (bot API) and pays the
+// one-per-user trial in its own short transaction.
+func grantTelegramTrialOnLogin(telegramId string, userId int) int {
+	if !telegramGroupMembershipCheck(telegramId) {
+		return 0
+	}
+	var credit int
+	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		credit, err = model.GrantTelegramTrialWithTx(tx, userId)
+		return err
+	}); err != nil {
+		common.SysError("telegram trial grant failed: " + err.Error())
+		return 0
+	}
+	return credit
+}
+
+// telegramGroupMembershipCheck is the seam tests use to pin the bot-API answer.
+var telegramGroupMembershipCheck = isTelegramGroupMember
+
 // createTelegramLoginUser resolves the inviter from the affiliate header and
-// registers the Telegram account in one transaction with the assertion claim,
-// the identity claim, and the trial credit. It returns the created user and
-// the granted trial credit for post-commit cache sync.
-func createTelegramLoginUser(params url.Values, telegramId string, c *gin.Context) (*model.User, int, error) {
+// registers the Telegram account in one transaction with the assertion claim
+// and the identity claim. The trial credit is granted by
+// grantTelegramTrialOnLogin after the user row exists (membership first).
+// It returns the created user for the login flow.
+func createTelegramLoginUser(params url.Values, telegramId string, c *gin.Context) (*model.User, error) {
 	// The widget signature covers the URL query, so the affiliate code travels
 	// in a header instead — it is referral attribution chosen by the client,
 	// not part of the Telegram assertion.
@@ -365,25 +454,24 @@ func createTelegramLoginUser(params url.Values, telegramId string, c *gin.Contex
 
 	assertion, assertionExpiresAt, err := telegramAuthorizationClaim(params, time.Now())
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	var user *model.User
-	var credit int
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := model.ClaimExternalAuthAssertionWithTx(tx, model.AuthFlowPurposeTelegramAssertion, assertion, assertionExpiresAt); err != nil {
 			return err
 		}
 		var err error
-		user, credit, err = model.CreateTelegramUserWithTx(tx, telegramId, username, displayName, inviterId)
+		user, _, err = model.CreateTelegramUserWithTx(tx, telegramId, username, displayName, inviterId, false)
 		return err
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	// Inviter reward and sidebar config run post-commit, as for other OAuth
 	// registrations. It is compliance- and option-gated inside.
 	user.FinalizeOAuthUserCreation(inviterId)
-	return user, credit, nil
+	return user, nil
 }
 
 func claimTelegramAuthorization(params url.Values, now time.Time) error {

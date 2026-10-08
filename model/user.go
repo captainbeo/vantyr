@@ -106,6 +106,11 @@ type User struct {
 	// Vantyr: one-shot marker for the referral top-up bonus — set when the
 	// inviter has been paid for this user's first qualifying top-up.
 	AffTopUpCredited     bool                       `json:"aff_topup_credited" gorm:"type:boolean;default:false;column:aff_topup_credited"`
+	// Vantyr: the $5 Telegram trial is one grant per user account; this
+	// marker survives Telegram unbind/rebind so a re-verified account cannot
+	// re-earn it, while a user who verified before joining the group can
+	// still claim it on a later Telegram login.
+	TelegramTrialCredited bool                      `json:"telegram_trial_credited" gorm:"type:boolean;default:false;column:telegram_trial_credited"`
 	DeletedAt            gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId            string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting              string                     `json:"setting" gorm:"type:text;column:setting"`

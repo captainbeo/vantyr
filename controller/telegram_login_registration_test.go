@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,13 +44,22 @@ func signTelegramWidgetParams(botToken string, fields map[string]string) url.Val
 	return params
 }
 
+// widgetAuthDateSequence keeps each signed assertion distinct even when two
+// logins happen within the same wall-clock second (identical params would
+// otherwise hash to the same one-time assertion and be rejected as replay).
+var widgetAuthDateSequence int64
+
+func nextWidgetAuthDate() string {
+	return strconv.FormatInt(time.Now().Unix()+atomic.AddInt64(&widgetAuthDateSequence, 1), 10)
+}
+
 // widgetLoginRequest calls TelegramLogin with signed widget params and an
 // optional affiliate header, as the frontend dialog would. mutate may rewrite
 // the signed params (which invalidates the signature unless re-signed).
 func widgetLoginRequest(botToken string, telegramID string, affiliateCode string, mutate func(url.Values)) *httptest.ResponseRecorder {
 	params := signTelegramWidgetParams(botToken, map[string]string{
 		"id":         telegramID,
-		"auth_date":  strconv.FormatInt(time.Now().Unix(), 10),
+		"auth_date":  nextWidgetAuthDate(),
 		"username":   "tg_widget_user",
 		"first_name": "Widget",
 	})
@@ -126,8 +136,18 @@ func setupWidgetLoginTest(t *testing.T) (botToken string) {
 	return botToken
 }
 
+// patchMembershipCheck pins the bot-API membership answer for a test and
+// restores the real check afterwards.
+func patchMembershipCheck(t *testing.T, member bool) {
+	t.Helper()
+	previous := telegramGroupMembershipCheck
+	telegramGroupMembershipCheck = func(telegramID string) bool { return member }
+	t.Cleanup(func() { telegramGroupMembershipCheck = previous })
+}
+
 func TestTelegramWidgetLoginRegistersUnknownAccount(t *testing.T) {
 	botToken := setupWidgetLoginTest(t)
+	patchMembershipCheck(t, true)
 	common.QuotaForNewUser = 500000
 	common.QuotaForInviter = 1500000
 
@@ -143,7 +163,8 @@ func TestTelegramWidgetLoginRegistersUnknownAccount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "tg_widget_user", created.Username)
 	assert.Equal(t, inviter.Id, created.InviterId)
-	assert.Equal(t, 500000, created.Quota, "trial credit granted at registration")
+	assert.Equal(t, 500000, created.Quota, "trial credit granted at login when a group member")
+	assert.True(t, created.TelegramTrialCredited)
 
 	var claim model.ExternalIdentityClaim
 	require.NoError(t, model.DB.Where("provider = ? AND subject = ?", model.ExternalIdentityProviderTelegram, "70001").First(&claim).Error)
@@ -157,6 +178,7 @@ func TestTelegramWidgetLoginRegistersUnknownAccount(t *testing.T) {
 
 func TestTelegramWidgetLoginUnknownAccountWithoutInviter(t *testing.T) {
 	botToken := setupWidgetLoginTest(t)
+	patchMembershipCheck(t, true)
 	common.QuotaForNewUser = 500000
 
 	response := widgetLoginRequest(botToken, "70002", "nocode", nil)
@@ -167,6 +189,37 @@ func TestTelegramWidgetLoginUnknownAccountWithoutInviter(t *testing.T) {
 	created, err := model.GetUserByTelegramID("70002")
 	require.NoError(t, err)
 	assert.Zero(t, created.InviterId)
+	assert.Equal(t, 500000, created.Quota)
+}
+
+func TestTelegramWidgetLoginTrialRequiresGroupMembership(t *testing.T) {
+	botToken := setupWidgetLoginTest(t)
+	patchMembershipCheck(t, false)
+	common.QuotaForNewUser = 500000
+
+	// Registration still succeeds without group membership…
+	response := widgetLoginRequest(botToken, "70009", "", nil)
+	var body widgetLoginBody
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
+	require.True(t, body.Success, response.Body.String())
+	created, err := model.GetUserByTelegramID("70009")
+	require.NoError(t, err)
+	assert.Zero(t, created.Quota, "no trial credit while not a group member")
+	assert.False(t, created.TelegramTrialCredited)
+
+	// …and the same account logging in again after joining gets the credit.
+	patchMembershipCheck(t, true)
+	second := widgetLoginRequest(botToken, "70009", "", nil)
+	require.NoError(t, common.Unmarshal(second.Body.Bytes(), &body))
+	require.True(t, body.Success, second.Body.String())
+	require.NoError(t, model.DB.First(&created, created.Id).Error)
+	assert.Equal(t, 500000, created.Quota, "trial granted on the later login after joining")
+
+	// Third login pays nothing more.
+	third := widgetLoginRequest(botToken, "70009", "", nil)
+	require.NoError(t, common.Unmarshal(third.Body.Bytes(), &body))
+	require.True(t, body.Success, third.Body.String())
+	require.NoError(t, model.DB.First(&created, created.Id).Error)
 	assert.Equal(t, 500000, created.Quota)
 }
 
@@ -227,6 +280,7 @@ func TestTelegramWidgetLoginRejectsTamperedParams(t *testing.T) {
 
 func TestTelegramWidgetLoginExistingUserPathUnchanged(t *testing.T) {
 	botToken := setupWidgetLoginTest(t)
+	patchMembershipCheck(t, false)
 	common.QuotaForNewUser = 500000
 
 	existing := &model.User{Username: "existing-widget", Password: "password", TelegramId: "70005", Status: common.UserStatusEnabled, AuthVersion: 1}
@@ -240,7 +294,7 @@ func TestTelegramWidgetLoginExistingUserPathUnchanged(t *testing.T) {
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
 	require.True(t, body.Success, response.Body.String())
 
-	// No trial credit for an already-existing account and no second user.
+	// Not a group member: no credit, and no second user created.
 	var stored model.User
 	require.NoError(t, model.DB.First(&stored, existing.Id).Error)
 	assert.Zero(t, stored.Quota)

@@ -75,7 +75,7 @@ func createReferralInviter(t *testing.T, affCode string) *User {
 	return inviter
 }
 
-func TestCreateTelegramUserWithTxGrantsTrialCreditAndPersistsInviter(t *testing.T) {
+func TestCreateTelegramUserWithTxPersistsInviterWithoutTrial(t *testing.T) {
 	truncateTables(t)
 	enableReferralTestDefaults(t)
 	patchReferralTestOptions(t, func(o *referralTestOptions) {
@@ -84,14 +84,12 @@ func TestCreateTelegramUserWithTxGrantsTrialCreditAndPersistsInviter(t *testing.
 
 	inviter := createReferralInviter(t, "inv1")
 	var user *User
-	var credit int
 	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		user, credit, err = CreateTelegramUserWithTx(tx, "777001", "tg_user", "TG User", inviter.Id)
+		user, _, err = CreateTelegramUserWithTx(tx, "777001", "tg_user", "TG User", inviter.Id, false)
 		return err
 	}))
 
-	assert.Equal(t, 500000, credit)
 	require.NotNil(t, user)
 	assert.NotZero(t, user.Id)
 	assert.Equal(t, "777001", user.TelegramId)
@@ -99,7 +97,8 @@ func TestCreateTelegramUserWithTxGrantsTrialCreditAndPersistsInviter(t *testing.
 	assert.Equal(t, common.RoleCommonUser, user.Role)
 	assert.Equal(t, common.UserStatusEnabled, user.Status)
 	assert.NotEmpty(t, user.AffCode)
-	assert.Equal(t, 500000, referralTestStoredQuota(t, user.Id), "trial credit persisted at creation")
+	assert.Zero(t, referralTestStoredQuota(t, user.Id), "trial credit is granted on login after membership, not at creation")
+	assert.False(t, user.TelegramTrialCredited)
 
 	var claim ExternalIdentityClaim
 	require.NoError(t, DB.Where("provider = ? AND subject = ?", ExternalIdentityProviderTelegram, "777001").First(&claim).Error)
@@ -120,7 +119,7 @@ func referralTestStoredQuota(t *testing.T, userId int) int {
 	return stored.Quota
 }
 
-func TestCreateTelegramUserWithTxTrialCreditLandsOnlyInTransaction(t *testing.T) {
+func TestCreateTelegramUserWithTxGrantTrialFlagAwardsCredit(t *testing.T) {
 	truncateTables(t)
 	enableReferralTestDefaults(t)
 	patchReferralTestOptions(t, func(o *referralTestOptions) {
@@ -128,22 +127,22 @@ func TestCreateTelegramUserWithTxTrialCreditLandsOnlyInTransaction(t *testing.T)
 	})
 
 	var user *User
+	var credit int
 	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		user, _, err = CreateTelegramUserWithTx(tx, "777002", "tg_user_2", "TG Two", 0)
+		user, credit, err = CreateTelegramUserWithTx(tx, "777002", "tg_user_2", "TG Two", 0, true)
 		return err
 	}))
+	assert.Equal(t, 500000, credit)
 	assert.Equal(t, 500000, referralTestStoredQuota(t, user.Id))
 
 	// A rolled-back transaction must leave neither the user nor the credit.
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		var credit int
 		var err error
-		_, credit, err = CreateTelegramUserWithTx(tx, "777003", "tg_user_3", "TG Three", 0)
+		_, _, err = CreateTelegramUserWithTx(tx, "777003", "tg_user_3", "TG Three", 0, true)
 		if err != nil {
 			return err
 		}
-		assert.Equal(t, 500000, credit)
 		return gorm.ErrRecordNotFound // force rollback
 	})
 	assert.Error(t, err)
@@ -153,6 +152,48 @@ func TestCreateTelegramUserWithTxTrialCreditLandsOnlyInTransaction(t *testing.T)
 	var claims int64
 	require.NoError(t, DB.Model(&ExternalIdentityClaim{}).Where("subject = ?", "777003").Count(&claims).Error)
 	assert.Zero(t, claims)
+}
+
+func TestGrantTelegramTrialWithTxIsOncePerUserAndRetryable(t *testing.T) {
+	truncateTables(t)
+	enableReferralTestDefaults(t)
+	patchReferralTestOptions(t, func(o *referralTestOptions) {
+		o.quotaForNewUser = 500000
+	})
+
+	user := &User{Username: "trial-retry", Password: "password", AffCode: "trial-retry", TelegramId: "777010"}
+	require.NoError(t, DB.Create(user).Error)
+
+	// First grant pays.
+	var credit int
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		credit, err = GrantTelegramTrialWithTx(tx, user.Id)
+		return err
+	}))
+	assert.Equal(t, 500000, credit)
+	assert.Equal(t, 500000, referralTestStoredQuota(t, user.Id))
+
+	// Second grant (e.g. login again after leaving and rejoining) pays nothing.
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		credit, err = GrantTelegramTrialWithTx(tx, user.Id)
+		return err
+	}))
+	assert.Zero(t, credit)
+	assert.Equal(t, 500000, referralTestStoredQuota(t, user.Id))
+
+	// Unbinding and rebinding a different Telegram account does not re-earn
+	// the trial: the marker is per user, not per Telegram identity.
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return ReleaseExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, user.Id)
+	}))
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		credit, err = GrantTelegramTrialWithTx(tx, user.Id)
+		return err
+	}))
+	assert.Zero(t, credit)
 }
 
 func TestCreateTelegramUserWithTxRejectsDuplicateTelegramAccount(t *testing.T) {
@@ -166,7 +207,7 @@ func TestCreateTelegramUserWithTxRejectsDuplicateTelegramAccount(t *testing.T) {
 	}))
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		_, _, err := CreateTelegramUserWithTx(tx, "777004", "tg_user_4", "TG Four", 0)
+		_, _, err := CreateTelegramUserWithTx(tx, "777004", "tg_user_4", "TG Four", 0, true)
 		return err
 	})
 	assert.ErrorIs(t, err, ErrExternalIdentityAlreadyClaimed)
@@ -182,7 +223,7 @@ func TestCreateTelegramUserWithTxSkipsCreditWhenDisabled(t *testing.T) {
 	var user *User
 	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		user, _, err = CreateTelegramUserWithTx(tx, "777005", "tg_user_5", "TG Five", 0)
+		user, _, err = CreateTelegramUserWithTx(tx, "777005", "tg_user_5", "TG Five", 0, true)
 		return err
 	}))
 	assert.Zero(t, referralTestStoredQuota(t, user.Id))
