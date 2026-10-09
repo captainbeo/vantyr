@@ -1405,3 +1405,33 @@ frontend-only.
   in logs.
 - Rollback: pinned-next18 (a473fc7465ec) retained — repoint
   compose.yaml + `docker compose up -d --no-build gateway`.
+
+## 2026-10-09 — Page unification (pinned-next20)
+
+`fix(web): unified page background, glass on rankings, once-per-session
+intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
+
+- Scope: all public pages sit on the same ambient body-glow canvas as
+  the homepage — page-local cyan/violet gradients removed from
+  rankings and Model Overview (they double-stacked over the body glow
+  and read as different backgrounds). Rankings sections
+  (models/market-share/pulse) get the glass-box treatment (blur +
+  translucent fill + specular edge) matching the about page panels.
+  The 3D intro now plays once per browsing session (sessionStorage
+  `vantyr.intro-seen` guard, set when the intro completes; cleared by
+  a fresh tab/browser): returning to Home via the header no longer
+  replays the rotating logo.
+- Verification: dev-preview inspected (rankings: 4 glass boxes with
+  blur(18px), transparent layout, zero page-local gradients, body
+  glow present; intro: plays fresh, does not replay after
+  mark-seen → navigate away → return Home, hero renders
+  immediately); typecheck clean; intro + landing vitest green
+  (4/4). Frontend-only change — no backend paths touched. Patch
+  (web/ only, VANTYR.md excluded — server copy diverged) md5-verified;
+  image pinned-next20 (84ebd363db9b) built on-server; binary embeds
+  `vantyr.intro-seen` + `glass-box` markers.
+- Live verification: gateway healthy; status/rankings/pricing/about
+  200; zero gateway errors; footer + archive (sha256
+  1e67a01d…eb73b) live.
+- Rollback: pinned-next19 retained — repoint compose.yaml +
+  `docker compose up -d --no-build gateway`.
