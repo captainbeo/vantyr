@@ -54,10 +54,10 @@ export function CTA(props: CTAProps) {
         <div className='mx-auto grid max-w-7xl gap-10 px-5 py-20 lg:grid-cols-[1fr_1.6fr]'>
           <div>
             <SectionCode code='SYS-02'>{t('Transparency')}</SectionCode>
-            <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+            <h2 className='font-display mt-3 text-3xl font-semibold md:text-4xl'>
               {t('Every request, accounted for.')}
             </h2>
-            <p className='mt-4 text-muted-foreground'>
+            <p className='text-muted-foreground mt-4'>
               {t(
                 'Per-request logs with model, status, latency and token cost. Nothing is stored beyond what billing needs.'
               )}
@@ -72,12 +72,14 @@ export function CTA(props: CTAProps) {
               <tbody>
                 {LOG_ROWS.map((row) => (
                   <tr key={row[0]} className='border-b last:border-b-0'>
-                    <td className='px-4 py-2 text-muted-foreground'>{row[0]}</td>
+                    <td className='text-muted-foreground px-4 py-2'>
+                      {row[0]}
+                    </td>
                     <td className='px-2 py-2'>{row[1]}</td>
                     <td className='px-2 py-2'>{row[2]}</td>
-                    <td className='px-2 py-2 text-primary'>{row[3]}</td>
-                    <td className='px-2 py-2 text-success'>{row[4]}</td>
-                    <td className='px-4 py-2 text-right text-muted-foreground'>
+                    <td className='text-primary px-2 py-2'>{row[3]}</td>
+                    <td className='text-success px-2 py-2'>{row[4]}</td>
+                    <td className='text-muted-foreground px-4 py-2 text-right'>
                       {row[5]}
                     </td>
                   </tr>

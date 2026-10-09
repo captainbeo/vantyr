@@ -45,14 +45,14 @@ export function HowItWorks(_props: HowItWorksProps) {
       num: '02',
       title: t('Swap the base URL'),
       desc: t(
-        'Point your SDK at this relay. Request and response shapes stay identical.'
+        'Point your SDK at Vantyr. Request and response shapes stay identical.'
       ),
     },
     {
       num: '03',
       title: t('Ship'),
       desc: t(
-        'Traffic is relayed to the upstream model over pooled capacity at a lower rate.'
+        'Requests are served by the upstream model over pooled capacity at a lower rate.'
       ),
     },
   ]
@@ -61,20 +61,20 @@ export function HowItWorks(_props: HowItWorksProps) {
     <section className='border-b'>
       <div className='mx-auto max-w-7xl px-5 py-20'>
         <SectionCode code='SYS-01'>{t('Integration')}</SectionCode>
-        <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+        <h2 className='font-display mt-3 text-3xl font-semibold md:text-4xl'>
           {t('Three steps. No rewrite.')}
         </h2>
         <ol
           data-slot='tile-grid'
-          className='mt-10 grid list-none gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-3'
+          className='bg-border mt-10 grid list-none gap-px overflow-hidden rounded-sm border md:grid-cols-3'
         >
           {steps.map((s) => (
             <li key={s.num} className='bg-background p-6'>
-              <div className='font-mono text-sm text-primary'>{s.num}</div>
-              <h3 className='mt-6 font-display text-xl font-semibold'>
+              <div className='text-primary font-mono text-sm'>{s.num}</div>
+              <h3 className='font-display mt-6 text-xl font-semibold'>
                 {s.title}
               </h3>
-              <p className='mt-2 text-sm text-muted-foreground'>{s.desc}</p>
+              <p className='text-muted-foreground mt-2 text-sm'>{s.desc}</p>
             </li>
           ))}
         </ol>

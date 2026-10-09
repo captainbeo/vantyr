@@ -33,23 +33,23 @@ export function Stats(_props: StatsProps) {
 
   const stats: StatDef[] = [
     { label: t('Median added latency'), value: '38', unit: 'ms' },
-    { label: t('Relay uptime · 90d'), value: '99.97', unit: '%' },
+    { label: t('Service uptime · 90d'), value: '99.97', unit: '%' },
     { label: t('Off official rates'), value: '98', unit: '%+' },
     { label: t('Usage limits'), value: '0', unit: t('caps') },
   ]
 
   return (
-    <section className='border-b' aria-label={t('Relay statistics')}>
+    <section className='border-b' aria-label={t('Service statistics')}>
       <div className='mx-auto grid max-w-7xl grid-cols-2 md:grid-cols-4'>
         {stats.map((s) => (
           <div
             key={s.label}
-            className='border-r px-5 py-8 last:border-r-0 [&:nth-child(2)]:max-md:border-r-0 max-md:[&:nth-child(-n+2)]:border-b md:border-b-0'
+            className='border-r px-5 py-8 last:border-r-0 md:border-b-0 max-md:[&:nth-child(-n+2)]:border-b [&:nth-child(2)]:max-md:border-r-0'
           >
             <div className='label-mono'>{s.label}</div>
-            <div className='mt-2 font-display text-4xl font-semibold'>
+            <div className='font-display mt-2 text-4xl font-semibold'>
               {s.value}
-              <span className='ml-1 text-lg text-primary'>{s.unit}</span>
+              <span className='text-primary ml-1 text-lg'>{s.unit}</span>
             </div>
           </div>
         ))}

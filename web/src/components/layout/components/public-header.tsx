@@ -20,6 +20,8 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { IconDiscord } from '@/assets/brand-icons/icon-discord'
+import { IconTelegram } from '@/assets/brand-icons/icon-telegram'
 import brandIcon from '@/assets/vantyr-mark.png'
 import wordmarkDark from '@/assets/vantyr-wordmark-dark.png'
 import wordmarkWhite from '@/assets/vantyr-wordmark-white.png'
@@ -38,6 +40,43 @@ import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
 
 const AUTH_PROMPT_SECONDS = 5
+
+// Community channels — the same permanent links the /docs guide and
+// footer carry. External, so they open in a new tab.
+const SOCIAL_LINKS = [
+  {
+    key: 'discord',
+    label: 'Discord community',
+    href: 'https://discord.gg/BNBdHZqGFb',
+    icon: IconDiscord,
+  },
+  {
+    key: 'telegram',
+    label: 'Telegram',
+    href: 'https://t.me/vantyrapi',
+    icon: IconTelegram,
+  },
+] as const
+
+function SocialLinks() {
+  return (
+    <>
+      {SOCIAL_LINKS.map((link) => (
+        <a
+          key={link.key}
+          href={link.href}
+          target='_blank'
+          rel='noopener noreferrer'
+          title={link.label}
+          aria-label={link.label}
+          className='text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-lg transition-colors duration-200'
+        >
+          <link.icon className='size-4' />
+        </a>
+      ))}
+    </>
+  )
+}
 
 type AuthPromptTarget = {
   title: string
@@ -290,6 +329,8 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <div className='bg-border/40 mx-2 h-4 w-px' />
               )}
 
+              <SocialLinks />
+
               {showLanguageSwitcher && <LanguageSwitcher />}
               {showThemeSwitch && <ThemeSwitch />}
 
@@ -415,6 +456,9 @@ export function PublicHeader(props: PublicHeaderProps) {
                 {isAuthenticated ? t('Go to Dashboard') : t('Sign in')}
               </Link>
             )}
+            <div className='flex items-center gap-4'>
+              <SocialLinks />
+            </div>
           </div>
         </div>
       </div>

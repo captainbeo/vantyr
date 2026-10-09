@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ReactNode } from 'react'
+
 import { cn } from '@/lib/utils'
 
 /**
@@ -88,8 +89,10 @@ export function ControlRoomPanel(props: {
 export function LiveDot(props: { caption: string; tone?: 'ok' | 'primary' }) {
   const toneClass = props.tone === 'primary' ? 'bg-primary' : 'bg-success'
   return (
-    <span className='flex items-center gap-2 font-mono text-[11px] tracking-wider text-muted-foreground uppercase'>
-      <span className={cn('size-1.5 rounded-full', toneClass, 'animate-blink')} />
+    <span className='text-muted-foreground flex items-center gap-2 font-mono text-[11px] tracking-wider uppercase'>
+      <span
+        className={cn('size-1.5 rounded-full', toneClass, 'animate-blink')}
+      />
       {props.caption}
     </span>
   )

@@ -26,11 +26,10 @@ import {
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { Home } from '@/features/home'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
-
-import { Home } from '@/features/home'
 
 let client: QueryClient
 
@@ -105,11 +104,13 @@ describe('Control Room landing sections', () => {
 
     // Stats band: mono labels render (i18n test resources return the key).
     expect(screen.getByText('Median added latency')).toBeInTheDocument()
-    expect(screen.getByText('Relay uptime · 90d')).toBeInTheDocument()
+    expect(screen.getByText('Service uptime · 90d')).toBeInTheDocument()
 
     // Comparison table + request-log panel: two tables on the landing.
     expect(screen.getAllByRole('table')).toHaveLength(2)
-    expect(screen.getByRole('columnheader', { name: 'Vantyr' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Vantyr' })
+    ).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '98%+ less' })).toBeInTheDocument()
 
     // Anonymous final CTA is visible. The h2's accessible name concatenates
@@ -136,8 +137,6 @@ describe('Control Room landing sections', () => {
         screen.getByRole('button', { name: 'Go to Dashboard' })
       ).toBeInTheDocument()
     })
-    expect(
-      screen.queryByRole('heading', { name: /Open a channel/ })
-    ).toBeNull()
+    expect(screen.queryByRole('heading', { name: /Open a channel/ })).toBeNull()
   })
 })

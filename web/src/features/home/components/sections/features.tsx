@@ -34,7 +34,7 @@ interface ProblemDef {
 
 const COMPARE_COLS: readonly string[] = [
   'Official APIs',
-  'Other relays',
+  'Other providers',
   'Vantyr',
 ]
 
@@ -72,7 +72,7 @@ export function Features(_props: FeaturesProps) {
     {
       num: '04',
       tag: 'Integrity',
-      problem: t('Relays that quietly swap in cheaper models'),
+      problem: t('Providers that quietly swap in cheaper models'),
       fix: t('Real models. Tested daily.'),
       desc: t(
         'No model swapping, distilling or downgrading. We test every model daily to confirm you get what you asked for.'
@@ -105,38 +105,18 @@ export function Features(_props: FeaturesProps) {
       t('Often throttled'),
       t('None'),
     ],
-    [
-      t('Price vs official'),
-      '100%',
-      t('Varies'),
-      t('98%+ less'),
-    ],
-    [
-      t('Models'),
-      t('One vendor'),
-      t('Mixed'),
-      t('Claude + Codex, one key'),
-    ],
-    [
-      t('Genuine models'),
-      t('Yes'),
-      t('Often swapped'),
-      t('Yes, tested daily'),
-    ],
+    [t('Price vs official'), '100%', t('Varies'), t('98%+ less')],
+    [t('Models'), t('One vendor'), t('Mixed'), t('Claude + Codex, one key')],
+    [t('Genuine models'), t('Yes'), t('Often swapped'), t('Yes, tested daily')],
     [t('Setup'), t('Per vendor'), t('Unclear'), t('One URL change + guide')],
-    [
-      t('Support'),
-      t('Ticket queue'),
-      t('Rare'),
-      t('Answers any question'),
-    ],
+    [t('Support'), t('Ticket queue'), t('Rare'), t('Answers any question')],
   ]
 
   return (
     <section className='border-b'>
       <div className='mx-auto max-w-7xl px-5 py-20'>
         <SectionCode code='WHY-00'>{t('What Vantyr fixes')}</SectionCode>
-        <h2 className='mt-3 max-w-3xl font-display text-3xl font-semibold md:text-5xl'>
+        <h2 className='font-display mt-3 max-w-3xl text-3xl font-semibold md:text-5xl'>
           {t(
             'Official APIs throttle you, bill you heavily and lock you to one vendor.'
           )}{' '}
@@ -145,23 +125,21 @@ export function Features(_props: FeaturesProps) {
 
         <div
           data-slot='tile-grid'
-          className='mt-12 grid gap-px overflow-hidden rounded-sm border bg-border md:grid-cols-2 lg:grid-cols-3'
+          className='bg-border mt-12 grid gap-px overflow-hidden rounded-sm border md:grid-cols-2 lg:grid-cols-3'
         >
           {problems.map((p) => (
             <div key={p.tag} className='bg-background p-6'>
               <div className='flex items-center justify-between'>
-                <span className='font-mono text-sm text-primary'>
-                  {p.num}
-                </span>
+                <span className='text-primary font-mono text-sm'>{p.num}</span>
                 <span className='label-mono'>{p.tag}</span>
               </div>
-              <p className='mt-6 font-mono text-xs text-muted-foreground line-through decoration-destructive/60'>
+              <p className='text-muted-foreground decoration-destructive/60 mt-6 font-mono text-xs line-through'>
                 {p.problem}
               </p>
-              <h3 className='mt-2 font-display text-xl font-semibold'>
+              <h3 className='font-display mt-2 text-xl font-semibold'>
                 {p.fix}
               </h3>
-              <p className='mt-2 text-sm text-muted-foreground'>{p.desc}</p>
+              <p className='text-muted-foreground mt-2 text-sm'>{p.desc}</p>
             </div>
           ))}
         </div>
@@ -169,11 +147,14 @@ export function Features(_props: FeaturesProps) {
         {/* Side-by-side comparison */}
         <div className='mt-20'>
           <SectionCode code='WHY-01'>{t('Side by side')}</SectionCode>
-          <h2 className='mt-3 font-display text-3xl font-semibold md:text-4xl'>
+          <h2 className='font-display mt-3 text-3xl font-semibold md:text-4xl'>
             {t('Why choose Vantyr.')}
           </h2>
-          <div className='mt-10 overflow-x-auto rounded-sm border bg-card'>
-            <table className='w-full min-w-[640px] font-mono text-[13px]'>
+          <div
+            data-slot='glass-box'
+            className='bg-card mt-10 overflow-hidden rounded-sm border'
+          >
+            <table className='w-full font-mono text-[13px]'>
               <thead>
                 <tr className='border-b'>
                   <th className='label-mono px-4 py-3 text-left font-normal'>
@@ -196,12 +177,12 @@ export function Features(_props: FeaturesProps) {
               <tbody>
                 {compare.map((row) => (
                   <tr key={row[0]} className='border-b last:border-b-0'>
-                    <td className='px-4 py-3 text-muted-foreground'>
+                    <td className='text-muted-foreground px-4 py-3'>
                       {row[0]}
                     </td>
                     <td className='px-4 py-3'>{row[1]}</td>
                     <td className='px-4 py-3'>{row[2]}</td>
-                    <td className='px-4 py-3 text-primary'>{row[3]}</td>
+                    <td className='text-primary px-4 py-3'>{row[3]}</td>
                   </tr>
                 ))}
               </tbody>

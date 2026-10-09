@@ -23,7 +23,7 @@ import mark from '@/assets/vantyr-mark.png'
 import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
 
-import { ControlRoomPanel, LiveDot, SectionCode, StatTileGrid } from './vantyr-sections'
+import { LiveDot, SectionCode, StatTileGrid } from './vantyr-sections'
 
 interface HeroProps {
   className?: string
@@ -31,7 +31,7 @@ interface HeroProps {
 }
 
 // Relay map sample lanes — decorative marketing data.
-const CLIENTS = ['CLIENT-A', 'CLIENT-B', 'CI RUNNER'] as const
+const POOLS = ['POOL 1', 'POOL 2', 'POOL 3'] as const
 const UPSTREAMS = ['CODEX', 'CLAUDE'] as const
 
 export function Hero(props: HeroProps) {
@@ -49,13 +49,15 @@ export function Hero(props: HeroProps) {
     <section className='relative overflow-hidden border-b'>
       <div className='mx-auto grid max-w-7xl gap-12 px-5 py-16 md:py-24 lg:grid-cols-[1.1fr_1fr]'>
         <div>
-          <SectionCode code='SYS-00'>{t('Genuine models · relay pricing')}</SectionCode>
-          <h1 className='mt-5 font-display text-5xl leading-[0.98] font-semibold md:text-7xl'>
+          <SectionCode code='SYS-00'>
+            {t('Genuine models · Vantyr pricing')}
+          </SectionCode>
+          <h1 className='font-display mt-5 text-5xl leading-[0.98] font-semibold md:text-7xl'>
             {t('The real models.')}
             <br />
             <span className='text-primary'>{t('98% off the bill.')}</span>
           </h1>
-          <p className='mt-6 max-w-lg text-lg text-muted-foreground'>
+          <p className='text-muted-foreground mt-6 max-w-lg text-lg'>
             {t(
               'Every request reaches genuine Claude and Codex. No swapped, distilled or downgraded models, ever. You pay a fraction of official API rates, or go unlimited for one flat monthly price.'
             )}
@@ -64,16 +66,16 @@ export function Hero(props: HeroProps) {
           <StatTileGrid className='mt-8 max-w-lg lg:grid-cols-2'>
             <div className='bg-background p-4'>
               <div className='label-mono'>{t('vs official API rates')}</div>
-              <div className='mt-1 font-display text-3xl font-semibold'>
+              <div className='font-display mt-1 text-3xl font-semibold'>
                 {t('up to')} <span className='text-primary'>{t('98%')}</span>{' '}
                 {t('less')}
               </div>
             </div>
             <div className='bg-background p-4'>
               <div className='label-mono'>{t('Unlimited usage')}</div>
-              <div className='mt-1 font-display text-3xl font-semibold'>
+              <div className='font-display mt-1 text-3xl font-semibold'>
                 $180
-                <span className='ml-1 font-mono text-sm font-normal text-muted-foreground'>
+                <span className='text-muted-foreground ml-1 font-mono text-sm font-normal'>
                   /mo
                 </span>
               </div>
@@ -99,46 +101,84 @@ export function Hero(props: HeroProps) {
             <LiveDot caption={t('Real models only')} />
           </div>
 
-          <pre className='mt-10 max-w-lg overflow-x-auto rounded-sm border bg-card p-4 font-mono text-[13px] leading-relaxed'>
+          <pre
+            data-slot='glass-box'
+            className='bg-card mt-10 max-w-lg overflow-hidden rounded-sm border p-4 font-mono text-[13px] leading-relaxed'
+          >
             <span className='text-muted-foreground'># before</span>
             {'\n'}base_url ={' '}
-            <span className='line-through opacity-50'>https://api.anthropic.com</span>
+            <span className='line-through opacity-50'>
+              https://api.anthropic.com
+            </span>
             {'\n'}
             <span className='text-muted-foreground'># after</span>
-            {'\n'}base_url = <span className='text-primary'>https://vantyr.xyz</span>
+            {'\n'}base_url ={' '}
+            <span className='text-primary'>https://vantyr.xyz</span>
           </pre>
         </div>
 
-        {/* Relay map */}
-        <ControlRoomPanel
-          title={t('Relay map · live')}
-          right={<LiveDot caption='3/3 ONLINE' tone='ok' />}
-          bodyClassName='relative'
-        >
-          <div className='relative aspect-[4/3]'>
-            <svg
-              viewBox='0 0 400 300'
-              className='absolute inset-0 h-full w-full'
-              aria-hidden
-            >
-              {(
-                [
-                  [60, 70],
-                  [60, 150],
-                  [60, 230],
-                ] as const
-              ).map(([x, y], i) => (
-                <g key={CLIENTS[i]}>
+        {/* Relay map: the map itself, frameless — no panel box, no
+         * header, no region latency strip. Sized like the old panel
+         * (max-w ~26rem, 4/3) so it doesn't stretch the full column. */}
+        <div className='relative mx-auto aspect-[4/3] w-full max-w-[26rem]'>
+          <svg
+            viewBox='0 0 400 300'
+            className='absolute inset-0 h-full w-full'
+            data-slot='relay-map'
+            aria-hidden
+          >
+            {(
+              [
+                [60, 70],
+                [60, 150],
+                [60, 230],
+              ] as const
+            ).map(([x, y], i) => (
+              <g key={POOLS[i]}>
+                <path
+                  d={`M${x + 40} ${y} C 160 ${y}, 160 150, 200 150`}
+                  fill='none'
+                  stroke='var(--border)'
+                  strokeWidth='1.5'
+                />
+                <path
+                  d={`M${x + 40} ${y} C 160 ${y}, 160 150, 200 150`}
+                  fill='none'
+                  stroke='var(--primary)'
+                  strokeWidth='1.5'
+                  className='animate-flow'
+                />
+                <rect
+                  x={x - 40}
+                  y={y - 14}
+                  width='80'
+                  height='28'
+                  rx='2'
+                  className='relay-chip'
+                  fill='var(--secondary)'
+                  stroke='var(--border)'
+                />
+                <text
+                  x={x}
+                  y={y + 4}
+                  textAnchor='middle'
+                  fontFamily='var(--font-mono-stack)'
+                  fontSize='10'
+                  fill='var(--muted-foreground)'
+                >
+                  {POOLS[i]}
+                </text>
+              </g>
+            ))}
+            {UPSTREAMS.map((label, i) => {
+              const x = 340
+              const y = i === 0 ? 100 : 200
+              return (
+                <g key={label}>
                   <path
-                    d={`M${x + 40} ${y} C 160 ${y}, 160 150, 200 150`}
+                    d={`M240 150 C 290 150, 280 ${y}, ${x - 40} ${y}`}
                     fill='none'
-                    stroke='var(--border)'
-                    strokeWidth='1.5'
-                  />
-                  <path
-                    d={`M${x + 40} ${y} C 160 ${y}, 160 150, 200 150`}
-                    fill='none'
-                    stroke='var(--primary)'
+                    stroke='var(--success)'
                     strokeWidth='1.5'
                     className='animate-flow'
                   />
@@ -148,6 +188,7 @@ export function Hero(props: HeroProps) {
                     width='80'
                     height='28'
                     rx='2'
+                    className='relay-chip'
                     fill='var(--secondary)'
                     stroke='var(--border)'
                   />
@@ -157,85 +198,38 @@ export function Hero(props: HeroProps) {
                     textAnchor='middle'
                     fontFamily='var(--font-mono-stack)'
                     fontSize='10'
-                    fill='var(--muted-foreground)'
+                    fill='var(--foreground)'
                   >
-                    {CLIENTS[i]}
+                    {label}
                   </text>
                 </g>
-              ))}
-              {UPSTREAMS.map((label, i) => {
-                const x = 340
-                const y = i === 0 ? 100 : 200
-                return (
-                  <g key={label}>
-                    <path
-                      d={`M240 150 C 290 150, 280 ${y}, ${x - 40} ${y}`}
-                      fill='none'
-                      stroke='var(--success)'
-                      strokeWidth='1.5'
-                      className='animate-flow'
-                    />
-                    <rect
-                      x={x - 40}
-                      y={y - 14}
-                      width='80'
-                      height='28'
-                      rx='2'
-                      fill='var(--secondary)'
-                      stroke='var(--border)'
-                    />
-                    <text
-                      x={x}
-                      y={y + 4}
-                      textAnchor='middle'
-                      fontFamily='var(--font-mono-stack)'
-                      fontSize='10'
-                      fill='var(--foreground)'
-                    >
-                      {label}
-                    </text>
-                  </g>
-                )
-              })}
-              <circle
-                cx='220'
-                cy='150'
-                r='34'
-                fill='var(--background)'
-                stroke='var(--primary)'
-                strokeWidth='1.5'
-              />
-              <circle
-                cx='220'
-                cy='150'
-                r='44'
-                fill='none'
-                stroke='var(--primary)'
-                strokeOpacity='0.25'
-                strokeDasharray='2 4'
-              />
-            </svg>
-            <img
-              src={mark}
-              alt=''
-              className='absolute top-1/2 left-[55%] h-12 w-12 -translate-x-1/2 -translate-y-1/2'
+              )
+            })}
+            <circle
+              cx='220'
+              cy='150'
+              r='34'
+              className='relay-hub'
+              fill='var(--background)'
+              stroke='var(--primary)'
+              strokeWidth='1.5'
             />
-          </div>
-          <div className='grid grid-cols-3 border-t font-mono text-[11px]'>
-            {(
-              [
-                ['EU-W', '31ms'],
-                ['US-E', '42ms'],
-                ['AP-SE', '57ms'],
-              ] as const
-            ).map(([region, latency]) => (
-              <div key={region} className='border-r px-4 py-2.5 last:border-r-0'>
-                <div className='text-muted-foreground'>{region}</div>
-                <div className='mt-0.5 text-foreground'>{latency}</div>
-              </div>
-            ))}
-          </div>
-        </ControlRoomPanel>
+            <circle
+              cx='220'
+              cy='150'
+              r='44'
+              fill='none'
+              stroke='var(--primary)'
+              strokeOpacity='0.25'
+              strokeDasharray='2 4'
+            />
+          </svg>
+          <img
+            src={mark}
+            alt=''
+            className='absolute top-1/2 left-[55%] h-12 w-12 -translate-x-1/2 -translate-y-1/2'
+          />
+        </div>
       </div>
     </section>
   )
