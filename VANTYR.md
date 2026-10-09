@@ -1464,3 +1464,38 @@ intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
   rules; archive (sha256 9f18269f…d4899) served 200; footer updated.
 - Rollback: pinned-next20 retained — repoint compose.yaml + `docker
   compose up -d --no-build gateway`.
+
+## 2026-10-09 — Glow positioning fix + Model Overview glow (pinned-next22)
+
+`fix(glass): clip glow to box bounds and light the Model Overview surfaces`
+(a432c6265, tag `deploy/2026-10-09-glow-positioning`).
+
+- Scope: the about-page tile grids had the orange/navy refraction glow
+  rendering oversized and offset across their content — the glow pseudo
+  is intentionally oversized (-18%/-12%) and relies on overflow
+  clipping, which the grid conversion had dropped. The glass-box base
+  rule now carries overflow:hidden so every glow surface clips its own
+  glow; wide-and-short grids set data-glow-fit='inset' pinning the glow
+  to inset 0 (restructured as a matching :is() selector — equal
+  specificity to the base glow rule, later source order wins). Model
+  Overview gets the refraction glow on both views: data-glass-glow on
+  the Card tiles (grid view) and on the DataTableView container (table
+  view). containerProps typing widened to accept data-* attributes via
+  a template-literal index signature.
+- Verification: typecheck clean; oxfmt clean on the five touched files;
+  about vitest green (3/3). model-cards/dynamic-price suites fail on
+  this machine only via nl-NL number formatting — identical failures on
+  the unmodified baseline (locale-dependent Intl assertions). Dev
+  preview: about grids glow at inset 0 (5/5, top/left 0px, overflow
+  hidden); 9 pricing cards + table view glow clipped to bounds; zero
+  console errors; screenshots captured for about (scrolled to tables)
+  and pricing (both views).
+- Live verification: gateway healthy on pinned-next22 (e641b10cb5bd);
+  /about + /pricing 200; live CSS index.6f1926ac9f.css contains
+  data-glass-glow ×8 and data-glow-fit=inset; running-container binary
+  grep glass-glow = 2 (old pinned-next21 image = 0); archive (md5
+  cc50d27628245b6db6884da53606bf28) served 200; footer updated via
+  options table + gateway restart, api/status serves glow-positioning
+  links; tag + branch pushed to remote 'public'.
+- Rollback: pinned-next21 retained — repoint compose.yaml + `docker
+  compose up -d --no-build gateway`.
