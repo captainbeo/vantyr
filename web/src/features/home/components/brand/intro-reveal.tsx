@@ -28,6 +28,10 @@ const Logo3D = lazy(() =>
   import('./vantyr-logo-3d').then((m) => ({ default: m.VantyrLogo3D }))
 )
 
+// Session marker: once the intro has played (or been scrolled through),
+// it never replays for the rest of the tab session.
+const INTRO_SESSION_KEY = 'vantyr.intro-seen'
+
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)
@@ -59,7 +63,17 @@ export function IntroReveal() {
   const overlay = useRef<HTMLDivElement>(null)
   const logo = useRef<HTMLDivElement>(null)
   const hint = useRef<HTMLDivElement>(null)
-  const [done, setDone] = useState(false)
+  // The intro is a visit greeting, not a route transition: it plays on the
+  // FIRST landing of a browsing session and never again while that tab
+  // session lives, so returning to Home via the header does not replay it.
+  // Cleared only by a fresh tab/browser (sessionStorage semantics).
+  const [done, setDone] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(INTRO_SESSION_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   // Probed after mount: environments without WebGL2 (and test runners)
   // keep the flat mark instead of mounting a dead canvas.
   const [canRender3D, setCanRender3D] = useState(false)
@@ -97,6 +111,12 @@ export function IntroReveal() {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             window.scrollTo(0, Math.max(0, y - h))
+            try {
+              window.sessionStorage.setItem(INTRO_SESSION_KEY, '1')
+            } catch {
+              // Storage can be unavailable (private mode quirks); the intro
+              // simply replays next visit — never a reason to break the page.
+            }
             setDone(true)
           })
         })
