@@ -24,7 +24,16 @@ export const INTERFACE_LANGUAGE_OPTIONS = [
   { code: 'ja', label: '日本語' },
   { code: 'vi', label: 'Tiếng Việt' },
   { code: 'zhTW', label: '繁體中文' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'nl', label: 'Nederlands' },
+  { code: 'tr', label: 'Türkçe' },
+  { code: 'es', label: 'Español' },
+  { code: 'ar', label: 'العربية' },
 ] as const
+
+// Languages written right-to-left; drives the html dir attribute. Values are
+// interface language codes as returned by normalizeInterfaceLanguage.
+export const RTL_LANGUAGE_CODES = new Set<string>(['ar'])
 
 export type InterfaceLanguageCode =
   (typeof INTERFACE_LANGUAGE_OPTIONS)[number]['code']

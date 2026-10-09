@@ -18,8 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { DirectionProvider as BaseDirectionProvider } from '@base-ui/react/direction-provider'
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import {
+  RTL_LANGUAGE_CODES,
+  normalizeInterfaceLanguage,
+  toIntlLocale,
+} from '@/i18n/languages'
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import { applyDayjsLocale } from '@/lib/dayjs'
 
 export type Direction = 'ltr' | 'rtl'
 
@@ -36,23 +43,45 @@ type DirectionContextType = {
 
 const DirectionContext = createContext<DirectionContextType | null>(null)
 
+// A manual direction override (theme drawer radio) is sticky across language
+// switches; without one, the direction follows the interface language so RTL
+// languages such as Arabic render correctly without touching settings.
 export function DirectionProvider({ children }: { children: React.ReactNode }) {
-  const [dir, _setDir] = useState<Direction>(
-    () => (getCookie(DIRECTION_COOKIE_NAME) as Direction) || DEFAULT_DIRECTION
+  const { i18n } = useTranslation()
+  const [manualDir, setManualDir] = useState<Direction | null>(() => {
+    const stored = getCookie(DIRECTION_COOKIE_NAME) as Direction | undefined
+    return stored === 'ltr' || stored === 'rtl' ? stored : null
+  })
+
+  const language = normalizeInterfaceLanguage(
+    i18n.resolvedLanguage || i18n.language
   )
+  const languageDir: Direction = RTL_LANGUAGE_CODES.has(language)
+    ? 'rtl'
+    : 'ltr'
+  const dir = manualDir ?? languageDir
 
   useEffect(() => {
     const htmlElement = document.documentElement
     htmlElement.setAttribute('dir', dir)
   }, [dir])
 
+  // Keep the semantic language tag in sync so assistive tech pronounces UI
+  // text with the right voice instead of assuming English, and keep relative
+  // timestamps in the same language.
+  useEffect(() => {
+    const locale = toIntlLocale(language)
+    if (locale) document.documentElement.setAttribute('lang', locale)
+    applyDayjsLocale(language)
+  }, [language])
+
   const setDir = (dir: Direction) => {
-    _setDir(dir)
+    setManualDir(dir)
     setCookie(DIRECTION_COOKIE_NAME, dir, DIRECTION_COOKIE_MAX_AGE)
   }
 
   const resetDir = () => {
-    _setDir(DEFAULT_DIRECTION)
+    setManualDir(null)
     removeCookie(DIRECTION_COOKIE_NAME)
   }
 

@@ -128,18 +128,6 @@ function stableStringify(obj) {
   return text + '\n'
 }
 
-function countLeafKeys(obj) {
-  if (Array.isArray(obj)) return obj.length
-  if (!isPlainObject(obj)) return 0
-  let count = 0
-  for (const k of Object.keys(obj)) {
-    const v = obj[k]
-    if (isPlainObject(v) || Array.isArray(v)) count += countLeafKeys(v)
-    else count += 1
-  }
-  return count
-}
-
 function reorderLikeBase(
   base,
   target,
@@ -227,12 +215,19 @@ function isLikelyUntranslated({ locale, baseValue, value }) {
   if (!/[A-Za-z]{3,}/.test(s)) return false
 
   // For locales with non-latin scripts, equality with EN is a strong signal.
-  if (locale === 'ja' || locale === 'zh') return true
-  if (locale === 'ru') return true
+  if (
+    locale === 'ja' ||
+    locale === 'zh' ||
+    locale === 'ru' ||
+    locale === 'ar'
+  ) {
+    return true
+  }
 
-  // For fr/vi: still useful but noisier; keep it conservative.
-  if (locale === 'fr' || locale === 'vi')
-    return /\b(the|and|or|to|with|please)\b/i.test(s)
+  // For latin-script locales, conservative common-word sniffing.
+  if (['fr', 'vi', 'es', 'de', 'nl', 'tr'].includes(locale)) {
+    return /(the|and|or|to|with|please|settings|profile)/i.test(s)
+  }
 
   return false
 }
@@ -252,17 +247,14 @@ async function main() {
     parsedByLocale[locale] = JSON.parse(raw)
   }
 
-  const baseLocale = Object.keys(parsedByLocale)
-    .map((locale) => {
-      const json = parsedByLocale[locale]
-      const trans = json?.translation ?? {}
-      return { locale, score: countLeafKeys(trans) }
-    })
-    .sort(
-      (a, b) => b.score - a.score || a.locale.localeCompare(b.locale)
-    )[0]?.locale
-
-  if (!baseLocale) throw new Error('No locale files found.')
+  // The base locale owns key order and fills gaps in every other locale.
+  // The old leaf-count auto-pick degenerates to an alphabetical tie-break once
+  // locales reach key parity, which silently hands base authority to whatever
+  // sorts first (e.g. `ar`). Pin it to English instead.
+  const baseLocale = 'en'
+  if (!parsedByLocale[baseLocale]) {
+    throw new Error('Base locale file en.json not found.')
+  }
 
   const baseFile = `${baseLocale}.json`
   const baseJson = parsedByLocale[baseLocale]

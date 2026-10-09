@@ -18,7 +18,31 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+// Interface language codes -> dayjs locale module names.
+import 'dayjs/locale/ar'
+import 'dayjs/locale/de'
+import 'dayjs/locale/es'
+import 'dayjs/locale/fr'
+import 'dayjs/locale/ja'
+import 'dayjs/locale/nl'
+import 'dayjs/locale/ru'
+import 'dayjs/locale/tr'
+import 'dayjs/locale/vi'
+import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/zh-tw'
 
 dayjs.extend(relativeTime)
+
+// Relative timestamps (fromNow) follow the interface language; the dayjs
+// global locale is switched together with the html lang/dir attributes.
+export function applyDayjsLocale(language: string) {
+  const map: Record<string, string> = {
+    zhCN: 'zh-cn',
+    zhTW: 'zh-tw',
+  }
+  const locale = map[language] ?? language
+  if (locale === dayjs.locale()) return
+  if (!dayjs.locale(locale)) dayjs.locale('en')
+}
 
 export default dayjs
