@@ -1325,3 +1325,36 @@ this image adds the two frontend reworks on top).
 - Rollback: pinned-next16 (0363da127464) retained — repoint
   compose.yaml + `docker compose up -d --no-build gateway`; no DB or
   options changes beyond the Footer text.
+
+## 2026-10-09 — Telegram trial group-membership gate (pinned-next18)
+
+`feat: gate the Telegram trial on group membership` (336ec1513, tag
+`deploy/2026-10-09-telegram-group-gate`).
+
+- Scope: the $5 Telegram trial now requires the verified Telegram
+  account to be a member of the configured Telegram group (option
+  `telegram.trial_group_chat_id`, set to -1004383766468 =
+  @vantyrapi "Vantyr AI Gateway | Chat"; empty disables the gate).
+  Grant moved from bind/registration to verified Telegram login via
+  bot-API getChatMember (10s timeout, fail-closed for the credit
+  only — login/registration never blocked; a not-yet-joined user
+  claims on a later login). New per-user
+  `users.telegram_trial_credited` marker (AutoMigrate) replaces the
+  per-Telegram-account bind dedup: unbind/rebind cannot re-earn the
+  trial, bind path now only links the identity.
+- Owner action required: add @VantyrVerificationBot to the group
+  (currently NOT a member — status "left"; membership checks for
+  other users return PARTICIPANT_ID_INVALID until the bot joins).
+- Verification: full model+controller suites green on the VPS after
+  two compile/test fixes (3-value call sites; same-second assertion
+  collision in rapid widget-logins — test now uses a per-call
+  auth_date sequence); image pinned-next18 (a473fc7465ec) built
+  on-server; compose pin swapped with backup
+  `/tmp/compose-pre-groupgate.yaml`.
+- Live verification: gateway healthy; status/pricing/docs/sign-up
+  200; relay 401; telegram_trial_credited column present; option
+  sync picked up the gate (60s); footer links the new tag; archive
+  served 200 (sha256 9b8cdfa7…d563); zero new gateway errors.
+- Rollback: pinned-next17 retained — repoint compose.yaml + `docker
+  compose up -d --no-build gateway`; the option row and column are
+  additive (gate disabled by deleting the option row).
