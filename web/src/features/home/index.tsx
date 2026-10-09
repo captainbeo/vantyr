@@ -33,7 +33,6 @@ import {
   IntroReveal,
   Stats,
 } from './components'
-import { AmbientBackground } from './components/ambient-background'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -132,10 +131,8 @@ export function Home() {
       {/* Opening scene: void overlay + 3D mark over the first screen.
        * Scroll-driven, plays once per load (removed when finished). */}
       <IntroReveal />
-      {/* Decorative ambient traces sit behind the landing content: the
-       * fixed layer paints over the layout's background, and the content
-       * wrapper lifts above it (z-10) like the marketing pages. */}
-      <AmbientBackground />
+      {/* The ambient drift + signal traces now render from PublicLayout for
+       * every public page; the content wrapper lifts above them (z-10). */}
       <div className='relative z-10 flex min-h-screen flex-col'>
         <Hero isAuthenticated={isAuthenticated} />
         <Stats />

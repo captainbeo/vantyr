@@ -98,26 +98,26 @@ function AboutHero() {
           </div>
         </div>
 
-        <div className='bg-border grid grid-cols-2 gap-px overflow-hidden rounded-sm border font-mono text-xs'>
-          <div className='bg-background p-5'>
+        <div data-slot='glass-box' className='bg-card grid grid-cols-2 divide-border divide-x divide-y rounded-sm border font-mono text-xs'>
+          <div className='p-5'>
             <div className='label-mono'>{t('Billing model')}</div>
             <div className='font-display mt-2 text-2xl font-semibold'>
               {t('Pay-as-you-go')}
             </div>
           </div>
-          <div className='bg-background p-5'>
+          <div className='p-5'>
             <div className='label-mono'>{t('Usage ceilings')}</div>
             <div className='font-display text-primary mt-2 text-2xl font-semibold'>
               {t('None')}
             </div>
           </div>
-          <div className='bg-background p-5'>
+          <div className='p-5'>
             <div className='label-mono'>{t('Model access')}</div>
             <div className='font-display mt-2 text-2xl font-semibold'>
               Claude + Codex
             </div>
           </div>
-          <div className='bg-background p-5'>
+          <div className='p-5'>
             <div className='label-mono'>{t('Budget stretch')}</div>
             <div className='font-display text-primary mt-2 text-2xl font-semibold'>
               {t('More usage')}
@@ -150,8 +150,8 @@ function BudgetSection() {
               )}
             </p>
           </div>
-          <div className='bg-border grid gap-px overflow-hidden rounded-sm border font-mono text-xs md:grid-cols-2'>
-            <div className='bg-background p-5'>
+          <div data-slot='glass-box' className='bg-card grid rounded-sm border divide-border divide-y font-mono text-xs md:grid-cols-2 md:divide-x md:divide-y-0'>
+            <div className='p-5'>
               <div className='label-mono'>{t('Official subscriptions')}</div>
               <h3 className='font-display mt-3 text-xl font-semibold'>
                 {t('Pay monthly, then hit a ceiling')}
@@ -160,7 +160,7 @@ function BudgetSection() {
                 {t('A fixed bill buys access to a plan, not unlimited work.')}
               </p>
             </div>
-            <div className='bg-background p-5'>
+            <div className='p-5'>
               <div className='label-mono text-primary'>{t('Vantyr PAYG')}</div>
               <h3 className='font-display mt-3 text-xl font-semibold'>
                 {t('Pay less, run more')}
@@ -226,9 +226,9 @@ function ProblemSection() {
         <h2 className='font-display mt-3 max-w-4xl text-3xl font-semibold md:text-5xl'>
           {t('Subscriptions are convenient until your work depends on them.')}
         </h2>
-        <div className='bg-border mt-12 grid gap-px overflow-hidden rounded-sm border md:grid-cols-2'>
+        <div data-slot='glass-box' className='bg-card mt-12 grid divide-border divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'>
           {problems.map((problem) => (
-            <article key={problem.title} className='bg-background p-6 md:p-8'>
+            <article key={problem.title} className='p-6 md:p-8'>
               <div className='text-primary'>{problem.icon}</div>
               <h3 className='font-display mt-5 text-xl font-semibold'>
                 {problem.title}
@@ -287,9 +287,9 @@ function SolutionSection() {
         <h2 className='font-display mt-3 max-w-4xl text-3xl font-semibold md:text-5xl'>
           {t('One gateway for the tools you already use.')}
         </h2>
-        <div className='bg-border mt-12 grid gap-px overflow-hidden rounded-sm border md:grid-cols-2'>
+        <div data-slot='glass-box' className='bg-card mt-12 grid divide-border divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'>
           {solutions.map((solution) => (
-            <article key={solution.title} className='bg-background p-6 md:p-8'>
+            <article key={solution.title} className='p-6 md:p-8'>
               <div className='text-primary'>{solution.icon}</div>
               <h3 className='font-display mt-5 text-xl font-semibold'>
                 {solution.title}
@@ -339,9 +339,9 @@ function StepsSection() {
         <h2 className='font-display mt-3 text-3xl font-semibold md:text-4xl'>
           {t('Three steps. No rewrite.')}
         </h2>
-        <ol className='bg-border mt-10 grid list-none gap-px overflow-hidden rounded-sm border md:grid-cols-3'>
+        <ol data-slot='glass-box' className='bg-card mt-10 grid list-none divide-border divide-y rounded-sm border md:grid-cols-3 md:divide-x md:divide-y-0'>
           {steps.map((step) => (
-            <li key={step.number} className='bg-background p-6'>
+            <li key={step.number} className='p-6'>
               <div className='text-primary font-mono text-sm'>
                 {step.number}
               </div>
@@ -402,7 +402,7 @@ function EmptyAboutState() {
   const ctaLabel = isAuthenticated ? t('Go to Dashboard') : t('Get API key')
 
   return (
-    <div className='relative overflow-hidden'>
+    <div className='relative z-10 overflow-hidden'>
       <AboutHero />
       <BudgetSection />
       <ProblemSection />

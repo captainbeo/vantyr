@@ -57,7 +57,7 @@ export function Rankings() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <div className='relative'>
+      <div className='relative z-10'>
         {/* No page-local gradient: the body's ambient glow canvas (the same
          * one the homepage sits on) already paints behind every public
          * page — layering a second, differently-colored one here made the

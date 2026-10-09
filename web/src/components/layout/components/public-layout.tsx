@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { AmbientBackground } from '@/features/home/components/ambient-background'
+
 import type { TopNavLink } from '../types'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
@@ -37,6 +39,10 @@ export function PublicLayout(props: PublicLayoutProps) {
       data-slot='public-layout'
       className='bg-background text-foreground relative min-h-svh overflow-x-clip'
     >
+      {/* Ambient canvas (drift + signal traces) shared by every public page —
+       * the homepage used to mount it privately; now it renders behind all
+       * public content so the whole site sits on one moving background. */}
+      <AmbientBackground />
       <PublicHeader
         navContent={props.navContent}
         navLinks={props.navLinks}
@@ -48,7 +54,7 @@ export function PublicLayout(props: PublicLayoutProps) {
       />
 
       {props.showMainContainer !== false ? (
-        <main className='container px-4 py-6 pt-20 md:px-4'>
+        <main className='container relative z-10 px-4 py-6 pt-20 md:px-4'>
           {props.children}
         </main>
       ) : (
