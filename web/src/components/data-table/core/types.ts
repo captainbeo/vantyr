@@ -65,7 +65,15 @@ export type DataTableViewProps<TData> = {
   splitHeaderScrollClassName?: string
   bodyContainerClassName?: string
   containerClassName?: string
-  containerProps?: Omit<React.ComponentProps<'div'>, 'className' | 'children'>
+  /* Allow `data-*` attributes (e.g. the pricing table's glow hook) through
+   * the object-literal path — JSX hyphenated attributes bypass checking,
+   * but this object prop does not, and ComponentProps has no data index. */
+  containerProps?: Omit<
+    React.ComponentProps<'div'>,
+    'className' | 'children'
+  > & {
+    [key: `data-${string}`]: string | undefined
+  }
   tableContainerClassName?: string
   colgroup?: React.ReactNode
 }

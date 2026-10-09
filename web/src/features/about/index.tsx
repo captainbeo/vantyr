@@ -98,7 +98,11 @@ function AboutHero() {
           </div>
         </div>
 
-        <div data-slot='glass-box' className='bg-card grid grid-cols-2 divide-border divide-x divide-y rounded-sm border font-mono text-xs'>
+        <div
+          data-slot='glass-box'
+          data-glow-fit='inset'
+          className='bg-card divide-border grid grid-cols-2 divide-x divide-y rounded-sm border font-mono text-xs'
+        >
           <div className='p-5'>
             <div className='label-mono'>{t('Billing model')}</div>
             <div className='font-display mt-2 text-2xl font-semibold'>
@@ -150,7 +154,11 @@ function BudgetSection() {
               )}
             </p>
           </div>
-          <div data-slot='glass-box' className='bg-card grid rounded-sm border divide-border divide-y font-mono text-xs md:grid-cols-2 md:divide-x md:divide-y-0'>
+          <div
+            data-slot='glass-box'
+            data-glow-fit='inset'
+            className='bg-card divide-border grid divide-y rounded-sm border font-mono text-xs md:grid-cols-2 md:divide-x md:divide-y-0'
+          >
             <div className='p-5'>
               <div className='label-mono'>{t('Official subscriptions')}</div>
               <h3 className='font-display mt-3 text-xl font-semibold'>
@@ -226,7 +234,11 @@ function ProblemSection() {
         <h2 className='font-display mt-3 max-w-4xl text-3xl font-semibold md:text-5xl'>
           {t('Subscriptions are convenient until your work depends on them.')}
         </h2>
-        <div data-slot='glass-box' className='bg-card mt-12 grid divide-border divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'>
+        <div
+          data-slot='glass-box'
+          data-glow-fit='inset'
+          className='bg-card divide-border mt-12 grid divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'
+        >
           {problems.map((problem) => (
             <article key={problem.title} className='p-6 md:p-8'>
               <div className='text-primary'>{problem.icon}</div>
@@ -287,7 +299,11 @@ function SolutionSection() {
         <h2 className='font-display mt-3 max-w-4xl text-3xl font-semibold md:text-5xl'>
           {t('One gateway for the tools you already use.')}
         </h2>
-        <div data-slot='glass-box' className='bg-card mt-12 grid divide-border divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'>
+        <div
+          data-slot='glass-box'
+          data-glow-fit='inset'
+          className='bg-card divide-border mt-12 grid divide-y rounded-sm border md:grid-cols-2 md:divide-x md:divide-y-0'
+        >
           {solutions.map((solution) => (
             <article key={solution.title} className='p-6 md:p-8'>
               <div className='text-primary'>{solution.icon}</div>
@@ -339,7 +355,11 @@ function StepsSection() {
         <h2 className='font-display mt-3 text-3xl font-semibold md:text-4xl'>
           {t('Three steps. No rewrite.')}
         </h2>
-        <ol data-slot='glass-box' className='bg-card mt-10 grid list-none divide-border divide-y rounded-sm border md:grid-cols-3 md:divide-x md:divide-y-0'>
+        <ol
+          data-slot='glass-box'
+          data-glow-fit='inset'
+          className='bg-card divide-border mt-10 grid list-none divide-y rounded-sm border md:grid-cols-3 md:divide-x md:divide-y-0'
+        >
           {steps.map((step) => (
             <li key={step.number} className='p-6'>
               <div className='text-primary font-mono text-sm'>

@@ -415,16 +415,28 @@ For commercial licensing, please contact support@quantumnous.com
   :is(
     [data-slot='glass-box'],
     [data-slot='control-room-panel'],
-    [data-slot='stat-tile-grid']
+    [data-slot='stat-tile-grid'],
+    [data-slot='card'][data-glass-glow],
+    [data-slot='data-table-box'][data-glass-glow]
   ) {
   position: relative;
   isolation: isolate;
+  /* The ::before glow is intentionally oversized (-18%/-12%) so the blur
+   * has something to refract at the edges; clip it to the box. The
+   * homepage boxes carry overflow-hidden utilities for the same effect —
+   * this makes the contract hold for every glass box (the about tile
+   * grids dropped the utility when they were converted). */
+  overflow: hidden;
 }
 [data-theme-preset='vantyr']
   :is(
     [data-slot='glass-box'],
     [data-slot='control-room-panel'],
-    [data-slot='stat-tile-grid']
+    [data-slot='stat-tile-grid'],
+    /* Model Overview surfaces: the model cards (grid view) and the
+     * models table (table view) get the same refraction glow. */
+    [data-slot='card'][data-glass-glow],
+    [data-slot='data-table-box'][data-glass-glow]
   )::before {
   content: '';
   position: absolute;
@@ -454,7 +466,9 @@ For commercial licensing, please contact support@quantumnous.com
   :is(
     [data-slot='glass-box'],
     [data-slot='control-room-panel'],
-    [data-slot='stat-tile-grid']
+    [data-slot='stat-tile-grid'],
+    [data-slot='card'][data-glass-glow],
+    [data-slot='data-table-box'][data-glass-glow]
   )::before {
   background:
     radial-gradient(
@@ -474,13 +488,23 @@ For commercial licensing, please contact support@quantumnous.com
     );
 }
 
-/* SYS-02 stream panel: pin the glow to the panel bounds. Unlike the
- * glass-box surfaces (which clip an oversized glow via overflow), this
- * panel is wide and short — the -18%/-12% spill poked out around the
- * table while its corner radials, positioned in the oversized glow
- * box's coordinates, landed partly off-table. At inset 0 the orange
- * (18%/12%) and navy (85%/90%) radials sit fully behind the table. */
-[data-theme-preset='vantyr'] [data-slot='control-room-panel']::before {
+/* Wide-and-short surfaces (SYS-02 stream panel, the about stat/tile
+ * grids): pin the glow to the panel bounds. The -18%/-12% spill put the
+ * corner radials partly off-table where the orange (18%/12%) and navy
+ * (85%/90%) radials belong; at inset 0 they sit fully behind the table.
+ * data-glow-fit='inset' marks such surfaces (the about grids set it). */
+/* Same :is() structure (and thus equal specificity) as the base glow
+ * rule above, but later in source order, so this inset: 0 wins for the
+ * surfaces named here. A plain two-attribute selector loses to the base
+ * rule because :is() counts its MOST specific argument — the card/data-
+ * table two-attribute selectors raised the base to (0,3,0). */
+[data-theme-preset='vantyr']
+  :is(
+    [data-slot='control-room-panel'],
+    [data-glow-fit='inset'],
+    [data-slot='card'][data-glass-glow],
+    [data-slot='data-table-box'][data-glass-glow]
+  )::before {
   inset: 0;
 }
 
