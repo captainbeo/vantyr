@@ -1435,3 +1435,32 @@ intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
   1e67a01d…eb73b) live.
 - Rollback: pinned-next19 retained — repoint compose.yaml +
   `docker compose up -d --no-build gateway`.
+
+## 2026-10-09 — Sitewide ambient + about/rankings glass (pinned-next21)
+
+`feat(web): ambient traces sitewide + liquid glass on about/rankings`
+(0c5e3a9a3, tag `deploy/2026-10-09-sitewide-ambient`).
+
+- Scope: the flowing ambient background (drift + oscilloscope signal
+  traces) previously mounted only on the homepage now renders from
+  PublicLayout — every public page (about, rankings, Model Overview,
+  legal) sits on the same animated canvas; the home route dropped its
+  private mount (no double render). Content wrappers on
+  rankings/pricing/about and the default main container lift above
+  the ambient layer (z-10). The about page's flat bg-background tile
+  grids converted to the homepage base-url-box glass treatment:
+  glass-box containers (translucent fill + 18px backdrop blur +
+  specular top edge), transparent cells, hairline dividers
+  (divide-border) between cells. Rankings sections already carried
+  glass-box from pinned-next20.
+- Verification: typecheck clean; home + about + rankings vitest green
+  (7/7). Browser-pane classifier outage blocked live preview
+  screenshots this round — verified via pattern parity (identical
+  glass-box recipe already proven live on the hero), binary markers
+  (ambient-drift ×2, glass-box ×4, divide-border ×8), and served CSS.
+- Live verification: gateway healthy on pinned-next21 (bf6f0ec3e78e);
+  status/rankings/pricing/about 200; zero gateway errors; new bundle
+  index.b49dadad75.js + CSS index.c9d7eb9152.css with ambient-trace
+  rules; archive (sha256 9f18269f…d4899) served 200; footer updated.
+- Rollback: pinned-next20 retained — repoint compose.yaml + `docker
+  compose up -d --no-build gateway`.
