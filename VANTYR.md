@@ -1358,3 +1358,50 @@ this image adds the two frontend reworks on top).
 - Rollback: pinned-next17 retained — repoint compose.yaml + `docker
   compose up -d --no-build gateway`; the option row and column are
   additive (gate disabled by deleting the option row).
+
+## 2026-10-09 — Landing polish + glass rounds 2–3 (pinned-next19)
+
+`feat(landing): frameless relay map, social header links, glass
+polish` (commit b433c96c3, tag `deploy/2026-10-09-landing-glass`),
+frontend-only.
+
+- Scope: (a) liquid-glass rounds 2–3 — PublicLayout made transparent
+  under the vantyr preset so the body ambient glow reaches landing
+  glass; relay-map SVG internals (relay-chip/relay-hub fills) treated
+  as glass; local brand-glow ::before refraction layers behind
+  glass-box/control-room-panel/stat-tile-grid (glass is invisible
+  over a near-uniform dark canvas without colored light behind it);
+  SYS-02 panel glow pinned to inset 0 (the -18%/-12% spill poked out
+  around a wide, short table); base-url block + Why-01 comparison
+  table fully clipped (clipping one axis makes the other a scroll
+  container, so the decorative glow created real vertical scrolling).
+  (b) Landing polish: relay map frameless — panel box/header
+  ("Relay map · live" + "3/3 ONLINE") and region latency strip
+  deleted, lanes renamed POOL 1/2/3, compact centered 4:3; Discord +
+  Telegram icon links in public header (desktop nav + mobile
+  overlay); homepage footer removed entirely (AGPL attribution stays
+  on /about); customer-facing "relay" wording replaced across hero,
+  comparison table, how-it-works, stats, and the index.html meta
+  description (i18n keys renamed in all 7 locales — rename in every
+  locale file at once or sync-i18n reverts from a stale base).
+- Build/protocol: 18+1 files, landing tests 2/2, oxfmt/oxlint clean;
+  commit amended for the meta-description fix (force-pushed both
+  remotes, tag deleted+recreated); archive
+  `vantyr-source-2026-10-09-landing-glass.tar.gz` (sha256
+  6a700eca…4547a8, 7090998 bytes verified equal local/remote/live);
+  server web tree rsynced from the tag archive (node_modules/dist
+  excluded; runtime deploy/ files untouched — Caddyfile md5 and
+  compose pin verified before swap); image pinned-next19 (6f3fa113ec87)
+  built on-server (Dockerfile builds web dist inside the image from
+  the synced tree); compose pin swapped with backup
+  `/tmp/compose-pre-landingglass.yaml`.
+- Live verification: real-browser DOM check on vantyr.xyz — 3× POOL
+  labels, no "Relay map · live"/"3/3 ONLINE" banner, no EU-W/US-E/
+  AP-SE strip, zero "relay" text, "Vantyr pricing" + "Service
+  uptime · 90d" present, Discord/Telegram header links resolve, no
+  footer (only the dev-only TanStack devtools of the test browser);
+  home/status/sign-up/about 200, relay 401, archive 200 full-body,
+  footer_html option carries the new tag link; zero gateway errors
+  in logs.
+- Rollback: pinned-next18 (a473fc7465ec) retained — repoint
+  compose.yaml + `docker compose up -d --no-build gateway`.
