@@ -1536,7 +1536,6 @@
     "Contains": "Содержит",
     "Contains Match": "Совпадение по содержанию",
     "Content": "Содержание",
-    "Content displayed on the home page (supports Markdown)": "Содержимое, отображаемое на главной странице (поддерживает Markdown)",
     "Content not found.": "Контент не найден.",
     "Content not modified!": "Контент не изменён!",
     "Content width": "Ширина контента",
@@ -6991,6 +6990,7 @@
     "Point your SDK at Vantyr. Request and response shapes stay identical.": "Point your SDK at Vantyr. Request and response shapes stay identical.",
     "Service uptime · 90d": "Service uptime · 90d",
     "Service statistics": "Service statistics",
-    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate."
+    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate.",
+    "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "Содержимое главной страницы (поддерживает Markdown или JSON-карту кодов языков с переводами)"
   }
 }

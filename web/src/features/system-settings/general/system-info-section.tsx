@@ -318,7 +318,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                       </FormControl>
                       <FormDescription>
                         {t(
-                          'Content displayed on the home page (supports Markdown)'
+                          'Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)'
                         )}
                       </FormDescription>
                       <FormMessage />

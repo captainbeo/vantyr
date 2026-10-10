@@ -1536,7 +1536,6 @@
     "Contains": "含む",
     "Contains Match": "含む一致",
     "Content": "コンテンツ",
-    "Content displayed on the home page (supports Markdown)": "ホームページに表示されるコンテンツ（Markdownをサポート）",
     "Content not found.": "コンテンツが見つかりません。",
     "Content not modified!": "コンテンツが変更されていません！",
     "Content width": "コンテンツ幅",
@@ -6991,6 +6990,7 @@
     "Point your SDK at Vantyr. Request and response shapes stay identical.": "Point your SDK at Vantyr. Request and response shapes stay identical.",
     "Service uptime · 90d": "Service uptime · 90d",
     "Service statistics": "Service statistics",
-    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate."
+    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate.",
+    "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "ホームページに表示するコンテンツ（Markdown、または言語コードごとの翻訳コンテンツを対応付ける JSON マップをサポート）"
   }
 }

@@ -1536,7 +1536,6 @@
     "Contains": "包含",
     "Contains Match": "包含匹配",
     "Content": "内容",
-    "Content displayed on the home page (supports Markdown)": "主页上显示的内容（支持 Markdown）",
     "Content not found.": "内容未找到。",
     "Content not modified!": "内容未修改！",
     "Content width": "内容宽度",
@@ -6991,6 +6990,7 @@
     "Point your SDK at Vantyr. Request and response shapes stay identical.": "Point your SDK at Vantyr. Request and response shapes stay identical.",
     "Service uptime · 90d": "Service uptime · 90d",
     "Service statistics": "Service statistics",
-    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate."
+    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Requests are served by the upstream model over pooled capacity at a lower rate.",
+    "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "首页显示的内容（支持 Markdown，或语言代码到已翻译内容的 JSON 映射）"
   }
 }

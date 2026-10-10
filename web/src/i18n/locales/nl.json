@@ -1536,7 +1536,6 @@
     "Contains": "Bevat",
     "Contains Match": "Overeenkomst op inhoud",
     "Content": "Inhoud",
-    "Content displayed on the home page (supports Markdown)": "Inhoud die op de startpagina wordt getoond (ondersteunt Markdown)",
     "Content not found.": "Inhoud niet gevonden.",
     "Content not modified!": "Inhoud niet gewijzigd!",
     "Content width": "Inhoudsbreedte",
@@ -6991,6 +6990,7 @@
     "Point your SDK at Vantyr. Request and response shapes stay identical.": "Wijs je SDK naar Vantyr. Aanvraag- en responsformaten blijven identiek.",
     "Service uptime · 90d": "Servicebeschikbaarheid · 90 d",
     "Service statistics": "Servicestatistieken",
-    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Aanvragen worden afgehandeld door het upstreammodel via gebundelde capaciteit tegen een lager tarief."
+    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Aanvragen worden afgehandeld door het upstreammodel via gebundelde capaciteit tegen een lager tarief.",
+    "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "Inhoud op de startpagina (ondersteunt Markdown, of een JSON-map van taalcodes naar vertaalde inhoud)"
   }
 }

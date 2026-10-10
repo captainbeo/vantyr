@@ -1536,7 +1536,6 @@
     "Contains": "Contiene",
     "Contains Match": "Coincidencia por contenido",
     "Content": "Contenido",
-    "Content displayed on the home page (supports Markdown)": "Contenido mostrado en la página de inicio (admite Markdown)",
     "Content not found.": "Contenido no encontrado.",
     "Content not modified!": "¡Contenido no modificado!",
     "Content width": "Ancho del contenido",
@@ -6991,6 +6990,7 @@
     "Point your SDK at Vantyr. Request and response shapes stay identical.": "Apunta tu SDK a Vantyr. Las estructuras de solicitud y respuesta se mantienen idénticas.",
     "Service uptime · 90d": "Disponibilidad del servicio · 90 d",
     "Service statistics": "Estadísticas del servicio",
-    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Las solicitudes las atiende el modelo del upstream sobre capacidad agrupada a una tarifa menor."
+    "Requests are served by the upstream model over pooled capacity at a lower rate.": "Las solicitudes las atiende el modelo del upstream sobre capacidad agrupada a una tarifa menor.",
+    "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "Contenido mostrado en la página de inicio (admite Markdown, o un mapa JSON de códigos de idioma a contenido traducido)"
   }
 }
