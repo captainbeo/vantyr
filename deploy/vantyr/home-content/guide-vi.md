@@ -9,7 +9,7 @@ Truy cập Claude & Codex cao cấp với chi phí chỉ bằng một phần nh�
    Mức giá PAYG áp dụng cho từng yêu cầu; xem trang [Mô hình & Giá cả](/pricing).
 3. **Tạo khóa API** — truy cập [Khóa API](/keys), nhấp **Tạo**, đặt tên cho khóa rồi sao chép khóa của bạn.
    > **Mẹo:** hãy giữ nguyên tùy chọn **Hạn mức không giới hạn** đang được tích. Trường hạn mức giới hạn tổng chi tiêu của khóa này; nếu để không giới hạn, số dư ví của bạn sẽ là thứ quyết định mức chi.
-4. **Trỏ công cụ của bạn tới Vantyr** — URL cơ sở `https://vantyr.example.com/v1` (địa chỉ tạm; xem tên miền khi ra mắt), header xác thực `Authorization: Bearer sk-...`.
+4. **Trỏ công cụ của bạn tới Vantyr** — URL cơ sở `https://vantyr.xyz/v1` (địa chỉ tạm; xem tên miền khi ra mắt), header xác thực `Authorization: Bearer sk-...`.
 
 ## Sử dụng Codex CLI
 
@@ -21,7 +21,7 @@ model_provider = "vantyr"
 
 [model_providers.vantyr]
 name = "Vantyr"
-base_url = "https://vantyr.example.com/v1"
+base_url = "https://vantyr.xyz/v1"
 wire_api = "responses"
 env_key = "VANTYR_API_KEY"
 ```
@@ -38,13 +38,13 @@ codex
 ## Dùng với bất kỳ client tương thích OpenAI
 
 ```bash
-curl https://vantyr.example.com/v1/chat/completions \
+curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-..." \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Dành cho người dùng Claude Code và Anthropic SDK: đặt `ANTHROPIC_BASE_URL` thành `https://vantyr.example.com` và `ANTHROPIC_API_KEY` thành khóa Vantyr của bạn.
+Dành cho người dùng Claude Code và Anthropic SDK: đặt `ANTHROPIC_BASE_URL` thành `https://vantyr.xyz` và `ANTHROPIC_API_KEY` thành khóa Vantyr của bạn.
 
 ## Gói hàng tháng không giới hạn — $180
 

@@ -9,7 +9,7 @@
    К каждому запросу применяются тарифы PAYG (оплата по факту использования); подробности — на странице [Модели и цены](/pricing).
 3. **Создайте API-ключ** — перейдите в раздел [Ключи](/keys), нажмите **Создать**, задайте имя и скопируйте ключ.
    > **Совет:** оставьте включённой опцию **Неограниченная квота**. Поле квоты ограничивает суммарный расход этого ключа; в режиме без ограничений расход контролирует баланс вашего кошелька.
-4. **Настройте свой инструмент на Vantyr** — базовый URL `https://vantyr.example.com/v1` (заглушка; см. домен запуска), заголовок авторизации `Authorization: Bearer sk-...`.
+4. **Настройте свой инструмент на Vantyr** — базовый URL `https://vantyr.xyz/v1` (заглушка; см. домен запуска), заголовок авторизации `Authorization: Bearer sk-...`.
 
 ## Использование Codex CLI
 
@@ -21,7 +21,7 @@ model_provider = "vantyr"
 
 [model_providers.vantyr]
 name = "Vantyr"
-base_url = "https://vantyr.example.com/v1"
+base_url = "https://vantyr.xyz/v1"
 wire_api = "responses"
 env_key = "VANTYR_API_KEY"
 ```
@@ -38,13 +38,13 @@ codex
 ## Использование любого клиента, совместимого с OpenAI
 
 ```bash
-curl https://vantyr.example.com/v1/chat/completions \
+curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-..." \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Пользователям Claude Code и SDK Anthropic: укажите в `ANTHROPIC_BASE_URL` значение `https://vantyr.example.com`, а в `ANTHROPIC_API_KEY` — ваш ключ Vantyr.
+Пользователям Claude Code и SDK Anthropic: укажите в `ANTHROPIC_BASE_URL` значение `https://vantyr.xyz`, а в `ANTHROPIC_API_KEY` — ваш ключ Vantyr.
 
 ## Месячный безлимит — $180
 

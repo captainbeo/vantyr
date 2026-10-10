@@ -9,7 +9,7 @@
    PAYG（按量付費）費率按請求計費；詳見[模型與定價](/pricing)頁面。
 3. **建立 API 金鑰** — 前往[金鑰](/keys)頁面，點擊**建立**，為其命名，然後複製金鑰。
    > **提示：** 保持勾選**無限配額**。額度欄位會限制此金鑰的總消費上限；設為無限後，支出即由錢包餘額控制。
-4. **將您的工具指向 Vantyr** — 基礎 URL 為 `https://vantyr.example.com/v1`（佔位符；以正式上線網域為準），認證標頭為 `Authorization: Bearer sk-...`。
+4. **將您的工具指向 Vantyr** — 基礎 URL 為 `https://vantyr.xyz/v1`（佔位符；以正式上線網域為準），認證標頭為 `Authorization: Bearer sk-...`。
 
 ## 使用 Codex CLI
 
@@ -21,7 +21,7 @@ model_provider = "vantyr"
 
 [model_providers.vantyr]
 name = "Vantyr"
-base_url = "https://vantyr.example.com/v1"
+base_url = "https://vantyr.xyz/v1"
 wire_api = "responses"
 env_key = "VANTYR_API_KEY"
 ```
@@ -38,13 +38,13 @@ codex
 ## 使用任何 OpenAI 相容用戶端
 
 ```bash
-curl https://vantyr.example.com/v1/chat/completions \
+curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-..." \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Claude Code 與 Anthropic SDK 用戶：將 `ANTHROPIC_BASE_URL` 設為 `https://vantyr.example.com`，並將 `ANTHROPIC_API_KEY` 設為您的 Vantyr 金鑰。
+Claude Code 與 Anthropic SDK 用戶：將 `ANTHROPIC_BASE_URL` 設為 `https://vantyr.xyz`，並將 `ANTHROPIC_API_KEY` 設為您的 Vantyr 金鑰。
 
 ## 無限月付 — $180
 

@@ -9,7 +9,7 @@ Resmi fiyatların çok küçük bir bölümü karşılığında premium Claude v
    İstek başına kullandıkça öde (PAYG) fiyatları uygulanır; [Modeller ve Fiyatlandırma](/pricing) sayfasına bak.
 3. **API anahtarı oluştur** — [API Anahtarları](/keys) sayfasına git, **Oluştur**'a tıkla, bir ad ver ve anahtarı kopyala.
    > **İpucu:** **Sınırsız kota** işaretli kalsın. Kota alanı bu anahtarın toplam harcamasını sınırlar; sınırsız bırakırsan harcamayı cüzdan bakiyen kontrol eder.
-4. **Aracını Vantyr'a yönlendir** — temel URL `https://vantyr.example.com/v1` (yer tutucu; lansman alan adına bak), kimlik doğrulama başlığı `Authorization: Bearer sk-...`.
+4. **Aracını Vantyr'a yönlendir** — temel URL `https://vantyr.xyz/v1` (yer tutucu; lansman alan adına bak), kimlik doğrulama başlığı `Authorization: Bearer sk-...`.
 
 ## Codex CLI kullanımı
 
@@ -21,7 +21,7 @@ model_provider = "vantyr"
 
 [model_providers.vantyr]
 name = "Vantyr"
-base_url = "https://vantyr.example.com/v1"
+base_url = "https://vantyr.xyz/v1"
 wire_api = "responses"
 env_key = "VANTYR_API_KEY"
 ```
@@ -38,13 +38,13 @@ codex
 ## OpenAI uyumlu herhangi bir istemciyle kullanım
 
 ```bash
-curl https://vantyr.example.com/v1/chat/completions \
+curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-..." \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Claude Code ve Anthropic SDK kullanıcıları: `ANTHROPIC_BASE_URL` değerini `https://vantyr.example.com`, `ANTHROPIC_API_KEY` değerini Vantyr anahtarın olarak ayarla.
+Claude Code ve Anthropic SDK kullanıcıları: `ANTHROPIC_BASE_URL` değerini `https://vantyr.xyz`, `ANTHROPIC_API_KEY` değerini Vantyr anahtarın olarak ayarla.
 
 ## Sınırsız Aylık — $180
 

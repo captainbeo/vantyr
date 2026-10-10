@@ -9,7 +9,7 @@ Premium-Zugriff auf Claude & Codex für einen Bruchteil der offiziellen Preise �
    PAYG-Tarife gelten pro Anfrage; sieh dir die Seite [Modelle & Preise](/pricing) an.
 3. **API-Schlüssel erstellen** — gehe zu [Schlüssel](/keys), klicke auf **Erstellen**, gib ihm einen Namen und kopiere den Schlüssel.
    > **Tipp:** Lasse **Unbegrenztes Kontingent** aktiviert. Das Kontingentfeld begrenzt die Gesamtausgaben dieses Schlüssels; unbegrenzt heißt, dein Wallet-Guthaben steuert die Ausgaben.
-4. **Richte dein Tool auf Vantyr** — Basis-URL `https://vantyr.example.com/v1` (Platzhalter; siehe Launch-Domain), Auth-Header `Authorization: Bearer sk-...`.
+4. **Richte dein Tool auf Vantyr** — Basis-URL `https://vantyr.xyz/v1` (Platzhalter; siehe Launch-Domain), Auth-Header `Authorization: Bearer sk-...`.
 
 ## Codex CLI verwenden
 
@@ -21,7 +21,7 @@ model_provider = "vantyr"
 
 [model_providers.vantyr]
 name = "Vantyr"
-base_url = "https://vantyr.example.com/v1"
+base_url = "https://vantyr.xyz/v1"
 wire_api = "responses"
 env_key = "VANTYR_API_KEY"
 ```
@@ -38,13 +38,13 @@ codex
 ## Beliebigen OpenAI-kompatiblen Client verwenden
 
 ```bash
-curl https://vantyr.example.com/v1/chat/completions \
+curl https://vantyr.xyz/v1/chat/completions \
   -H "Authorization: Bearer sk-..." \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Claude-Code- und Anthropic-SDK-Nutzer: Setze `ANTHROPIC_BASE_URL` auf `https://vantyr.example.com` und `ANTHROPIC_API_KEY` auf deinen Vantyr-Schlüssel.
+Claude-Code- und Anthropic-SDK-Nutzer: Setze `ANTHROPIC_BASE_URL` auf `https://vantyr.xyz` und `ANTHROPIC_API_KEY` auf deinen Vantyr-Schlüssel.
 
 ## Unbegrenzt im Monat — 180 $
 
