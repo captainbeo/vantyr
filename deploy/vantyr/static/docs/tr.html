@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="tr" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vantyr — Docs</title>
-<meta name="description" content="Connect Claude Code, Codex CLI, Cursor, Windsurf, Cline, Aider, Kilo Code and OpenCode to the Vantyr gateway. Base URLs, keys, and copy-paste config for every agent.">
+<title>Vantyr — Dokümanlar</title>
+<meta name="description" content="Claude Code, Codex CLI, Cursor, Windsurf, Cline, Aider, Kilo Code ve OpenCode'u Vantyr ağ geçidine bağla. Her ajan için temel URL'ler, anahtarlar ve kopyala-yapıştır yapılandırması.">
 <link rel="icon" href="/static/brand/logo.png">
 <link rel="stylesheet" href="fonts.css">
 <style>
@@ -323,15 +323,15 @@ footer .right { margin-left: auto; }
   <div class="inner">
     <div class="brand">VANTYR<span class="tick">//</span></div>
     <div class="links">
-      <a href="#base-urls">Base URLs</a>
-      <a href="#agents">Agents</a>
-      <a href="#setup">Setup</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#payments">Payments</a>
+      <a href="#base-urls">Temel URL'ler</a>
+      <a href="#agents">Ajanlar</a>
+      <a href="#setup">Kurulum</a>
+      <a href="#pricing">Fiyatlandırma</a>
+      <a href="#payments">Ödemeler</a>
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Open Console</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Konsolu Aç</a>
   </div>
 </nav>
 
@@ -339,86 +339,86 @@ footer .right { margin-left: auto; }
 
 <header>
   <div class="inner">
-    <h1>One key.<br>Every agent<span class="tick">.</span></h1>
-    <p class="sub">Vantyr is one gateway for Claude, GPT and open models — plug the same API key into Claude Code, Codex, Cursor, Windsurf, Cline, Aider, Kilo Code, OpenCode, or any OpenAI-compatible client.</p>
+    <h1>Tek anahtar.<br>Her ajan<span class="tick">.</span></h1>
+    <p class="sub">Vantyr, Claude, GPT ve açık modeller için tek bir ağ geçididir — aynı API anahtarını Claude Code, Codex, Cursor, Windsurf, Cline, Aider, Kilo Code, OpenCode veya herhangi bir OpenAI uyumlu istemciye tak.</p>
     <div class="hero-chips">
-      <span class="chip hot">8 agent guides</span>
-      <span class="chip">OpenAI + Anthropic compatible</span>
-      <span class="chip">from $0.02 / 1M tokens</span>
-      <span class="chip">crypto top-up from $1</span>
+      <span class="chip hot">8 ajan rehberi</span>
+      <span class="chip">OpenAI + Anthropic uyumlu</span>
+      <span class="chip">1M token başına $0.02'den başlayan</span>
+      <span class="chip">$1'den başlayan kripto bakiye yükleme</span>
     </div>
   </div>
 </header>
 
 <section id="base-urls">
-  <h2>Base URLs<span class="tick">//</span> two protocols, one key</h2>
-  <p class="sec-sub">Every Vantyr model works over both protocols with the same <span class="mono">sk-</span> key. Pick the URL that matches your client — the difference is only the <span class="mono">/v1</span> suffix.</p>
+  <h2>Temel URL'ler<span class="tick">//</span> iki protokol, tek anahtar</h2>
+  <p class="sec-sub">Her Vantyr modeli her iki protokolde de aynı <span class="mono">sk-</span> anahtarla çalışır. İstemcine uyan URL'yi seç — aralarındaki tek fark <span class="mono">/v1</span> son eki.</p>
   <div class="urls">
     <div class="url-card anthropic">
-      <div class="proto">Anthropic-compatible</div>
-      <div class="tag">for Claude Code · Anthropic SDK</div>
+      <div class="proto">Anthropic uyumlu</div>
+      <div class="tag">Claude Code · Anthropic SDK için</div>
       <div class="url">https://vantyr.xyz
         <button class="copy-btn" data-copy="https://vantyr.xyz">Copy</button>
       </div>
-      <p class="hint">No <span class="mono">/v1</span> suffix. Use with <span class="mono">x-api-key</span> header or <span class="mono">ANTHROPIC_BASE_URL</span>. Requests hit <span class="mono">/v1/messages</span> under the hood.</p>
+      <p class="hint">Hayır, <span class="mono">/v1</span> son eki yoktur. <span class="mono">x-api-key</span> üstbilgisi veya <span class="mono">ANTHROPIC_BASE_URL</span>. İstekler arka planda <span class="mono">/v1/messages</span> uç noktasına gider.</p>
     </div>
     <div class="url-card openai">
-      <div class="proto">OpenAI-compatible</div>
-      <div class="tag">for Codex CLI · OpenAI SDK · agents</div>
+      <div class="proto">OpenAI uyumlu</div>
+      <div class="tag">Codex CLI · OpenAI SDK · ajanlar için</div>
       <div class="url">https://vantyr.xyz/v1
         <button class="copy-btn" data-copy="https://vantyr.xyz/v1">Copy</button>
       </div>
-      <p class="hint">With <span class="mono">/v1</span>. Serves <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/models</span>. Bearer token auth.</p>
+      <p class="hint">Şununla: <span class="mono">/v1</span>. Şu uç noktaları sunar: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/models</span>. Bearer token kimlik doğrulaması.</p>
     </div>
   </div>
   <div class="callout">
-    <p><strong>Why two URLs?</strong> Anthropic's protocol expects the base to be the server root (it appends <span class="mono">/v1/messages</span> itself), while OpenAI tools expect the versioned root. Same key, same models, same billing on both.</p>
+    <p><strong>Neden iki URL?</strong> Anthropic'ın protokolü temel adresin sunucu kökü olmasını bekler (kendisi <span class="mono">/v1/messages</span> son ekini ekler), OpenAI araçları ise sürümlü kökü bekler. Her ikisinde de aynı anahtar, aynı modeller, aynı faturalandırma.</p>
   </div>
-  <p>Your key: create one in the console at <a href="https://vantyr.xyz/console">Keys</a>. It is shown once — copy it then. The key works on both URLs.</p>
+  <p>Anahtarın: konsolda <a href="https://vantyr.xyz/console">Anahtarlar</a>. Yalnızca bir kez gösterilir — o anda kopyala. Anahtar her iki URL'de de çalışır.</p>
 </section>
 
 <section id="agents">
-  <h2>Agents<span class="tick">//</span> works with your tool</h2>
-  <p class="sec-sub">Guides with copy-paste config for each client. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> lists every model ID you can use.</p>
+  <h2>Ajanlar<span class="tick">//</span> aracınla çalışır</h2>
+  <p class="sec-sub">Her istemci için kopyala-yapıştır yapılandırmalı rehberler. <a href="https://vantyr.xyz/pricing">Model Genel Bakış sayfası</a> kullanabileceğin tüm model ID'lerini listeler.</p>
   <div class="agents">
-    <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Desktop + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses wire</div></a>
-    <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">via extension</div></a>
-    <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">via extension</div></a>
-    <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI compatible</div></a>
-    <a class="agent-card" href="#agent-aider"><span class="arrow">→</span><div class="name">Aider</div><div class="kind">env vars</div></a>
-    <a class="agent-card" href="#agent-kilocode"><span class="arrow">→</span><div class="name">Kilo Code</div><div class="kind">provider config</div></a>
-    <a class="agent-card" href="#agent-opencode"><span class="arrow">→</span><div class="name">OpenCode</div><div class="kind">provider config</div></a>
+    <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Masaüstü + CLI</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses protokolü</div></a>
+    <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">uzantı üzerinden</div></a>
+    <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">uzantı üzerinden</div></a>
+    <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI uyumlu</div></a>
+    <a class="agent-card" href="#agent-aider"><span class="arrow">→</span><div class="name">Aider</div><div class="kind">ortam değişkenleri</div></a>
+    <a class="agent-card" href="#agent-kilocode"><span class="arrow">→</span><div class="name">Kilo Code</div><div class="kind">sağlayıcı yapılandırması</div></a>
+    <a class="agent-card" href="#agent-opencode"><span class="arrow">→</span><div class="name">OpenCode</div><div class="kind">sağlayıcı yapılandırması</div></a>
   </div>
-  <p class="muted">Something else? Any client that accepts a custom OpenAI-compatible base URL works with <span class="mono">https://vantyr.xyz/v1</span> + your key — see <a href="#agent-generic">generic clients</a>.</p>
+  <p class="muted">Başka bir şey mi? Özel bir OpenAI uyumlu temel URL kabul eden her istemci <span class="mono">https://vantyr.xyz/v1</span> adresiyle ve anahtarınla çalışır — bkz. <a href="#agent-generic">genel istemciler</a>.</p>
 </section>
 
 <section id="setup">
-  <h2>Setup<span class="tick">//</span> three steps, five minutes</h2>
+  <h2>Kurulum<span class="tick">//</span> üç adım, beş dakika</h2>
 
   <div class="step">
     <div class="num">01</div>
     <div class="body">
-      <h3>Create an account and top up</h3>
-      <p>Register at <a href="https://vantyr.xyz">vantyr.xyz</a> (free; a Cloudflare captcha keeps the bots out). Top up your wallet from the Wallet page with USDT or USDC on 8 networks — minimum $1, credit lands in 1–3 minutes after the transaction confirms.</p>
-      <p class="muted">Wallet balance is consumed per token as requests run. Failed requests are refunded automatically — you never pay for a response you didn't get.</p>
+      <h3>Hesap oluştur ve bakiye yükle</h3>
+      <p>Kaydol: <a href="https://vantyr.xyz">vantyr.xyz</a> (ücretsiz; bir Cloudflare captcha'sı botları uzak tutar). Cüzdanına Wallet sayfasından 8 ağ üzerinde USDT veya USDC ile bakiye yükle — minimum $1, işlem onaylandıktan 1–3 dakika sonra bakiye hesabına geçer.</p>
+      <p class="muted">Cüzdan bakiyesi istekler çalışırken token başına harcanır. Başarısız istekler otomatik olarak iade edilir — almadığın bir yanıt için asla ödeme yapmazsın.</p>
     </div>
   </div>
 
   <div class="step">
     <div class="num">02</div>
     <div class="body">
-      <h3>Create a key and paste the config</h3>
-      <p>Keys page → Add Key. Give it a name, optionally a quota ceiling or model restriction. The full <span class="mono">sk-…</span> value appears once — copy it. Then pick your agent below:</p>
+      <h3>Anahtar oluştur ve yapılandırmayı yapıştır</h3>
+      <p>Anahtarlar sayfası → Anahtar Ekle. Bir ad ver, isteğe bağlı olarak bir kota üst sınırı veya model kısıtlaması belirle. Tam <span class="mono">sk-…</span> değeri yalnızca bir kez görünür — kopyala. Sonra aşağıdan ajanını seç:</p>
       <div class="tabs" id="setup-tabs">
         <button class="tab active" data-panel="t-claude">Claude Code</button>
         <button class="tab" data-panel="t-codex">Codex CLI</button>
         <button class="tab" data-panel="t-cline">Cline / Kilo</button>
         <button class="tab" data-panel="t-cursor">Cursor / Windsurf</button>
-        <button class="tab" data-panel="t-other">Something else</button>
+        <button class="tab" data-panel="t-other">Başka bir şey</button>
       </div>
       <div class="tabpanel active" id="t-claude"><div class="panel-box">
-        <p><strong>Claude Desktop app (recommended):</strong> enable Developer Mode (<span class="mono">Help → Troubleshooting</span>), then <span class="mono">Developer → Configure Third-Party Inference…</span>, set provider to <strong>Gateway</strong>, and enter base URL <span class="mono">https://vantyr.xyz</span> + your key. The window tests the connection and auto-discovers your models. Full steps in the <a href="#agent-claude-code">Claude guide</a>.</p>
+        <p><strong>Claude Desktop uygulaması (önerilir):</strong> öğesini etkinleştir (<span class="mono">Help → Troubleshooting</span>), ardından <span class="mono">Developer → Configure Third-Party Inference…</span>, sağlayıcıyı <strong>Gateway</strong>, sağlayıcıyı ve temel URL olarak <span class="mono">https://vantyr.xyz</span> + anahtarını gir. Pencere bağlantıyı sınar ve modellerini otomatik keşfeder. Adım adım tam anlatım için: <a href="#agent-claude-code">Claude rehberi</a>.</p>
         <div class="copy-hint">Claude Code CLI — ~/.claude/settings.json</div>
         <pre>{
   "env": {
@@ -428,7 +428,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
-        <div class="copy-hint">~/.codex/config.toml — provider block</div>
+        <div class="copy-hint">~/.codex/config.toml — sağlayıcı bloğu</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
 
@@ -440,24 +440,24 @@ env_key = "VANTYR_API_KEY"
 supports_websockets = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-        <div class="copy-hint">then</div>
+        <div class="copy-hint">sonra</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
       </div></div>
       <div class="tabpanel" id="t-cline"><div class="panel-box">
-        <div class="copy-hint">Cline / Kilo Code provider settings</div>
+        <div class="copy-hint">Cline / Kilo Code sağlayıcı ayarları</div>
         <div class="kv">
-          <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
-          <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-          <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+          <div class="k">API Sağlayıcı</div><div class="v">OpenAI Uyumlu</div>
+          <div class="k">Temel URL</div><div class="v">https://vantyr.xyz/v1</div>
+          <div class="k">API Anahtarı</div><div class="v">sk-your-vantyr-key</div>
           <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
         </div>
       </div></div>
       <div class="tabpanel" id="t-cursor"><div class="panel-box">
-        <p>Cursor's and Windsurf's own agents can't take a custom base URL — install the Cline or Kilo Code extension inside the editor and point it at Vantyr (exact steps in the <a href="#agents">agent guides</a> below).</p>
+        <p>Cursor'ın ve Windsurf'ün kendi ajanları özel bir temel URL kabul etmiyor — editörün içine Cline veya Kilo Code uzantısını kur ve onu Vantyr'a yönlendir (ayrıntılı adımlar: <a href="#agents">ajan rehberleri</a> bölümü).</p>
       </div></div>
       <div class="tabpanel" id="t-other"><div class="panel-box">
-        <p>Any OpenAI-compatible client: base URL <span class="mono">https://vantyr.xyz/v1</span>, Bearer auth with your key. Anthropic-native clients: base URL <span class="mono">https://vantyr.xyz</span> with <span class="mono">x-api-key</span>. See <a href="#agent-generic">generic client snippets</a>.</p>
+        <p>Herhangi bir OpenAI uyumlu istemci: temel URL <span class="mono">https://vantyr.xyz/v1</span>, anahtarınla Bearer kimlik doğrulaması. Anthropic yerel istemciler: temel URL <span class="mono">https://vantyr.xyz</span> <span class="mono">x-api-key</span>. Bkz. <a href="#agent-generic">genel istemci kod parçaları</a>.</p>
       </div></div>
     </div>
   </div>
@@ -465,7 +465,7 @@ codex</pre>
   <div class="step">
     <div class="num">03</div>
     <div class="body">
-      <h3>Test it</h3>
+      <h3>Dene</h3>
       <div class="tabs">
         <button class="tab active" data-panel="t-test-nix">macOS / Linux</button>
         <button class="tab" data-panel="t-test-win">Windows PowerShell</button>
@@ -482,27 +482,27 @@ codex</pre>
   -H "Content-Type: application/json" `
   -d '{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hello vantyr\"}]}'</pre>
       </div></div>
-      <p>A JSON response with <span class="mono">"content": "..."</span> means you're live. Something wrong? <a href="#troubleshooting">Troubleshooting</a>.</p>
+      <p>Yanıtta <span class="mono">"content": "..."</span> içeren bir JSON, her şeyin çalıştığı anlamına gelir. Bir sorun mu var? <a href="#troubleshooting">Sorun Giderme</a>.</p>
     </div>
   </div>
 </section>
 
 <section id="guides">
-  <h2>Agent guides<span class="tick">//</span> exact config per tool</h2>
-  <p class="sec-sub">Every block has a copy button. Replace <span class="mono">sk-your-vantyr-key</span> with your real key. In all configs the model ID is your choice from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — examples use <span class="mono">claude-sonnet-5</span> (value pick) and <span class="mono">gpt-6-astra</span>.</p>
+  <h2>Ajan rehberleri<span class="tick">//</span> araç başına tam yapılandırma</h2>
+  <p class="sec-sub">Her bloğun bir kopyalama düğmesi var. <span class="mono">sk-your-vantyr-key</span> yazan yere gerçek anahtarını yaz. Tüm yapılandırmalarda model ID'si <a href="https://vantyr.xyz/pricing">Model Genel Bakış</a> sayfasından seçtiğin bir modeldir — örneklerde <span class="mono">claude-sonnet-5</span> (uygun fiyatlı seçim) ve <span class="mono">gpt-6-astra</span>.</p>
 
   <div id="agent-claude-code">
     <h3>Claude Code</h3>
-    <p>Vantyr serves the native Anthropic protocol, so Claude works with no code changes. There are two surfaces — the <strong>Claude Desktop app</strong> (recommended: guided setup with connection test and automatic model discovery) and the <strong>Claude Code terminal CLI</strong> (environment variables).</p>
+    <p>Vantyr, Anthropic'ın yerel protokolünü sunduğu için Claude herhangi bir kod değişikliği olmadan çalışır. İki yüzey var — <strong>Claude Desktop uygulaması</strong> (önerilir: bağlantı testi ve otomatik model keşfi ile yönlendirilmiş kurulum) ve <strong>Claude Code terminal CLI'si</strong> (ortam değişkenleri).</p>
 
     <div class="tabs">
-      <button class="tab active" data-panel="t-cd-desktop">Claude Desktop app (recommended)</button>
+      <button class="tab active" data-panel="t-cd-desktop">Claude Desktop uygulaması (önerilir)</button>
       <button class="tab" data-panel="t-cd-cli">Claude Code CLI</button>
     </div>
     <div class="tabpanel active" id="t-cd-desktop"><div class="panel-box">
-      <p><strong>1. Enable Developer Mode.</strong> In the app menu: <span class="mono">Help → Troubleshooting → Enable Developer Mode</span>. The app restarts with a <strong>Developer</strong> menu.</p>
-      <p><strong>2. Open the inference configuration.</strong> <span class="mono">Developer → Configure Third-Party Inference…</span></p>
-      <p><strong>3. Enter the gateway credentials.</strong> In the <em>Connection</em> section, set <em>Inference provider</em> to <strong>Gateway</strong>, then in the Gateway credentials card:</p>
+      <p><strong>1. Developer Mode'u etkinleştir.</strong> Uygulama menüsünde: <span class="mono">Help → Troubleshooting → Enable Developer Mode</span>. Uygulama, yeniden başladığında <strong>Developer</strong> menüsüyle açılır.</p>
+      <p><strong>2. Çıkarım yapılandırmasını aç.</strong> <span class="mono">Developer → Configure Third-Party Inference…</span></p>
+      <p><strong>3. Ağ geçidi kimlik bilgilerini gir.</strong> <em>Connection</em> bölümünde <em>Inference provider</em> öğesini <strong>Gateway</strong>, sonra Gateway credentials kartında:</p>
       <div class="kv">
         <div class="k">Inference provider</div><div class="v">Gateway</div>
         <div class="k">Gateway base URL</div><div class="v">https://vantyr.xyz</div>
@@ -510,34 +510,34 @@ codex</pre>
         <div class="k">Credential kind</div><div class="v">Static API key</div>
         <div class="k">Gateway auth scheme</div><div class="v">Bearer (default)</div>
       </div>
-      <p><strong>4. Apply.</strong> The window validates the connection as you type — Vantyr implements <span class="mono">GET /v1/models</span>, so your claude-* models are <strong>discovered automatically</strong> in the model picker. Click <strong>Apply Changes</strong> and the app relaunches against Vantyr.</p>
-      <div class="callout"><p>While a gateway is active, the Desktop app runs sessions locally (no SSH or Anthropic-hosted environments), and Remote Control is unavailable. Non-Claude-shaped model IDs (like <span class="mono">gpt-6-astra</span>) don't appear via auto-discovery — you can still list them manually under <span class="mono">inferenceModels</span> in the developer config.</p></div>
+      <p><strong>4. Uygula.</strong> Pencere, sen yazarken bağlantıyı doğrular — Vantyr <span class="mono">GET /v1/models</span>, dolayısıyla claude-* modellerin <strong>otomatik keşfedilir</strong> model seçicide. <strong>Apply Changes</strong> düğmesine tıkla ve uygulama Vantyr'a karşı yeniden başlar.</p>
+      <div class="callout"><p>Bir ağ geçidi etkinken Desktop uygulaması oturumları yerel olarak çalıştırır (SSH veya Anthropic'ın barındırdığı ortamlar yok) ve Remote Control kullanılamaz. Claude biçiminde olmayan model ID'leri (örneğin <span class="mono">gpt-6-astra</span>) otomatik keşifle görünmez — bunları yine de geliştirici yapılandırmasındaki <span class="mono">inferenceModels</span> altında elle listeleyebilirsin.</p></div>
     </div></div>
     <div class="tabpanel" id="t-cd-cli"><div class="panel-box">
-      <p>The terminal CLI is configured with environment variables (there is no Developer Mode in the CLI).</p>
-      <div class="copy-hint">Install (Node 18+)</div>
+      <p>Terminal CLI'si ortam değişkenleriyle yapılandırılır (CLI'de Developer Mode yoktur).</p>
+      <div class="copy-hint">Kurulum (Node 18+)</div>
       <pre>npm install -g @anthropic-ai/claude-code</pre>
-      <div class="copy-hint">Global config — ~/.claude/settings.json (applies to every project)</div>
+      <div class="copy-hint">Genel yapılandırma — ~/.claude/settings.json (her projeye uygulanır)</div>
       <pre>{
   "env": {
     "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
     "ANTHROPIC_AUTH_TOKEN": "sk-your-vantyr-key"
   }
 }</pre>
-      <div class="copy-hint">…or per-shell environment variables</div>
+      <div class="copy-hint">…veya kabuk başına ortam değişkenleri</div>
       <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"      <span class="cm"># no /v1</span>
 export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
-      <p>Run <span class="mono">claude</span> in your project directory; check <span class="mono">/status</span> in-session to confirm the base URL is active. Pick a model with <span class="mono">claude /model claude-sonnet-5</span>.</p>
-      <div class="callout warn"><p>Use <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (Bearer header) — Vantyr accepts Bearer on the Anthropic endpoint too, and the AUTH_TOKEN form maps directly onto it. If you use <span class="mono">ANTHROPIC_API_KEY</span> instead, it sends <span class="mono">x-api-key</span>, which also works; just don't mix them up in one shell.</p></div>
+      <p>Şu komutu çalıştır: <span class="mono">claude</span> — proje dizininde; temel URL'nin etkin olduğunu doğrulamak için oturum içinde <span class="mono">/status</span> komutunu çalıştırıp temel URL'nin etkin olduğunu doğrula. Bir model seçmek için <span class="mono">claude /model claude-sonnet-5</span>.</p>
+      <div class="callout warn"><p>Şunu kullan: <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (Bearer üstbilgisi) — Vantyr, Anthropic uç noktasında da Bearer kabul eder ve AUTH_TOKEN biçimi doğrudan bunun üzerine eşlenir. Bunun yerine <span class="mono">ANTHROPIC_API_KEY</span> kullanırsan <span class="mono">x-api-key</span>; o da çalışır — yalnızca ikisini aynı kabukta karıştırma.</p></div>
     </div></div>
   </div>
 
   <div id="agent-codex">
     <h3>Codex CLI</h3>
-    <p>OpenAI's terminal agent. Codex talks the Responses wire API and takes a provider entry in its config.</p>
-    <div class="copy-hint">Install</div>
+    <p>OpenAI'nin terminal ajanı. Codex, Responses protokol API'siyle konuşur ve yapılandırmasında bir sağlayıcı girdisi alır.</p>
+    <div class="copy-hint">Kurulum</div>
     <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — add the Vantyr provider</div>
+    <div class="copy-hint">~/.codex/config.toml — Vantyr sağlayıcısını ekle</div>
     <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
@@ -553,80 +553,80 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">Key in the environment</div>
+    <div class="copy-hint">Anahtar ortam değişkeninde</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>Keep <span class="mono">name = "OpenAI"</span> exactly — Codex's remote compaction keys off that display name. The provider ID (<span class="mono">vantyr</span>) is what your <span class="mono">model_provider</span> selects. If you also use Codex with an OpenAI account, the two configs coexist — the provider block only routes Vantyr traffic.</p></div>
+    <div class="callout"><p>Şunu değiştirmeden bırak: <span class="mono">name = "OpenAI"</span> — Codex'in uzak sıkıştırması bu görünen adı baz alır. Sağlayıcı ID'si (<span class="mono">vantyr</span>), <span class="mono">model_provider</span> satırının seçtiği budur. Codex'i ayrıca bir OpenAI hesabıyla kullanıyorsan iki yapılandırma yan yana var olur — sağlayıcı bloğu yalnızca Vantyr trafiğini yönlendirir.</p></div>
   </div>
 
   <div id="agent-cursor">
     <h3>Cursor</h3>
-    <p>Cursor's own agent models can't be pointed at a custom gateway — the reliable path is running an OpenAI-compatible extension <em>inside</em> Cursor. Only the extension's traffic bills to your Vantyr wallet; Cursor's chat and Tab keep using Cursor's models.</p>
-    <div class="copy-hint">Install Cline inside Cursor (integrated terminal)</div>
+    <p>Cursor'ın kendi ajan modelleri özel bir ağ geçidine yönlendirilemiyor — güvenilir yol, Cursor <em>içinde</em> içinde OpenAI uyumlu bir uzantı çalıştırmaktır. Yalnızca uzantının trafiği Vantyr cüzdanına faturalanır; Cursor'ın sohbeti ve Tab'ı Cursor'ın modellerini kullanmaya devam eder.</p>
+    <div class="copy-hint">Cline'ı Cursor içine kur (tümleşik terminal)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Or install <a href="#agent-kilocode">Kilo Code</a> the same way. Then open the extension's settings and enter:</p>
+    <p>Ya da <a href="#agent-kilocode">Kilo Code</a> aynı şekilde kur. Sonra uzantının ayarlarını aç ve şunları gir:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
-      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">API Sağlayıcı</div><div class="v">OpenAI Uyumlu</div>
+      <div class="k">Temel URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Anahtarı</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
-    <div class="callout"><p>Model metadata (context window, prices) in extension settings is display-only; edit it to match the <a href="#pricing">real Vantyr prices</a> if you want accurate cost estimates in the UI. Billing is always server-side from live token counts.</p></div>
+    <div class="callout"><p>Uzantı ayarlarındaki model meta verileri (bağlam penceresi, fiyatlar) yalnızca görüntüleme amaçlıdır; <a href="#pricing">gerçek Vantyr fiyatlarıyla</a> eşleşecek şekilde düzenle, böylece arayüzde isabetli maliyet tahminleri görürsün. Faturalandırma her zaman sunucu tarafında, canlı token sayımlarından yapılır.</p></div>
   </div>
 
   <div id="agent-windsurf">
     <h3>Windsurf</h3>
-    <p>Same pattern as Cursor: Cascade (Windsurf's agent) doesn't expose a custom base URL, so run Cline or Kilo Code as an extension inside Windsurf. Cascade keeps running on Windsurf's own credits.</p>
-    <div class="copy-hint">Install Cline inside Windsurf (integrated terminal)</div>
+    <p>Cursor ile aynı mantık: Cascade (Windsurf'ün ajanı) özel bir temel URL sunmuyor, bu yüzden Cline veya Kilo Code'u Windsurf içinde uzantı olarak çalıştır. Cascade, Windsurf'ün kendi kredileriyle çalışmaya devam eder.</p>
+    <div class="copy-hint">Cline'ı Windsurf içine kur (tümleşik terminal)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Extension settings — identical values:</p>
+    <p>Uzantı ayarları — aynı değerler:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
-      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">API Sağlayıcı</div><div class="v">OpenAI Uyumlu</div>
+      <div class="k">Temel URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Anahtarı</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
   </div>
 
   <div id="agent-cline">
     <h3>Cline</h3>
-    <p>Cline is an open-source agent extension for VS Code (also the recommended path inside Cursor and Windsurf).</p>
-    <div class="copy-hint">Install (VS Code)</div>
+    <p>Cline, VS Code için açık kaynak bir ajan uzantısıdır (Cursor ve Windsurf içindeki önerilen yol da budur).</p>
+    <div class="copy-hint">Kurulum (VS Code)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Open the Cline panel → gear icon → provider settings:</p>
+    <p>Cline panelini aç → dişli simgesi → sağlayıcı ayarları:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
-      <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">API Sağlayıcı</div><div class="v">OpenAI Uyumlu</div>
+      <div class="k">Temel URL</div><div class="v">https://vantyr.xyz/v1</div>
+      <div class="k">API Anahtarı</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
-    <p>After entering values, click <strong>Verify</strong> in the extension: "Invalid API Key" means a typo in the key; "Model Not Found" means the model ID isn't one Vantyr serves — check the <a href="https://vantyr.xyz/pricing">Model Overview</a> for exact IDs.</p>
-    <p class="muted">Recommended model metadata for claude-sonnet-5: context window 200000, max output 16384, input $0.26/1M, output $1.30/1M (see the <a href="#pricing">table</a>).</p>
+    <p>Değerleri girdikten sonra uzantıda <strong>Verify</strong> düğmesine tıkla: "Invalid API Key" anahtarda yazım hatası demektir; "Model Not Found", o model ID'sinin Vantyr'ın sunmadığı bir model demektir — tam ID'ler için <a href="https://vantyr.xyz/pricing">Model Genel Bakış</a> sayfasına bak.</p>
+    <p class="muted">claude-sonnet-5 için önerilen model meta verileri: bağlam penceresi 200000, maksimum çıktı 16384, girdi $0.26/1M, çıktı $1.30/1M (bkz. <a href="#pricing">tablo</a>).</p>
   </div>
 
   <div id="agent-aider">
     <h3>Aider</h3>
-    <p>Aider reads the standard OpenAI environment variables, so it needs no config file.</p>
-    <div class="copy-hint">Install (Python 3.9+)</div>
+    <p>Aider standart OpenAI ortam değişkenlerini okuduğu için bir yapılandırma dosyasına ihtiyaç duymaz.</p>
+    <div class="copy-hint">Kurulum (Python 3.9+)</div>
     <pre>python -m pip install aider-install &amp;&amp; aider-install</pre>
-    <div class="copy-hint">Point it at Vantyr — macOS / Linux</div>
+    <div class="copy-hint">Vantyr'a yönlendir — macOS / Linux</div>
     <pre>export OPENAI_API_BASE="https://vantyr.xyz/v1"
 export OPENAI_API_KEY="sk-your-vantyr-key"</pre>
-    <div class="copy-hint">Windows PowerShell (restart shell after)</div>
+    <div class="copy-hint">Windows PowerShell (sonrasında kabuğu yeniden başlat)</div>
     <pre>setx OPENAI_API_BASE "https://vantyr.xyz/v1"
 setx OPENAI_API_KEY "sk-your-vantyr-key"</pre>
-    <div class="copy-hint">Run in a repo</div>
+    <div class="copy-hint">Bir depoda çalıştır</div>
     <pre>aider --model openai/claude-sonnet-5</pre>
-    <div class="callout"><p>The <span class="mono">openai/</span> prefix tells Aider to use its OpenAI-compatible client instead of looking the model up in its built-in list. A "model not in metadata" warning is cosmetic — the request still routes through Vantyr.</p></div>
+    <div class="callout"><p>The <span class="mono">openai/</span> öneki, Aider'a modeli yerleşik listesinde aramak yerine OpenAI uyumlu istemcisini kullanmasını söyler. "model not in metadata" uyarısı yalnızca görünüşe ilişkindir — istek yine de Vantyr üzerinden yönlendirilir.</p></div>
   </div>
 
   <div id="agent-kilocode">
     <h3>Kilo Code</h3>
-    <p>Kilo Code can run as a VS Code extension or a standalone CLI, sharing the same provider config. Add Vantyr as a custom provider:</p>
-    <div class="copy-hint">Install</div>
+    <p>Kilo Code, VS Code uzantısı veya bağımsız CLI olarak çalışabilir ve aynı sağlayıcı yapılandırmasını paylaşır. Vantyr'ı özel bir sağlayıcı olarak ekle:</p>
+    <div class="copy-hint">Kurulum</div>
     <pre>code --install-extension kilocode.kilo-code   <span class="cm"># VS Code extension</span>
 npm install -g @kilocode/cli                    <span class="cm"># or standalone CLI</span></pre>
-    <div class="copy-hint">Provider config (~/.config/kilo/kilo.json, or Settings → Providers → Custom provider in the UI)</div>
+    <div class="copy-hint">Sağlayıcı yapılandırması (~/.config/kilo/kilo.json veya arayüzde Settings → Providers → Custom provider)</div>
     <pre>{
   "providers": {
     "vantyr": {
@@ -645,17 +645,17 @@ npm install -g @kilocode/cli                    <span class="cm"># or standalone
     }
   }
 }</pre>
-    <div class="copy-hint">Run</div>
+    <div class="copy-hint">Çalıştır</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
 kilo
 <span class="cm"># inside Kilo: /models  →  select vantyr/claude-sonnet-5</span></pre>
-    <div class="callout warn"><p>The <span class="mono">{env:VANTYR_API_KEY}</span> form resolves only from trusted global config — keep the real key out of committed project files.</p></div>
+    <div class="callout warn"><p>The <span class="mono">{env:VANTYR_API_KEY}</span> biçimi yalnızca güvenilen genel yapılandırmadan çözülür — gerçek anahtarı depoya gönderilen proje dosyalarında tutma.</p></div>
   </div>
 
   <div id="agent-opencode">
     <h3>OpenCode</h3>
-    <p>OpenCode merges a global config with a project-level <span class="mono">opencode.json</span>. Add Vantyr as an OpenAI-compatible provider:</p>
-    <div class="copy-hint">Install</div>
+    <p>OpenCode, genel yapılandırmayı proje düzeyindeki bir <span class="mono">opencode.json</span>. Vantyr'ı OpenAI uyumlu bir sağlayıcı olarak ekle:</p>
+    <div class="copy-hint">Kurulum</div>
     <pre>curl -fsSL https://opencode.ai/install | bash</pre>
     <div class="copy-hint">~/.config/opencode/opencode.json</div>
     <pre>{
@@ -675,7 +675,7 @@ kilo
     }
   }
 }</pre>
-    <div class="copy-hint">Run</div>
+    <div class="copy-hint">Çalıştır</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
 cd /path/to/project
 opencode
@@ -683,7 +683,7 @@ opencode
   </div>
 
   <div id="agent-generic">
-    <h3>Any other OpenAI-compatible client</h3>
+    <h3>Diğer herhangi bir OpenAI uyumlu istemci</h3>
     <div class="copy-hint">Python (openai SDK)</div>
     <pre>from openai import OpenAI
 
@@ -701,85 +701,85 @@ print(resp.choices[0].message.content)</pre>
   -H "Authorization: Bearer sk-your-vantyr-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hello"}]}'</pre>
-    <p>Anthropic-native SDKs: base URL <span class="mono">https://vantyr.xyz</span>, header <span class="mono">x-api-key</span>. Supported endpoints: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span>, <span class="mono">/v1/models</span>.</p>
+    <p>Anthropic yerel SDK'lar: temel URL <span class="mono">https://vantyr.xyz</span>, üstbilgi <span class="mono">x-api-key</span>. Desteklenen uç noktalar: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span>, <span class="mono">/v1/models</span>.</p>
   </div>
 </section>
 
 <section id="pricing">
-  <h2>Pricing<span class="tick">//</span> per-token, no minimums</h2>
-  <p class="sec-sub">Prices in USD per 1M tokens; input and output billed separately; cached prompt segments at the discount rate. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> is generated from live configuration and is always authoritative.</p>
+  <h2>Fiyatlandırma<span class="tick">//</span> token başına, minimum yok</h2>
+  <p class="sec-sub">Fiyatlar 1M token başına USD cinsindendir; girdi ve çıktı ayrı faturalanır; önbelleğe alınan istem bölümleri indirimli oranla ücretlendirilir. <a href="https://vantyr.xyz/pricing">Model Genel Bakış sayfası</a> canlı yapılandırmadan üretilir ve her zaman yetkili kaynaktır.</p>
   <table>
     <thead><tr>
-      <th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th>Best for</th>
+      <th>Model</th><th class="num">Girdi</th><th class="num">Çıktı</th><th class="num">Önbellek</th><th>En uygun olduğu kullanım</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">flagship</span> hardest problems</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">latest</span> newest Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span> everyday coding</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span></td></tr>
-      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td><span class="pill">cheap</span> high volume</td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td><span class="pill">cheap</span></td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td>mid-tier reasoning</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">amiral gemisi</span> en zor problemler</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">en yeni</span> en yeni Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td>dengeli amiral gemisi</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>dengeli amiral gemisi</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">uygun fiyatlı</span> günlük kodlama</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">uygun fiyatlı</span></td></tr>
+      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td><span class="pill">ucuz</span> yüksek hacim</td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td><span class="pill">ucuz</span></td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td>orta kademe akıl yürütme</td></tr>
     </tbody>
   </table>
-  <p class="muted">Table reflects live configuration as of 2026-10-08.</p>
-  <p><strong>Worked example:</strong> a coding session on <span class="mono">claude-sonnet-5</span> sending 30k input + 5k output tokens costs about <strong>$0.014</strong>. A month of heavy daily use lands in single-digit dollars.</p>
+  <p class="muted">Tablo, 2026-10-08 tarihi itibarıyla canlı yapılandırmayı yansıtır.</p>
+  <p><strong>Örnek hesap:</strong> ile bir kodlama oturumu — <span class="mono">claude-sonnet-5</span> 30k girdi + 5k çıktı token göndermek yaklaşık <strong>$0.014</strong>. Bir aylık yoğun günlük kullanım tek haneli dolarlarda kalır.</p>
   <ul>
-    <li>Requests pre-authorize a small hold, then settle to actual usage — the difference returns immediately.</li>
-    <li>Upstream-failed requests are refunded automatically; zero charge for a response you didn't get.</li>
-    <li>Per-key quota ceilings (Keys page) cap spend per key — useful for automation or shared keys.</li>
-    <li>Balance hits zero → requests stop before reaching the model. No overdraft.</li>
+    <li>İstekler önce küçük bir provizyon tutar, sonra gerçek kullanıma göre hesaplanır — aradaki fark anında geri döner.</li>
+    <li>Upstream'in başarısız olduğu istekler otomatik olarak iade edilir; almadığın yanıt için sıfır ücret ödersin.</li>
+    <li>Anahtar başına kota üst sınırları (Anahtarlar sayfası) her anahtarın harcamasını sınırlar — otomasyon veya paylaşılan anahtarlar için kullanışlıdır.</li>
+    <li>Bakiye sıfıra ulaştığında istekler modele gitmeden önce durur. Eksi bakiye oluşmaz.</li>
   </ul>
 </section>
 
 <section id="payments">
-  <h2>Payments<span class="tick">//</span> crypto top-up</h2>
+  <h2>Ödemeler<span class="tick">//</span> kripto bakiye yükleme</h2>
   <ul>
-    <li>USDT / USDC at 1:1 against the dollar, on 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
-    <li>Minimum top-up <strong>$1</strong>, no maximum. Wallet credit never expires.</li>
-    <li>After clicking Top Up you get an address and exact amount — send exactly that amount. Credit lands automatically on network confirmation (typically 1–3 minutes; TON can take longer).</li>
-    <li>Payment stuck (sent but not credited after 30 minutes)? Note the transaction hash and contact support — every order is recorded and can be reconciled manually.</li>
+    <li>USDT / USDC, dolara karşı 1:1 oranla, 8 ağda: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
+    <li>Minimum yükleme <strong>$1</strong>, üst sınır yok. Cüzdan bakiyesi hiçbir zaman süresi dolmaz.</li>
+    <li>Top Up'a tıkladıktan sonra bir adres ve tutar alırsın — tam o tutarı gönder. Bakiye, ağ onayı geldiğinde otomatik hesabına geçer (genellikle 1–3 dakika; TON daha uzun sürebilir).</li>
+    <li>Ödemen takıldı mı (gönderildi ama 30 dakika sonra hâlâ hesapta değil)? İşlem hash'ini not al ve desteğe ulaş — her sipariş kayıt altındadır ve elle mutabık kılınabilir.</li>
   </ul>
 </section>
 
 <section id="troubleshooting">
-  <h2>Troubleshooting<span class="tick">//</span> common failures</h2>
+  <h2>Sorun Giderme<span class="tick">//</span> yaygın sorunlar</h2>
   <dl class="err-box">
-    <dt>401 Invalid API key</dt>
-    <dd>The key is wrong or mistyped. Keys are shown once at creation — if you lost it, create a new one in the console. Also check the right env var is set for your agent (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, or <span class="mono">OPENAI_API_KEY</span> depending on the tool).</dd>
+    <dt>401 Geçersiz API anahtarı</dt>
+    <dd>Anahtar hatalı veya yanlış yazılmış. Anahtarlar oluşturulurken yalnızca bir kez gösterilir — kaybettiysen konsolda yeni bir tane oluştur. Ayrıca ajanın için doğru ortam değişkeninin ayarlandığını kontrol et (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, veya <span class="mono">OPENAI_API_KEY</span> — araca göre değişir).</dd>
     <dt>404 / Not Found</dt>
-    <dd>Almost always the wrong base URL — Anthropic clients need <span class="mono">https://vantyr.xyz</span> (no <span class="mono">/v1</span>), OpenAI clients need <span class="mono">https://vantyr.xyz/v1</span>. Check both cards at the <a href="#base-urls">top of this page</a>.</dd>
-    <dt>Model not found / no channel available</dt>
-    <dd>The model ID doesn't match. Use exact IDs from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — e.g. <span class="mono">claude-sonnet-5</span>, not <span class="mono">claude-sonnet</span>. Also check the model isn't restricted on your key (Keys page → model limits).</dd>
-    <dt>Insufficient quota / balance</dt>
-    <dd>Wallet empty or the key hit its quota ceiling. Top up at the Wallet page, or raise/remove the key's quota limit.</dd>
-    <dt>Stream disconnected mid-response</dt>
-    <dd>Rare upstream hiccup. Your key was not charged for the failed portion (failed requests auto-refund). Retry the turn; if it repeats, check the <a href="https://vantyr.xyz">status banner</a> or ask in the <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord community</a>.</dd>
+    <dd>Neredeyse her zaman yanlış temel URL'dir — Anthropic istemcileri <span class="mono">https://vantyr.xyz</span> (olmadan <span class="mono">/v1</span>) ister; OpenAI istemcileri <span class="mono">https://vantyr.xyz/v1</span>. Sayfanın başındaki <a href="#base-urls">iki kartı da kontrol et</a>.</dd>
+    <dt>Model bulunamadı / uygun kanal yok</dt>
+    <dd>Model ID'si eşleşmiyor. <a href="https://vantyr.xyz/pricing">Model Genel Bakış</a> sayfasındaki tam ID'leri kullan — örneğin <span class="mono">claude-sonnet-5</span>, değil <span class="mono">claude-sonnet</span>. Ayrıca modelin anahtarında kısıtlanmadığını da kontrol et (Anahtarlar sayfası → model sınırları).</dd>
+    <dt>Yetersiz kota / bakiye</dt>
+    <dd>Cüzdan boş ya da anahtar kota üst sınırına ulaştı. Wallet sayfasından bakiye yükle veya anahtarın kota sınırını yükselt/kaldır.</dd>
+    <dt>Yanıt ortasında akış kesildi</dt>
+    <dd>Nadir görülen bir upstream aksaklığı. Başarısız kısım için anahtarından ücret alınmadı (başarısız istekler otomatik iade edilir). O turu yeniden dene; tekrarlanırsa <a href="https://vantyr.xyz">durum bildirimine</a> bak veya <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord topluluğunda</a>.</dd>
   </dl>
 </section>
 
 <section id="faq">
   <h2>FAQ<span class="tick">//</span></h2>
-  <h3>Where do I see my usage and spend?</h3>
-  <p>Usage page in the console: every request with model, tokens, and amount billed. Wallet page: balance and top-up history.</p>
-  <h3>Which model should I pick?</h3>
-  <p><span class="mono">claude-sonnet-5</span> for most coding and chat (best quality per dollar); <span class="mono">claude-fable-5</span> when the task is genuinely hard; <span class="mono">gpt-5-6-luna</span> or <span class="mono">gpt-6-sol</span> when volume beats peak quality.</p>
-  <h3>Do you support streaming / tools / structured output?</h3>
-  <p>Yes — all standard client features pass through on every model: SSE streaming, tool calling, structured outputs, prompt caching.</p>
-  <h3>Is my data used for training?</h3>
-  <p>Vantyr is a relay: prompts and completions are forwarded to the upstream provider and logged only as billing metadata (token counts, model, timestamp) — never message content.</p>
-  <h3>Can I use one key across many tools?</h3>
-  <p>Yes — the same key works on both base URLs in any number of clients. For separating budgets, create one key per tool and set a quota ceiling on each.</p>
+  <h3>Kullanımımı ve harcamamı nerede görürüm?</h3>
+  <p>Konsoldaki Usage sayfası: model, token ve faturalanan tutarla birlikte her istek. Wallet sayfası: bakiye ve yükleme geçmişi.</p>
+  <h3>Hangi modeli seçmeliyim?</h3>
+  <p><span class="mono">claude-sonnet-5</span> çoğu kodlama ve sohbet için (dolar başına en iyi kalite); <span class="mono">claude-fable-5</span> iş gerçekten zorsa; <span class="mono">gpt-5-6-luna</span> veya <span class="mono">gpt-6-sol</span> hacim en yüksek kaliteden daha önemliyse.</p>
+  <h3>Akış, araç çağrıları ve yapılandırılmış çıktı destekliyor musunuz?</h3>
+  <p>Evet — tüm standart istemci özellikleri her modelde geçer: SSE akışı, araç çağrısı, yapılandırılmış çıktılar, istem önbelleğe alma.</p>
+  <h3>Verilerim eğitim için kullanılıyor mu?</h3>
+  <p>Vantyr bir aktarıcıdır: istemler ve yanıtlar upstream sağlayıcıya iletilir ve yalnızca faturalandırma meta verisi (token sayıları, model, zaman damgası) olarak kaydedilir — asla mesaj içeriği kaydedilmez.</p>
+  <h3>Tek bir anahtarı birçok araçta kullanabilir miyim?</h3>
+  <p>Evet — aynı anahtar, her iki temel URL'de ve dilediğin sayıda istemcide çalışır. Bütçeleri ayırmak için araç başına bir anahtar oluştur ve her birine kota üst sınırı ayarla.</p>
 </section>
 
 <footer>
   <span>VANTYR// control room</span>
   <a href="https://vantyr.xyz">vantyr.xyz</a>
-  <a href="https://vantyr.xyz/pricing">models &amp; pricing</a>
-  <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
-  <a href="https://github.com/captainbeo/vantyr">source (AGPL)</a>
+  <a href="https://vantyr.xyz/pricing">modeller &amp; fiyatlandırma</a>
+  <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord topluluğu</a>
+  <a href="https://github.com/captainbeo/vantyr">kaynak (AGPL)</a>
   <span class="right">docs rev 2026-10-08</span>
 </footer>
 
@@ -818,6 +818,7 @@ function flash(btn, ok) {
   var old = btn.textContent;
   btn.textContent = ok ? 'Copied' : 'Failed';
   btn.classList.add('done');
+  setTimeout(function() { btn.textContent = old; }, 1400);
   setTimeout(function() { btn.textContent = old; btn.classList.remove('done'); }, 1400);
 }
 document.querySelectorAll('.copy-btn').forEach(function(btn) {
@@ -839,7 +840,7 @@ document.querySelectorAll('.copy-btn').forEach(function(btn) {
 function legacyCopy(btn, text) {
   var ta = document.createElement('textarea');
   ta.value = text;
-  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  ta.style position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta);
   ta.select();
   try { document.execCommand('copy'); flash(btn, true); } catch (e) { flash(btn, false); }

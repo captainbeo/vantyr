@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="vi" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vantyr — Docs</title>
-<meta name="description" content="Connect Claude Code, Codex CLI, Cursor, Windsurf, Cline, Aider, Kilo Code and OpenCode to the Vantyr gateway. Base URLs, keys, and copy-paste config for every agent.">
+<title>Vantyr — Tài liệu</title>
+<meta name="description" content="Kết nối Claude Code, Codex CLI, Cursor, Windsurf, Cline, Aider, Kilo Code và OpenCode với gateway Vantyr. Base URL, khóa và config copy-paste cho mọi agent.">
 <link rel="icon" href="/static/brand/logo.png">
 <link rel="stylesheet" href="fonts.css">
 <style>
@@ -323,15 +323,15 @@ footer .right { margin-left: auto; }
   <div class="inner">
     <div class="brand">VANTYR<span class="tick">//</span></div>
     <div class="links">
-      <a href="#base-urls">Base URLs</a>
+      <a href="#base-urls">URL cơ sở</a>
       <a href="#agents">Agents</a>
-      <a href="#setup">Setup</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#payments">Payments</a>
+      <a href="#setup">Thiết lập</a>
+      <a href="#pricing">Bảng giá</a>
+      <a href="#payments">Thanh toán</a>
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Open Console</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Mở Bảng điều khiển</a>
   </div>
 </nav>
 
@@ -339,86 +339,86 @@ footer .right { margin-left: auto; }
 
 <header>
   <div class="inner">
-    <h1>One key.<br>Every agent<span class="tick">.</span></h1>
-    <p class="sub">Vantyr is one gateway for Claude, GPT and open models — plug the same API key into Claude Code, Codex, Cursor, Windsurf, Cline, Aider, Kilo Code, OpenCode, or any OpenAI-compatible client.</p>
+    <h1>Một khóa.<br>Mọi agent<span class="tick">.</span></h1>
+    <p class="sub">Vantyr là một gateway duy nhất cho Claude, GPT và các mô hình mở — cắm chung một khóa API vào Claude Code, Codex, Cursor, Windsurf, Cline, Aider, Kilo Code, OpenCode, hay bất kỳ client tương thích OpenAI nào.</p>
     <div class="hero-chips">
-      <span class="chip hot">8 agent guides</span>
-      <span class="chip">OpenAI + Anthropic compatible</span>
-      <span class="chip">from $0.02 / 1M tokens</span>
-      <span class="chip">crypto top-up from $1</span>
+      <span class="chip hot">8 hướng dẫn agent</span>
+      <span class="chip">Tương thích OpenAI + Anthropic</span>
+      <span class="chip">từ $0.02 / 1M tokens</span>
+      <span class="chip">nạp crypto từ $1</span>
     </div>
   </div>
 </header>
 
 <section id="base-urls">
-  <h2>Base URLs<span class="tick">//</span> two protocols, one key</h2>
-  <p class="sec-sub">Every Vantyr model works over both protocols with the same <span class="mono">sk-</span> key. Pick the URL that matches your client — the difference is only the <span class="mono">/v1</span> suffix.</p>
+  <h2>URL cơ sở<span class="tick">//</span> hai giao thức, một khóa</h2>
+  <p class="sec-sub">Mọi mô hình trên Vantyr đều chạy trên cả hai giao thức với cùng khóa <span class="mono">sk-</span> như vậy. Chọn URL phù hợp với client của bạn — khác biệt chỉ là hậu tố <span class="mono">/v1</span> mà thôi.</p>
   <div class="urls">
     <div class="url-card anthropic">
-      <div class="proto">Anthropic-compatible</div>
-      <div class="tag">for Claude Code · Anthropic SDK</div>
+      <div class="proto">Tương thích Anthropic</div>
+      <div class="tag">cho Claude Code · Anthropic SDK</div>
       <div class="url">https://vantyr.xyz
         <button class="copy-btn" data-copy="https://vantyr.xyz">Copy</button>
       </div>
-      <p class="hint">No <span class="mono">/v1</span> suffix. Use with <span class="mono">x-api-key</span> header or <span class="mono">ANTHROPIC_BASE_URL</span>. Requests hit <span class="mono">/v1/messages</span> under the hood.</p>
+      <p class="hint">Không có <span class="mono">/v1</span> ở cuối. Dùng với <span class="mono">x-api-key</span> ở dạng header hoặc <span class="mono">ANTHROPIC_BASE_URL</span>. Yêu cầu đi tới <span class="mono">/v1/messages</span> trong nội bộ.</p>
     </div>
     <div class="url-card openai">
-      <div class="proto">OpenAI-compatible</div>
-      <div class="tag">for Codex CLI · OpenAI SDK · agents</div>
+      <div class="proto">Tương thích OpenAI</div>
+      <div class="tag">cho Codex CLI · OpenAI SDK · các agent</div>
       <div class="url">https://vantyr.xyz/v1
         <button class="copy-btn" data-copy="https://vantyr.xyz/v1">Copy</button>
       </div>
-      <p class="hint">With <span class="mono">/v1</span>. Serves <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/models</span>. Bearer token auth.</p>
+      <p class="hint">Với <span class="mono">/v1</span>. Phục vụ <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/models</span>. Xác thực bằng Bearer token.</p>
     </div>
   </div>
   <div class="callout">
-    <p><strong>Why two URLs?</strong> Anthropic's protocol expects the base to be the server root (it appends <span class="mono">/v1/messages</span> itself), while OpenAI tools expect the versioned root. Same key, same models, same billing on both.</p>
+    <p><strong>Vì sao có hai URL?</strong> Giao thức của Anthropic yêu cầu base là gốc máy chủ (nó tự nối <span class="mono">/v1/messages</span> vào), còn các công cụ OpenAI cần gốc có phiên bản. Cùng một khóa, cùng mô hình, cùng cách tính phí trên cả hai.</p>
   </div>
-  <p>Your key: create one in the console at <a href="https://vantyr.xyz/console">Keys</a>. It is shown once — copy it then. The key works on both URLs.</p>
+  <p>Khóa của bạn: tạo khóa trong bảng điều khiển, tại mục <a href="https://vantyr.xyz/console">Khóa</a>. Khóa chỉ hiển thị một lần — hãy sao chép ngay lúc đó. Khóa dùng được cho cả hai URL.</p>
 </section>
 
 <section id="agents">
-  <h2>Agents<span class="tick">//</span> works with your tool</h2>
-  <p class="sec-sub">Guides with copy-paste config for each client. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> lists every model ID you can use.</p>
+  <h2>Agents<span class="tick">//</span> hoạt động với công cụ của bạn</h2>
+  <p class="sec-sub">Hướng dẫn kèm config copy-paste cho từng client. Trang <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> liệt kê mọi model ID bạn có thể dùng.</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Desktop + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses wire</div></a>
-    <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">via extension</div></a>
-    <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">via extension</div></a>
-    <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI compatible</div></a>
-    <a class="agent-card" href="#agent-aider"><span class="arrow">→</span><div class="name">Aider</div><div class="kind">env vars</div></a>
-    <a class="agent-card" href="#agent-kilocode"><span class="arrow">→</span><div class="name">Kilo Code</div><div class="kind">provider config</div></a>
-    <a class="agent-card" href="#agent-opencode"><span class="arrow">→</span><div class="name">OpenCode</div><div class="kind">provider config</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Giao thức Responses</div></a>
+    <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">qua extension</div></a>
+    <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">qua extension</div></a>
+    <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">Tương thích OpenAI</div></a>
+    <a class="agent-card" href="#agent-aider"><span class="arrow">→</span><div class="name">Aider</div><div class="kind">biến môi trường</div></a>
+    <a class="agent-card" href="#agent-kilocode"><span class="arrow">→</span><div class="name">Kilo Code</div><div class="kind">cấu hình provider</div></a>
+    <a class="agent-card" href="#agent-opencode"><span class="arrow">→</span><div class="name">OpenCode</div><div class="kind">cấu hình provider</div></a>
   </div>
-  <p class="muted">Something else? Any client that accepts a custom OpenAI-compatible base URL works with <span class="mono">https://vantyr.xyz/v1</span> + your key — see <a href="#agent-generic">generic clients</a>.</p>
+  <p class="muted">Công cụ khác? Bất kỳ client nào chấp nhận base URL tương thích OpenAI tùy chỉnh đều hoạt động với <span class="mono">https://vantyr.xyz/v1</span> + khóa của bạn — xem <a href="#agent-generic">các client tổng quát</a>.</p>
 </section>
 
 <section id="setup">
-  <h2>Setup<span class="tick">//</span> three steps, five minutes</h2>
+  <h2>Thiết lập<span class="tick">//</span> ba bước, năm phút</h2>
 
   <div class="step">
     <div class="num">01</div>
     <div class="body">
-      <h3>Create an account and top up</h3>
-      <p>Register at <a href="https://vantyr.xyz">vantyr.xyz</a> (free; a Cloudflare captcha keeps the bots out). Top up your wallet from the Wallet page with USDT or USDC on 8 networks — minimum $1, credit lands in 1–3 minutes after the transaction confirms.</p>
-      <p class="muted">Wallet balance is consumed per token as requests run. Failed requests are refunded automatically — you never pay for a response you didn't get.</p>
+      <h3>Tạo tài khoản và nạp tiền</h3>
+      <p>Đăng ký tại <a href="https://vantyr.xyz">vantyr.xyz</a> (miễn phí; captcha Cloudflare chặn bot). Nạp ví từ trang Ví bằng USDT hoặc USDC trên 8 mạng — tối thiểu $1, tiền vào ví sau 1–3 phút kể từ khi giao dịch được xác nhận.</p>
+      <p class="muted">Số dư ví được trừ theo token khi yêu cầu chạy. Yêu cầu thất bại được hoàn tiền tự động — bạn không bao giờ phải trả tiền cho một phản hồi không nhận được.</p>
     </div>
   </div>
 
   <div class="step">
     <div class="num">02</div>
     <div class="body">
-      <h3>Create a key and paste the config</h3>
-      <p>Keys page → Add Key. Give it a name, optionally a quota ceiling or model restriction. The full <span class="mono">sk-…</span> value appears once — copy it. Then pick your agent below:</p>
+      <h3>Tạo khóa và dán config</h3>
+      <p>Trang Khóa → Thêm khóa. Đặt tên, tùy chọn thêm trần hạn mức hoặc giới hạn mô hình. Giá trị <span class="mono">sk-…</span> đầy đủ chỉ hiển thị một lần — hãy sao chép. Sau đó chọn agent của bạn bên dưới:</p>
       <div class="tabs" id="setup-tabs">
         <button class="tab active" data-panel="t-claude">Claude Code</button>
         <button class="tab" data-panel="t-codex">Codex CLI</button>
         <button class="tab" data-panel="t-cline">Cline / Kilo</button>
         <button class="tab" data-panel="t-cursor">Cursor / Windsurf</button>
-        <button class="tab" data-panel="t-other">Something else</button>
+        <button class="tab" data-panel="t-other">Công cụ khác</button>
       </div>
       <div class="tabpanel active" id="t-claude"><div class="panel-box">
-        <p><strong>Claude Desktop app (recommended):</strong> enable Developer Mode (<span class="mono">Help → Troubleshooting</span>), then <span class="mono">Developer → Configure Third-Party Inference…</span>, set provider to <strong>Gateway</strong>, and enter base URL <span class="mono">https://vantyr.xyz</span> + your key. The window tests the connection and auto-discovers your models. Full steps in the <a href="#agent-claude-code">Claude guide</a>.</p>
+        <p><strong>Ứng dụng Claude Desktop (khuyên dùng):</strong> bật Developer Mode (<span class="mono">Help → Troubleshooting</span>), sau đó <span class="mono">Developer → Configure Third-Party Inference…</span>, đặt provider thành <strong>Gateway</strong>, và nhập base URL <span class="mono">https://vantyr.xyz</span> + khóa của bạn. Cửa sổ sẽ kiểm tra kết nối và tự động nhận diện mô hình của bạn. Các bước đầy đủ trong <a href="#agent-claude-code">hướng dẫn Claude</a>.</p>
         <div class="copy-hint">Claude Code CLI — ~/.claude/settings.json</div>
         <pre>{
   "env": {
@@ -440,24 +440,24 @@ env_key = "VANTYR_API_KEY"
 supports_websockets = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-        <div class="copy-hint">then</div>
+        <div class="copy-hint">rồi</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
       </div></div>
       <div class="tabpanel" id="t-cline"><div class="panel-box">
-        <div class="copy-hint">Cline / Kilo Code provider settings</div>
+        <div class="copy-hint">Cài đặt provider của Cline / Kilo Code</div>
         <div class="kv">
-          <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+          <div class="k">Nhà cung cấp API</div><div class="v">OpenAI Compatible</div>
           <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-          <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+          <div class="k">Khóa API</div><div class="v">sk-your-vantyr-key</div>
           <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
         </div>
       </div></div>
       <div class="tabpanel" id="t-cursor"><div class="panel-box">
-        <p>Cursor's and Windsurf's own agents can't take a custom base URL — install the Cline or Kilo Code extension inside the editor and point it at Vantyr (exact steps in the <a href="#agents">agent guides</a> below).</p>
+        <p>Agent tích hợp sẵn của Cursor và Windsurf không nhận base URL tùy chỉnh — hãy cài extension Cline hoặc Kilo Code ngay trong trình soạn thảo và trỏ nó tới Vantyr (các bước chi tiết trong <a href="#agents">hướng dẫn agent</a> bên dưới).</p>
       </div></div>
       <div class="tabpanel" id="t-other"><div class="panel-box">
-        <p>Any OpenAI-compatible client: base URL <span class="mono">https://vantyr.xyz/v1</span>, Bearer auth with your key. Anthropic-native clients: base URL <span class="mono">https://vantyr.xyz</span> with <span class="mono">x-api-key</span>. See <a href="#agent-generic">generic client snippets</a>.</p>
+        <p>Bất kỳ client tương thích OpenAI nào: base URL <span class="mono">https://vantyr.xyz/v1</span>, xác thực Bearer bằng khóa của bạn. Các client Anthropic-native: base URL <span class="mono">https://vantyr.xyz</span> với <span class="mono">x-api-key</span>. Xem <a href="#agent-generic">các đoạn code client tổng quát</a>.</p>
       </div></div>
     </div>
   </div>
@@ -465,7 +465,7 @@ codex</pre>
   <div class="step">
     <div class="num">03</div>
     <div class="body">
-      <h3>Test it</h3>
+      <h3>Kiểm tra</h3>
       <div class="tabs">
         <button class="tab active" data-panel="t-test-nix">macOS / Linux</button>
         <button class="tab" data-panel="t-test-win">Windows PowerShell</button>
@@ -482,62 +482,62 @@ codex</pre>
   -H "Content-Type: application/json" `
   -d '{\"model\":\"claude-sonnet-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hello vantyr\"}]}'</pre>
       </div></div>
-      <p>A JSON response with <span class="mono">"content": "..."</span> means you're live. Something wrong? <a href="#troubleshooting">Troubleshooting</a>.</p>
+      <p>Phản hồi JSON chứa <span class="mono">"content": "..."</span> nghĩa là bạn đã chạy được rồi. Có gì sai? <a href="#troubleshooting">Khắc phục sự cố</a>.</p>
     </div>
   </div>
 </section>
 
 <section id="guides">
-  <h2>Agent guides<span class="tick">//</span> exact config per tool</h2>
-  <p class="sec-sub">Every block has a copy button. Replace <span class="mono">sk-your-vantyr-key</span> with your real key. In all configs the model ID is your choice from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — examples use <span class="mono">claude-sonnet-5</span> (value pick) and <span class="mono">gpt-6-astra</span>.</p>
+  <h2>Hướng dẫn agent<span class="tick">//</span> config chính xác cho từng công cụ</h2>
+  <p class="sec-sub">Mỗi khối đều có nút sao chép. Thay <span class="mono">sk-your-vantyr-key</span> bằng khóa thật của bạn. Trong mọi config, model ID là lựa chọn của bạn từ <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> — ví dụ dùng <span class="mono">claude-sonnet-5</span> (chọn tiết kiệm) và <span class="mono">gpt-6-astra</span>.</p>
 
   <div id="agent-claude-code">
     <h3>Claude Code</h3>
-    <p>Vantyr serves the native Anthropic protocol, so Claude works with no code changes. There are two surfaces — the <strong>Claude Desktop app</strong> (recommended: guided setup with connection test and automatic model discovery) and the <strong>Claude Code terminal CLI</strong> (environment variables).</p>
+    <p>Vantyr phục vụ giao thức Anthropic gốc, nên Claude chạy mà không cần đổi code. Có hai môi trường — ứng dụng <strong>Claude Desktop</strong> (khuyên dùng: thiết lập có hướng dẫn, kiểm tra kết nối và tự động nhận diện mô hình) và <strong>công cụ dòng lệnh Claude Code</strong> (biến môi trường).</p>
 
     <div class="tabs">
-      <button class="tab active" data-panel="t-cd-desktop">Claude Desktop app (recommended)</button>
+      <button class="tab active" data-panel="t-cd-desktop">Ứng dụng Claude Desktop (khuyên dùng)</button>
       <button class="tab" data-panel="t-cd-cli">Claude Code CLI</button>
     </div>
     <div class="tabpanel active" id="t-cd-desktop"><div class="panel-box">
-      <p><strong>1. Enable Developer Mode.</strong> In the app menu: <span class="mono">Help → Troubleshooting → Enable Developer Mode</span>. The app restarts with a <strong>Developer</strong> menu.</p>
-      <p><strong>2. Open the inference configuration.</strong> <span class="mono">Developer → Configure Third-Party Inference…</span></p>
-      <p><strong>3. Enter the gateway credentials.</strong> In the <em>Connection</em> section, set <em>Inference provider</em> to <strong>Gateway</strong>, then in the Gateway credentials card:</p>
+      <p><strong>1. Bật Developer Mode.</strong> Trong menu ứng dụng: <span class="mono">Help → Troubleshooting → Enable Developer Mode</span>. Ứng dụng khởi động lại với menu <strong>Developer</strong> mới.</p>
+      <p><strong>2. Mở cấu hình suy luận.</strong> <span class="mono">Developer → Configure Third-Party Inference…</span></p>
+      <p><strong>3. Nhập thông tin xác thực gateway.</strong> Trong mục <em>Connection</em> — đặt <em>Inference provider</em> thành <strong>Gateway</strong>, rồi trong thẻ Gateway credentials:</p>
       <div class="kv">
         <div class="k">Inference provider</div><div class="v">Gateway</div>
         <div class="k">Gateway base URL</div><div class="v">https://vantyr.xyz</div>
         <div class="k">Gateway API key</div><div class="v">sk-your-vantyr-key</div>
         <div class="k">Credential kind</div><div class="v">Static API key</div>
-        <div class="k">Gateway auth scheme</div><div class="v">Bearer (default)</div>
+        <div class="k">Gateway auth scheme</div><div class="v">Bearer (mặc định)</div>
       </div>
-      <p><strong>4. Apply.</strong> The window validates the connection as you type — Vantyr implements <span class="mono">GET /v1/models</span>, so your claude-* models are <strong>discovered automatically</strong> in the model picker. Click <strong>Apply Changes</strong> and the app relaunches against Vantyr.</p>
-      <div class="callout"><p>While a gateway is active, the Desktop app runs sessions locally (no SSH or Anthropic-hosted environments), and Remote Control is unavailable. Non-Claude-shaped model IDs (like <span class="mono">gpt-6-astra</span>) don't appear via auto-discovery — you can still list them manually under <span class="mono">inferenceModels</span> in the developer config.</p></div>
+      <p><strong>4. Áp dụng.</strong> Cửa sổ xác thực kết nối ngay khi bạn nhập — Vantyr triển khai <span class="mono">GET /v1/models</span>, nên các mô hình claude-* của bạn được <strong>tự động nhận diện</strong> trong bộ chọn mô hình. Nhấp <strong>Apply Changes</strong> và ứng dụng khởi động lại trên Vantyr.</p>
+      <div class="callout"><p>Khi gateway đang hoạt động, ứng dụng Desktop chạy phiên cục bộ (không dùng SSH hay môi trường do Anthropic lưu trữ), và Remote Control không khả dụng. Các model ID không theo dạng Claude (như <span class="mono">gpt-6-astra</span>) không xuất hiện qua tự động nhận diện — bạn vẫn có thể liệt kê thủ công trong <span class="mono">inferenceModels</span> của cấu hình developer.</p></div>
     </div></div>
     <div class="tabpanel" id="t-cd-cli"><div class="panel-box">
-      <p>The terminal CLI is configured with environment variables (there is no Developer Mode in the CLI).</p>
-      <div class="copy-hint">Install (Node 18+)</div>
+      <p>Công cụ dòng lệnh được cấu hình bằng biến môi trường (CLI không có Developer Mode).</p>
+      <div class="copy-hint">Cài đặt (Node 18+)</div>
       <pre>npm install -g @anthropic-ai/claude-code</pre>
-      <div class="copy-hint">Global config — ~/.claude/settings.json (applies to every project)</div>
+      <div class="copy-hint">Config toàn cục — ~/.claude/settings.json (áp dụng cho mọi dự án)</div>
       <pre>{
   "env": {
     "ANTHROPIC_BASE_URL": "https://vantyr.xyz",
     "ANTHROPIC_AUTH_TOKEN": "sk-your-vantyr-key"
   }
 }</pre>
-      <div class="copy-hint">…or per-shell environment variables</div>
+      <div class="copy-hint">…hoặc biến môi trường cho từng shell</div>
       <pre>export ANTHROPIC_BASE_URL="https://vantyr.xyz"      <span class="cm"># no /v1</span>
 export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
-      <p>Run <span class="mono">claude</span> in your project directory; check <span class="mono">/status</span> in-session to confirm the base URL is active. Pick a model with <span class="mono">claude /model claude-sonnet-5</span>.</p>
-      <div class="callout warn"><p>Use <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (Bearer header) — Vantyr accepts Bearer on the Anthropic endpoint too, and the AUTH_TOKEN form maps directly onto it. If you use <span class="mono">ANTHROPIC_API_KEY</span> instead, it sends <span class="mono">x-api-key</span>, which also works; just don't mix them up in one shell.</p></div>
+      <p>Chạy <span class="mono">claude</span> trong thư mục dự án của bạn; kiểm tra <span class="mono">/status</span> trong phiên để xác nhận base URL đang hiệu lực. Chọn mô hình bằng <span class="mono">claude /model claude-sonnet-5</span>.</p>
+      <div class="callout warn"><p>Dùng <span class="mono">ANTHROPIC_AUTH_TOKEN</span> (header Bearer) — Vantyr cũng chấp nhận Bearer trên endpoint Anthropic, và dạng AUTH_TOKEN ánh xạ thẳng vào nó. Nếu bạn dùng <span class="mono">ANTHROPIC_API_KEY</span> thì nó gửi <span class="mono">x-api-key</span>, cách này cũng chạy được; chỉ đừng trộn lẫn hai cách trong cùng một shell.</p></div>
     </div></div>
   </div>
 
   <div id="agent-codex">
     <h3>Codex CLI</h3>
-    <p>OpenAI's terminal agent. Codex talks the Responses wire API and takes a provider entry in its config.</p>
-    <div class="copy-hint">Install</div>
+    <p>Agent dòng lệnh của OpenAI. Codex dùng API Responses và cần một mục provider trong config của nó.</p>
+    <div class="copy-hint">Cài đặt</div>
     <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — add the Vantyr provider</div>
+    <div class="copy-hint">~/.codex/config.toml — thêm provider Vantyr</div>
     <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
@@ -553,80 +553,80 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">Key in the environment</div>
+    <div class="copy-hint">Khóa nằm trong biến môi trường</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>Keep <span class="mono">name = "OpenAI"</span> exactly — Codex's remote compaction keys off that display name. The provider ID (<span class="mono">vantyr</span>) is what your <span class="mono">model_provider</span> selects. If you also use Codex with an OpenAI account, the two configs coexist — the provider block only routes Vantyr traffic.</p></div>
+    <div class="callout"><p>Giữ nguyên <span class="mono">name = "OpenAI"</span> — tính năng nén từ xa của Codex bám vào tên hiển thị đó. ID provider (<span class="mono">vantyr</span>) chính là thứ mà <span class="mono">model_provider</span> của bạn chọn. Nếu bạn cũng dùng Codex với tài khoản OpenAI, hai config tồn tại song song — khối provider chỉ điều hướng lưu lượng tới Vantyr.</p></div>
   </div>
 
   <div id="agent-cursor">
     <h3>Cursor</h3>
-    <p>Cursor's own agent models can't be pointed at a custom gateway — the reliable path is running an OpenAI-compatible extension <em>inside</em> Cursor. Only the extension's traffic bills to your Vantyr wallet; Cursor's chat and Tab keep using Cursor's models.</p>
-    <div class="copy-hint">Install Cline inside Cursor (integrated terminal)</div>
+    <p>Các mô hình agent riêng của Cursor không thể trỏ tới gateway tùy chỉnh — cách đáng tin là chạy một extension tương thích OpenAI <em>ngay trong</em> Cursor. Chỉ lưu lượng của extension mới tính vào ví Vantyr; chat và Tab của Cursor vẫn dùng mô hình của Cursor.</p>
+    <div class="copy-hint">Cài Cline ngay trong Cursor (terminal tích hợp)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Or install <a href="#agent-kilocode">Kilo Code</a> the same way. Then open the extension's settings and enter:</p>
+    <p>Hoặc cài <a href="#agent-kilocode">Kilo Code</a> theo cách tương tự. Sau đó mở cài đặt của extension và nhập:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Nhà cung cấp API</div><div class="v">OpenAI Compatible</div>
       <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Khóa API</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
-    <div class="callout"><p>Model metadata (context window, prices) in extension settings is display-only; edit it to match the <a href="#pricing">real Vantyr prices</a> if you want accurate cost estimates in the UI. Billing is always server-side from live token counts.</p></div>
+    <div class="callout"><p>Siêu dữ liệu mô hình (cửa sổ ngữ cảnh, giá) trong cài đặt extension chỉ để hiển thị; chỉnh nó khớp với <a href="#pricing">giá Vantyr thực tế</a> nếu bạn muốn UI ước tính chi phí chính xác. Việc tính phí luôn diễn ra phía máy chủ dựa trên số token thực tế.</p></div>
   </div>
 
   <div id="agent-windsurf">
     <h3>Windsurf</h3>
-    <p>Same pattern as Cursor: Cascade (Windsurf's agent) doesn't expose a custom base URL, so run Cline or Kilo Code as an extension inside Windsurf. Cascade keeps running on Windsurf's own credits.</p>
-    <div class="copy-hint">Install Cline inside Windsurf (integrated terminal)</div>
+    <p>Tương tự Cursor: Cascade (agent của Windsurf) không cho phép base URL tùy chỉnh, nên hãy chạy Cline hoặc Kilo Code như một extension trong Windsurf. Cascade vẫn chạy trên credit của chính Windsurf.</p>
+    <div class="copy-hint">Cài Cline ngay trong Windsurf (terminal tích hợp)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Extension settings — identical values:</p>
+    <p>Cài đặt extension — giá trị giống hệt:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Nhà cung cấp API</div><div class="v">OpenAI Compatible</div>
       <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Khóa API</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
   </div>
 
   <div id="agent-cline">
     <h3>Cline</h3>
-    <p>Cline is an open-source agent extension for VS Code (also the recommended path inside Cursor and Windsurf).</p>
-    <div class="copy-hint">Install (VS Code)</div>
+    <p>Cline là một extension agent mã nguồn mở cho VS Code (cũng là cách khuyên dùng trong Cursor và Windsurf).</p>
+    <div class="copy-hint">Cài đặt (VS Code)</div>
     <pre>code --install-extension saoudrizwan.claude-dev</pre>
-    <p>Open the Cline panel → gear icon → provider settings:</p>
+    <p>Mở panel Cline → biểu tượng bánh răng → cài đặt provider:</p>
     <div class="kv">
-      <div class="k">API Provider</div><div class="v">OpenAI Compatible</div>
+      <div class="k">Nhà cung cấp API</div><div class="v">OpenAI Compatible</div>
       <div class="k">Base URL</div><div class="v">https://vantyr.xyz/v1</div>
-      <div class="k">API Key</div><div class="v">sk-your-vantyr-key</div>
+      <div class="k">Khóa API</div><div class="v">sk-your-vantyr-key</div>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
-    <p>After entering values, click <strong>Verify</strong> in the extension: "Invalid API Key" means a typo in the key; "Model Not Found" means the model ID isn't one Vantyr serves — check the <a href="https://vantyr.xyz/pricing">Model Overview</a> for exact IDs.</p>
-    <p class="muted">Recommended model metadata for claude-sonnet-5: context window 200000, max output 16384, input $0.26/1M, output $1.30/1M (see the <a href="#pricing">table</a>).</p>
+    <p>Sau khi nhập xong các giá trị, nhấp <strong>Verify</strong> trong extension: "Invalid API Key" nghĩa là khóa bị gõ sai; "Model Not Found" nghĩa là model ID không nằm trong số Vantyr đang phục vụ — kiểm tra <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> để lấy ID chính xác.</p>
+    <p class="muted">Siêu dữ liệu mô hình khuyên dùng cho claude-sonnet-5: cửa sổ ngữ cảnh 200000, đầu ra tối đa 16384, đầu vào $0.26/1M, đầu ra $1.30/1M (xem <a href="#pricing">bảng</a>).</p>
   </div>
 
   <div id="agent-aider">
     <h3>Aider</h3>
-    <p>Aider reads the standard OpenAI environment variables, so it needs no config file.</p>
-    <div class="copy-hint">Install (Python 3.9+)</div>
+    <p>Aider đọc các biến môi trường OpenAI chuẩn, nên không cần tệp config.</p>
+    <div class="copy-hint">Cài đặt (Python 3.9+)</div>
     <pre>python -m pip install aider-install &amp;&amp; aider-install</pre>
-    <div class="copy-hint">Point it at Vantyr — macOS / Linux</div>
+    <div class="copy-hint">Trỏ nó tới Vantyr — macOS / Linux</div>
     <pre>export OPENAI_API_BASE="https://vantyr.xyz/v1"
 export OPENAI_API_KEY="sk-your-vantyr-key"</pre>
-    <div class="copy-hint">Windows PowerShell (restart shell after)</div>
+    <div class="copy-hint">Windows PowerShell (khởi động lại shell sau đó)</div>
     <pre>setx OPENAI_API_BASE "https://vantyr.xyz/v1"
 setx OPENAI_API_KEY "sk-your-vantyr-key"</pre>
-    <div class="copy-hint">Run in a repo</div>
+    <div class="copy-hint">Chạy trong một repo</div>
     <pre>aider --model openai/claude-sonnet-5</pre>
-    <div class="callout"><p>The <span class="mono">openai/</span> prefix tells Aider to use its OpenAI-compatible client instead of looking the model up in its built-in list. A "model not in metadata" warning is cosmetic — the request still routes through Vantyr.</p></div>
+    <div class="callout"><p>Tiền tố <span class="mono">openai/</span> báo Aider dùng client tương thích OpenAI thay vì tra mô hình trong danh sách có sẵn của nó. Cảnh báo "model not in metadata" chỉ là hình thức — yêu cầu vẫn được định tuyến qua Vantyr.</p></div>
   </div>
 
   <div id="agent-kilocode">
     <h3>Kilo Code</h3>
-    <p>Kilo Code can run as a VS Code extension or a standalone CLI, sharing the same provider config. Add Vantyr as a custom provider:</p>
-    <div class="copy-hint">Install</div>
+    <p>Kilo Code chạy được như extension VS Code hoặc CLI độc lập, dùng chung một cấu hình provider. Thêm Vantyr làm provider tùy chỉnh:</p>
+    <div class="copy-hint">Cài đặt</div>
     <pre>code --install-extension kilocode.kilo-code   <span class="cm"># VS Code extension</span>
 npm install -g @kilocode/cli                    <span class="cm"># or standalone CLI</span></pre>
-    <div class="copy-hint">Provider config (~/.config/kilo/kilo.json, or Settings → Providers → Custom provider in the UI)</div>
+    <div class="copy-hint">Cấu hình provider (~/.config/kilo/kilo.json, hoặc Settings → Providers → Custom provider trong UI)</div>
     <pre>{
   "providers": {
     "vantyr": {
@@ -645,17 +645,17 @@ npm install -g @kilocode/cli                    <span class="cm"># or standalone
     }
   }
 }</pre>
-    <div class="copy-hint">Run</div>
+    <div class="copy-hint">Chạy</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
 kilo
 <span class="cm"># inside Kilo: /models  →  select vantyr/claude-sonnet-5</span></pre>
-    <div class="callout warn"><p>The <span class="mono">{env:VANTYR_API_KEY}</span> form resolves only from trusted global config — keep the real key out of committed project files.</p></div>
+    <div class="callout warn"><p>Tiền tố <span class="mono">{env:VANTYR_API_KEY}</span> chỉ được phân giải từ config toàn cục tin cậy — đừng để khóa thật lọt vào các tệp dự án đã commit.</p></div>
   </div>
 
   <div id="agent-opencode">
     <h3>OpenCode</h3>
-    <p>OpenCode merges a global config with a project-level <span class="mono">opencode.json</span>. Add Vantyr as an OpenAI-compatible provider:</p>
-    <div class="copy-hint">Install</div>
+    <p>OpenCode gộp config toàn cục với tệp <span class="mono">opencode.json</span>. Thêm Vantyr làm provider tương thích OpenAI:</p>
+    <div class="copy-hint">Cài đặt</div>
     <pre>curl -fsSL https://opencode.ai/install | bash</pre>
     <div class="copy-hint">~/.config/opencode/opencode.json</div>
     <pre>{
@@ -675,7 +675,7 @@ kilo
     }
   }
 }</pre>
-    <div class="copy-hint">Run</div>
+    <div class="copy-hint">Chạy</div>
     <pre>export VANTYR_API_KEY="sk-your-vantyr-key"
 cd /path/to/project
 opencode
@@ -683,7 +683,7 @@ opencode
   </div>
 
   <div id="agent-generic">
-    <h3>Any other OpenAI-compatible client</h3>
+    <h3>Bất kỳ client tương thích OpenAI nào khác</h3>
     <div class="copy-hint">Python (openai SDK)</div>
     <pre>from openai import OpenAI
 
@@ -701,86 +701,86 @@ print(resp.choices[0].message.content)</pre>
   -H "Authorization: Bearer sk-your-vantyr-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hello"}]}'</pre>
-    <p>Anthropic-native SDKs: base URL <span class="mono">https://vantyr.xyz</span>, header <span class="mono">x-api-key</span>. Supported endpoints: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span>, <span class="mono">/v1/models</span>.</p>
+    <p>Các SDK Anthropic-native: base URL <span class="mono">https://vantyr.xyz</span>, header <span class="mono">x-api-key</span>. Các endpoint được hỗ trợ: <span class="mono">/v1/chat/completions</span>, <span class="mono">/v1/responses</span>, <span class="mono">/v1/messages</span>, <span class="mono">/v1/models</span>.</p>
   </div>
 </section>
 
 <section id="pricing">
-  <h2>Pricing<span class="tick">//</span> per-token, no minimums</h2>
-  <p class="sec-sub">Prices in USD per 1M tokens; input and output billed separately; cached prompt segments at the discount rate. The <a href="https://vantyr.xyz/pricing">Model Overview page</a> is generated from live configuration and is always authoritative.</p>
+  <h2>Bảng giá<span class="tick">//</span> tính theo token, không mức tối thiểu</h2>
+  <p class="sec-sub">Giá tính bằng USD cho mỗi 1M tokens; đầu vào và đầu ra tính riêng; đoạn prompt được cache theo giá chiết khấu. Trang <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> được sinh từ cấu hình thời gian thực và luôn là nguồn chuẩn xác.</p>
   <table>
     <thead><tr>
-      <th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th>Best for</th>
+      <th>Mô hình</th><th class="num">Đầu vào</th><th class="num">Đầu ra</th><th class="num">Cache</th><th>Phù hợp nhất</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">flagship</span> hardest problems</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">latest</span> newest Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span> everyday coding</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span></td></tr>
-      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td><span class="pill">cheap</span> high volume</td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td><span class="pill">cheap</span></td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td>mid-tier reasoning</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">flagship</span> vấn đề khó nhất</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">latest</span> Fable mới nhất</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.65</td><td class="num">$3.25</td><td class="num">$0.07</td><td>flagship cân bằng</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>flagship cân bằng</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">giá tốt</span> lập trình hằng ngày</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">giá tốt</span></td></tr>
+      <tr><td><span class="mono">gpt-5-6-luna</span></td><td class="num">$0.02</td><td class="num">$0.08</td><td class="num">$0.002</td><td><span class="pill">rẻ</span> khối lượng lớn</td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.02</td><td class="num">$0.10</td><td class="num">$0.02</td><td><span class="pill">rẻ</span></td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.08</td><td class="num">$0.16</td><td class="num">$0.04</td><td>reasoning tầm trung</td></tr>
     </tbody>
   </table>
-  <p class="muted">Table reflects live configuration as of 2026-10-08.</p>
-  <p><strong>Worked example:</strong> a coding session on <span class="mono">claude-sonnet-5</span> sending 30k input + 5k output tokens costs about <strong>$0.014</strong>. A month of heavy daily use lands in single-digit dollars.</p>
+  <p class="muted">Bảng phản ánh cấu hình thời gian thực tính đến 2026-10-08.</p>
+  <p><strong>Ví dụ minh họa:</strong> một phiên lập trình trên <span class="mono">claude-sonnet-5</span> gửi 30k token đầu vào + 5k token đầu ra tốn khoảng <strong>$0.014</strong>. Một tháng dùng nặng hằng ngày cũng chỉ ở mức vài đô la.</p>
   <ul>
-    <li>Requests pre-authorize a small hold, then settle to actual usage — the difference returns immediately.</li>
-    <li>Upstream-failed requests are refunded automatically; zero charge for a response you didn't get.</li>
-    <li>Per-key quota ceilings (Keys page) cap spend per key — useful for automation or shared keys.</li>
-    <li>Balance hits zero → requests stop before reaching the model. No overdraft.</li>
+    <li>Yêu cầu tạm giữ trước một khoản nhỏ, rồi quyết toán theo mức dùng thực tế — phần chênh lệch hoàn lại ngay lập tức.</li>
+    <li>Yêu cầu thất bại phía upstream được hoàn tiền tự động; không tính phí cho phản hồi bạn không nhận được.</li>
+    <li>Trần hạn mức cho từng khóa (trang Khóa) giới hạn chi tiêu mỗi khóa — hữu ích cho tự động hóa hoặc khóa dùng chung.</li>
+    <li>Số dư về 0 → yêu cầu dừng trước khi tới mô hình. Không bao giờ âm.</li>
   </ul>
 </section>
 
 <section id="payments">
-  <h2>Payments<span class="tick">//</span> crypto top-up</h2>
+  <h2>Thanh toán<span class="tick">//</span> nạp crypto</h2>
   <ul>
-    <li>USDT / USDC at 1:1 against the dollar, on 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
-    <li>Minimum top-up <strong>$1</strong>, no maximum. Wallet credit never expires.</li>
-    <li>After clicking Top Up you get an address and exact amount — send exactly that amount. Credit lands automatically on network confirmation (typically 1–3 minutes; TON can take longer).</li>
-    <li>Payment stuck (sent but not credited after 30 minutes)? Note the transaction hash and contact support — every order is recorded and can be reconciled manually.</li>
+    <li>USDT / USDC theo tỷ lệ 1:1 với đô la, trên 8 mạng: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
+    <li>Nạp tối thiểu <strong>$1</strong>, không giới hạn tối đa. Số tiền nạp vào ví không bao giờ hết hạn.</li>
+    <li>Sau khi nhấp Nạp tiền, bạn nhận được một địa chỉ và số tiền chính xác — hãy gửi đúng số tiền đó. Tiền vào ví tự động khi mạng xác nhận (thường 1–3 phút; TON có thể lâu hơn).</li>
+    <li>Thanh toán bị treo (đã gửi nhưng chưa vào ví sau 30 phút)? Ghi lại mã hash giao dịch và liên hệ hỗ trợ — mọi đơn hàng đều được ghi lại và có thể đối soát thủ công.</li>
   </ul>
 </section>
 
 <section id="troubleshooting">
-  <h2>Troubleshooting<span class="tick">//</span> common failures</h2>
+  <h2>Khắc phục sự cố<span class="tick">//</span> lỗi thường gặp</h2>
   <dl class="err-box">
-    <dt>401 Invalid API key</dt>
-    <dd>The key is wrong or mistyped. Keys are shown once at creation — if you lost it, create a new one in the console. Also check the right env var is set for your agent (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, or <span class="mono">OPENAI_API_KEY</span> depending on the tool).</dd>
-    <dt>404 / Not Found</dt>
-    <dd>Almost always the wrong base URL — Anthropic clients need <span class="mono">https://vantyr.xyz</span> (no <span class="mono">/v1</span>), OpenAI clients need <span class="mono">https://vantyr.xyz/v1</span>. Check both cards at the <a href="#base-urls">top of this page</a>.</dd>
-    <dt>Model not found / no channel available</dt>
-    <dd>The model ID doesn't match. Use exact IDs from the <a href="https://vantyr.xyz/pricing">Model Overview</a> — e.g. <span class="mono">claude-sonnet-5</span>, not <span class="mono">claude-sonnet</span>. Also check the model isn't restricted on your key (Keys page → model limits).</dd>
-    <dt>Insufficient quota / balance</dt>
-    <dd>Wallet empty or the key hit its quota ceiling. Top up at the Wallet page, or raise/remove the key's quota limit.</dd>
-    <dt>Stream disconnected mid-response</dt>
-    <dd>Rare upstream hiccup. Your key was not charged for the failed portion (failed requests auto-refund). Retry the turn; if it repeats, check the <a href="https://vantyr.xyz">status banner</a> or ask in the <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord community</a>.</dd>
+    <dt>401 Khóa API không hợp lệ</dt>
+    <dd>Khóa sai hoặc gõ nhầm. Khóa chỉ hiển thị một lần khi tạo — nếu mất, hãy tạo khóa mới trong bảng điều khiển. Cũng kiểm tra xem agent của bạn đã đặt đúng biến môi trường chưa (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, hoặc <span class="mono">OPENAI_API_KEY</span> tùy theo công cụ).</dd>
+    <dt>404 / Không tìm thấy</dt>
+    <dd>Hầu như luôn là sai base URL — client Anthropic cần <span class="mono">https://vantyr.xyz</span> (không <span class="mono">/v1</span>), client OpenAI cần <span class="mono">https://vantyr.xyz/v1</span>. Kiểm tra cả hai thẻ ở <a href="#base-urls">đầu trang này</a>.</dd>
+    <dt>Không tìm thấy mô hình / không có kênh khả dụng</dt>
+    <dd>Model ID không khớp. Dùng ID chính xác từ <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> — ví dụ <span class="mono">claude-sonnet-5</span>, chứ không phải <span class="mono">claude-sonnet</span>. Cũng kiểm tra xem mô hình có bị giới hạn trên khóa của bạn không (trang Khóa → giới hạn mô hình).</dd>
+    <dt>Hạn mức / số dư không đủ</dt>
+    <dd>Ví hết tiền hoặc khóa đã chạm trần hạn mức. Nạp tiền ở trang Ví, hoặc nâng/gỡ giới hạn hạn mức của khóa.</dd>
+    <dt>Luồng bị ngắt giữa phản hồi</dt>
+    <dd>Sự cố hiếm gặp phía upstream. Khóa của bạn không bị tính phí cho phần thất bại (yêu cầu thất bại tự động hoàn tiền). Thử lại lượt đó; nếu lặp lại, kiểm tra <a href="https://vantyr.xyz">thanh trạng thái</a> hoặc hỏi trong <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">cộng đồng Discord</a>.</dd>
   </dl>
 </section>
 
 <section id="faq">
   <h2>FAQ<span class="tick">//</span></h2>
-  <h3>Where do I see my usage and spend?</h3>
-  <p>Usage page in the console: every request with model, tokens, and amount billed. Wallet page: balance and top-up history.</p>
-  <h3>Which model should I pick?</h3>
-  <p><span class="mono">claude-sonnet-5</span> for most coding and chat (best quality per dollar); <span class="mono">claude-fable-5</span> when the task is genuinely hard; <span class="mono">gpt-5-6-luna</span> or <span class="mono">gpt-6-sol</span> when volume beats peak quality.</p>
-  <h3>Do you support streaming / tools / structured output?</h3>
-  <p>Yes — all standard client features pass through on every model: SSE streaming, tool calling, structured outputs, prompt caching.</p>
-  <h3>Is my data used for training?</h3>
-  <p>Vantyr is a relay: prompts and completions are forwarded to the upstream provider and logged only as billing metadata (token counts, model, timestamp) — never message content.</p>
-  <h3>Can I use one key across many tools?</h3>
-  <p>Yes — the same key works on both base URLs in any number of clients. For separating budgets, create one key per tool and set a quota ceiling on each.</p>
+  <h3>Tôi xem mức dùng và chi tiêu ở đâu?</h3>
+  <p>Trang Sử dụng trong bảng điều khiển: mọi yêu cầu kèm mô hình, số token và số tiền tính phí. Trang Ví: số dư và lịch sử nạp tiền.</p>
+  <h3>Nên chọn mô hình nào?</h3>
+  <p><span class="mono">claude-sonnet-5</span> cho phần lớn việc lập trình và trò chuyện (chất lượng tốt nhất trên mỗi đô la); <span class="mono">claude-fable-5</span> khi nhiệm vụ thực sự khó; <span class="mono">gpt-5-6-luna</span> hoặc <span class="mono">gpt-6-sol</span> khi khối lượng quan trọng hơn chất lượng đỉnh.</p>
+  <h3>Bạn có hỗ trợ streaming / tools / structured output không?</h3>
+  <p>Có — mọi tính năng client chuẩn đều đi qua trên tất cả mô hình: SSE streaming, tool calling, structured outputs, prompt caching.</p>
+  <h3>Dữ liệu của tôi có bị dùng để huấn luyện không?</h3>
+  <p>Vantyr là một relay: prompt và completion được chuyển tiếp tới nhà cung cấp upstream và chỉ ghi lại dưới dạng siêu dữ liệu tính phí (số token, mô hình, dấu thời gian) — không bao giờ là nội dung tin nhắn.</p>
+  <h3>Tôi có thể dùng một khóa cho nhiều công cụ không?</h3>
+  <p>Có — cùng một khóa chạy trên cả hai base URL ở bất kỳ số lượng client nào. Muốn tách ngân sách, hãy tạo một khóa cho mỗi công cụ và đặt trần hạn mức riêng cho từng khóa.</p>
 </section>
 
 <footer>
   <span>VANTYR// control room</span>
   <a href="https://vantyr.xyz">vantyr.xyz</a>
-  <a href="https://vantyr.xyz/pricing">models &amp; pricing</a>
-  <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
-  <a href="https://github.com/captainbeo/vantyr">source (AGPL)</a>
-  <span class="right">docs rev 2026-10-08</span>
+  <a href="https://vantyr.xyz/pricing">mô hình &amp; bảng giá</a>
+  <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">cộng đồng Discord</a>
+  <a href="https://github.com/captainbeo/vantyr">mã nguồn (AGPL)</a>
+  <span class="right">tài liệu bản cập nhật 2026-10-08</span>
 </footer>
 
 </div>
