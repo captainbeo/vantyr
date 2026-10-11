@@ -32,6 +32,9 @@ type StripePayRequest struct {
 	Amount int64 `json:"amount"`
 	// PaymentMethod specifies the payment method (e.g., "stripe").
 	PaymentMethod string `json:"payment_method"`
+	// Currency optionally selects the checkout currency: "usd" for the
+	// secondary USD price, "eur" (or empty) for the primary price.
+	Currency string `json:"currency,omitempty"`
 	// SuccessURL is the optional custom URL to redirect after successful payment.
 	// If empty, defaults to the server's console log page.
 	SuccessURL string `json:"success_url,omitempty"`
@@ -44,6 +47,10 @@ type StripeAdaptor struct {
 }
 
 func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
+	if stripeCurrencyUsd(req.Currency) && strings.TrimSpace(setting.StripePriceIdUsd) == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "USD 支付未配置"})
+		return
+	}
 	if req.Amount < getStripeMinTopup() {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getStripeMinTopup())})
 		return
@@ -93,6 +100,11 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		return
 	}
 
+	if stripeCurrencyUsd(req.Currency) && strings.TrimSpace(setting.StripePriceIdUsd) == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "USD 支付未配置"})
+		return
+	}
+
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, false)
 	if err != nil || user == nil {
@@ -109,7 +121,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, req.SuccessURL, req.CancelURL)
+	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, req.SuccessURL, req.CancelURL, req.Currency)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建 Checkout Session 失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
@@ -353,14 +365,24 @@ func sessionExpired(ctx context.Context, event stripe.Event) {
 //   - amount: quantity of units to purchase
 //   - successURL: custom URL to redirect after successful payment (empty for default)
 //   - cancelURL: custom URL to redirect when payment is canceled (empty for default)
+//   - currency: optional checkout currency ("usd" for the secondary USD price;
+//     "eur", empty, or any other value selects the primary price)
 //
 // Returns the checkout session URL or an error if the session creation fails.
-func genStripeLink(referenceId string, customerId string, email string, amount int64, successURL string, cancelURL string) (string, error) {
+func genStripeLink(referenceId string, customerId string, email string, amount int64, successURL string, cancelURL string, currency string) (string, error) {
 	if !strings.HasPrefix(setting.StripeApiSecret, "sk_") && !strings.HasPrefix(setting.StripeApiSecret, "rk_") {
 		return "", fmt.Errorf("无效的Stripe API密钥")
 	}
 
 	stripe.Key = setting.StripeApiSecret
+
+	priceId := setting.StripePriceId
+	if stripeCurrencyUsd(currency) {
+		priceId = strings.TrimSpace(setting.StripePriceIdUsd)
+		if priceId == "" {
+			return "", fmt.Errorf("USD支付价格未配置")
+		}
+	}
 
 	// Use custom URLs if provided, otherwise use defaults
 	if successURL == "" {
@@ -376,7 +398,7 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 		CancelURL:         stripe.String(cancelURL),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
-				Price:    stripe.String(setting.StripePriceId),
+				Price:    stripe.String(priceId),
 				Quantity: stripe.Int64(amount),
 			},
 		},
@@ -448,4 +470,11 @@ func getStripeMinTopup() int64 {
 		minTopup = minTopup * int(common.QuotaPerUnit)
 	}
 	return int64(minTopup)
+}
+
+// stripeCurrencyUsd reports whether a Stripe checkout request selected the
+// secondary USD price. Anything other than an explicit "usd" (including the
+// empty default) stays on the primary price.
+func stripeCurrencyUsd(currency string) bool {
+	return strings.EqualFold(strings.TrimSpace(currency), "usd")
 }
