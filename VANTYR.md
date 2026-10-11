@@ -1525,3 +1525,83 @@ intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
   backups/footer-pre-next24.txt); tag + branch pushed to public.
 - Rollback: pinned-next23 retained — repoint compose.yaml + `docker
   compose up -d --no-build gateway`.
+
+## 2026-10-11 — Payment rails: TRY transfer, Stripe EUR/USD, iDEAL|Wero
+
+Owner decision (four rails): crypto (already live), Stripe cards in
+EUR + USD (dual-currency), iDEAL|Wero riding Stripe Checkout, and
+manual TRY bank transfer to the owner's Turkish IBAN quoted via
+support (IBAN never published on the site or in the public repo).
+Stripe account will be an EU entity, so both iDEAL|Wero and Wero
+(when it leaves Stripe preview) are available. Branch
+`feat/payment-rails` off `vantyr/main` (d24d5b1ac); NOT stacked on
+the pending codex/daq-redesign work.
+
+**Fork Go change (documented gap): dual-currency Stripe prices.**
+Upstream supports exactly one `StripePriceId`; the fork adds
+`StripePriceIdUsd` (options table, admin-UI field) and an optional
+`currency` field on `POST /api/user/stripe/amount` +
+`POST /api/user/stripe/pay`. Empty/`eur`/unknown → primary price
+(EUR for Vantyr); `usd` → secondary price, and it FAILS CLOSED
+(error, no order created, guard before DB access) when the USD price
+is unset — a misconfigured USD checkout can never silently charge
+EUR. Credit still comes from the order row (`Money × QuotaPerUnit`),
+currency-independent; the webhook handles both currencies with zero
+changes (same checkout.session.completed fulfillment; amount+currency
+are logged per event). `GET /api/user/topup/info` reports
+`stripe_usd_enabled` only when Stripe itself is enabled. Frontend:
+wallet shows an €/$ segmented toggle (hidden until USD configured),
+confirm dialog shows the matching currency symbol; admin payment
+settings gained the StripePriceIdUsd field and the full 4-event
+webhook helper text (async events matter for iDEAL|Wero).
+
+**iDEAL|Wero + Wero (config-only, zero code):** the checkout session
+never restricts `payment_method_types`, so dashboard-enabled methods
+surface automatically on EUR sessions. Enable iDEAL|Wero in the
+Stripe Dashboard → Payment methods (Wero: request preview access via
+the interest form — currently preview for EU entities; iDEAL|Wero
+itself is GA and must be the live branding until the 2026–2027
+migration). iDEAL scheme rule: the site must show the company
+registration number (KVK/equivalent) — add to footer or /docs before
+enabling live iDEAL (owner action).
+
+**Stripe live checklist (owner; keys via admin UI only, never chat):**
+create EUR one-time price (€1/unit equivalent) + USD price ($1) →
+set StripeApiSecret, StripeWebhookSecret, StripePriceId (EUR),
+StripePriceIdUsd, StripeUnitPrice=1, StripeMinTopUp → register
+webhook `POST /api/stripe/webhook` with ALL FOUR events:
+checkout.session.completed, .expired, .async_payment_succeeded,
+.async_payment_failed → confirm payment compliance → run the R3-style
+test-mode money loop for BOTH currencies (checkout + signed webhook +
+exact credit + usage-log reconcile) before live keys.
+
+**TRY manual-transfer runbook:** customer opens a Discord ticket or
+email → owner replies with ₺ quote at the current rate (valid ~24h) +
+IBAN → customer sends Havale/EFT → owner verifies the bank statement
+→ owner creates a redemption code in the admin console for the USD
+value at the quoted rate (×500,000 quota per unit; redemption flow is
+the cache-safe manual-credit path per the 2026-10-04 note — do NOT
+edit quota rows directly, Redis cache goes stale) → customer redeems
+on the Wallet page. Reconciliation: redemptions are logged with the
+redeemer; the ticket holds the ₺ quote that explains the amount.
+Set `TopUpLink=https://vantyr.xyz/docs#payments` (options table,
+60s sync) so the wallet's "Need a redemption code? Get one here"
+link lands on the payment docs.
+
+**Docs shipped with this change:** /docs payments section (all 12
+languages) now covers all four rails; hero chip updated; guide files
++ guide-map.json updated — deliberately files-only, NOT applied to
+the DB option (standing owner decision after the 2026-10-10 homepage
+incident).
+
+**Subscription plan stays USD** ($180 via plan.StripePriceId); an EUR
+plan price is a follow-up only if EU customers ask.
+
+**Tests:** genStripeLink price selection via stubbed stripe-go
+backend (no network), USD fail-closed amount guard, currency
+normalization — all green with the payment-related controller suite
+(198s); model/setting suites green. Web: currency toggle component
+tests 4/4, wallet feature tests 8/8, typecheck/lint/format clean.
+The two system-settings suite failures (pricing-sync tier display,
+routing invalid-locale) pre-exist on the vantyr/main baseline
+(verified by stash-and-rerun).
