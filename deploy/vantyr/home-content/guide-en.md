@@ -5,7 +5,7 @@ Premium Claude & Codex access at a fraction of official pricing — one key, one
 ## Get started in 5 minutes
 
 1. **Create an account** — [Register](/register), then [log in](/login). Then link your **Telegram** under Security → Account bindings to receive **$5 of free credit** — enough to try every model properly, no card needed.
-2. **Add credit** — open the [Wallet](/wallet) page, choose a top-up amount, and pay by card (Stripe).
+2. **Add credit** — open the [Wallet](/wallet) page, choose a top-up amount, and pay by card (Stripe, EUR or USD — iDEAL for Dutch banks), crypto (USDT/USDC), or ask us for a Turkish lira bank transfer.
    PAYG rates apply per request; see the [Models & Pricing](/pricing) page.
 3. **Create an API key** — go to [Keys](/keys), click **Create**, name it, and copy the key.
    > **Tip:** leave **Unlimited quota** checked. The quota field limits this key's total spend; unlimited lets your wallet balance control spending.

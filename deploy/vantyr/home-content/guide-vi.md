@@ -5,7 +5,7 @@ Truy cập Claude & Codex cao cấp với chi phí chỉ bằng một phần nh�
 ## Bắt đầu trong 5 phút
 
 1. **Tạo tài khoản** — [Đăng ký](/register), sau đó [đăng nhập](/login). Tiếp theo, hãy liên kết **Telegram** của bạn trong mục Bảo mật → Liên kết tài khoản để nhận **$5 tín dụng miễn phí** — đủ để trải nghiệm trọn vẹn mọi mô hình, không cần thẻ.
-2. **Nạp tiền** — mở trang [Ví](/wallet), chọn số tiền cần nạp và thanh toán bằng thẻ (Stripe).
+2. **Nạp tín dụng** — mở trang [Ví](/wallet), chọn số tiền và thanh toán bằng thẻ (Stripe, EUR hoặc USD — iDEAL cho ngân hàng Hà Lan), bằng crypto (USDT/USDC) hoặc yêu cầu chuyển khoản bằng lira Thổ Nhĩ Kỳ.
    Mức giá PAYG áp dụng cho từng yêu cầu; xem trang [Mô hình & Giá cả](/pricing).
 3. **Tạo khóa API** — truy cập [Khóa API](/keys), nhấp **Tạo**, đặt tên cho khóa rồi sao chép khóa của bạn.
    > **Mẹo:** hãy giữ nguyên tùy chọn **Hạn mức không giới hạn** đang được tích. Trường hạn mức giới hạn tổng chi tiêu của khóa này; nếu để không giới hạn, số dư ví của bạn sẽ là thứ quyết định mức chi.

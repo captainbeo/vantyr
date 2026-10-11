@@ -5,7 +5,7 @@ Premium-Zugriff auf Claude & Codex für einen Bruchteil der offiziellen Preise �
 ## In 5 Minuten loslegen
 
 1. **Konto erstellen** — [Registriere dich](/register) und [melde dich an](/login). Verknüpfe dann dein **Telegram** unter Sicherheit → Kontoverknüpfungen, um **5 $ Guthaben gratis** zu erhalten — genug, um jedes Modell ausgiebig auszuprobieren, ganz ohne Karte.
-2. **Guthaben aufladen** — öffne die [Wallet](/wallet), wähle einen Aufladebetrag und bezahle mit Karte (Stripe).
+2. **Guthaben aufladen** — öffne die [Wallet](/wallet)-Seite, wähle einen Betrag und zahle per Karte (Stripe, EUR oder USD — iDEAL für niederländische Banken), per Krypto (USDT/USDC) oder frage nach einer Banküberweisung in türkischen Lira.
    PAYG-Tarife gelten pro Anfrage; sieh dir die Seite [Modelle & Preise](/pricing) an.
 3. **API-Schlüssel erstellen** — gehe zu [Schlüssel](/keys), klicke auf **Erstellen**, gib ihm einen Namen und kopiere den Schlüssel.
    > **Tipp:** Lasse **Unbegrenztes Kontingent** aktiviert. Das Kontingentfeld begrenzt die Gesamtausgaben dieses Schlüssels; unbegrenzt heißt, dein Wallet-Guthaben steuert die Ausgaben.

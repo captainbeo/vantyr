@@ -5,7 +5,7 @@ Premium-toegang tot Claude & Codex voor een fractie van de officiële prijzen �
 ## In 5 minuten aan de slag
 
 1. **Account aanmaken** — [registreer je](/register) en [log in](/login). Koppel vervolgens je **Telegram** onder Beveiliging → Accountkoppelingen om **$5 gratis tegoed** te ontvangen — genoeg om elk model grondig uit te proberen, geen kaart nodig.
-2. **Tegoed toevoegen** — open de pagina [Portemonnee](/wallet), kies een opwaardeerbedrag en betaal met kaart (Stripe).
+2. **Tegoed toevoegen** — open de [Wallet](/wallet)-pagina, kies een bedrag en betaal met kaart (Stripe, EUR of USD — iDEAL voor Nederlandse banken), met crypto (USDT/USDC) of vraag naar een bankoverschrijving in Turkse lira.
    Er gelden PAYG-tarieven per aanvraag; bekijk de pagina [Modellen & prijzen](/pricing).
 3. **API-sleutel aanmaken** — ga naar [Sleutels](/keys), klik op **Aanmaken**, geef de sleutel een naam en kopieer hem.
    > **Tip:** laat **Onbeperkt quotum** aangevinkt. Het quotumveld begrenst de totale uitgaven van deze sleutel; bij onbeperkt bepaalt je portemonneesaldo de uitgaven.

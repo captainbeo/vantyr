@@ -5,7 +5,7 @@ Resmi fiyatların çok küçük bir bölümü karşılığında premium Claude v
 ## 5 dakikada başla
 
 1. **Hesap oluştur** — [Kaydol](/register), ardından [oturum aç](/login). Sonra **5 $ ücretsiz kredi** almak için **Telegram** hesabını Güvenlik → Hesap Bağlamaları altından bağla — her modeli gerektiği gibi denemeye yeter, kart gerekmez.
-2. **Kredi ekle** — [Cüzdan](/wallet) sayfasını aç, bir yükleme tutarı seç ve kartla öde (Stripe).
+2. **Kredi ekle** — [Cüzdan](/wallet) sayfasını aç, bir yükleme tutarı seç ve kartla öde (Stripe, EUR veya USD — Hollanda bankaları için iDEAL), kripto (USDT/USDC) ile öde veya Türk lirasıyla banka transferi için bize sor.
    İstek başına kullandıkça öde (PAYG) fiyatları uygulanır; [Modeller ve Fiyatlandırma](/pricing) sayfasına bak.
 3. **API anahtarı oluştur** — [API Anahtarları](/keys) sayfasına git, **Oluştur**'a tıkla, bir ad ver ve anahtarı kopyala.
    > **İpucu:** **Sınırsız kota** işaretli kalsın. Kota alanı bu anahtarın toplam harcamasını sınırlar; sınırsız bırakırsan harcamayı cüzdan bakiyen kontrol eder.

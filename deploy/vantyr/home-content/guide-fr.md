@@ -5,7 +5,7 @@ Un accès premium à Claude et Codex pour une fraction des tarifs officiels — 
 ## Commencez en 5 minutes
 
 1. **Créez un compte** — [Inscrivez-vous](/register), puis [connectez-vous](/login). Liez ensuite votre compte **Telegram** dans Sécurité → Associations de compte pour recevoir **$5 de crédit gratuit** — de quoi tester correctement tous les modèles, sans carte bancaire.
-2. **Ajoutez du crédit** — ouvrez la page [Portefeuille](/wallet), choisissez un montant de recharge et payez par carte (Stripe).
+2. **Ajoutez du crédit** — ouvrez la page [Wallet](/wallet), choisissez un montant et payez par carte (Stripe, EUR ou USD — iDEAL pour les banques néerlandaises), en crypto (USDT/USDC) ou demandez-nous un virement bancaire en livres turques.
    Les tarifs PAYG s'appliquent par requête ; consultez la page [Modèles et tarifs](/pricing).
 3. **Créez une clé API** — rendez-vous sur [Clés API](/keys), cliquez sur **Créer**, donnez-lui un nom, puis copiez la clé.
    > **Astuce :** laissez **Quota illimité** coché. Le champ quota limite la dépense totale de cette clé ; en illimité, c'est le solde de votre portefeuille qui contrôle les dépenses.
