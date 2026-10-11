@@ -6992,5 +6992,9 @@
     "Service statistics": "Thống kê dịch vụ",
     "Requests are served by the upstream model over pooled capacity at a lower rate.": "Yêu cầu được phục vụ bởi mô hình thượng nguồn qua dung lượng gộp với mức giá thấp hơn.",
     "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "Nội dung hiển thị trên trang chủ (hỗ trợ Markdown, hoặc bản đồ JSON từ mã ngôn ngữ sang nội dung đã dịch)"
-  }
+  },
+  "Price ID (USD)": "ID giá (USD)",
+  "Optional second price in USD; empty disables USD checkout": "Giá thứ hai tùy chọn bằng USD; để trống sẽ tắt thanh toán USD",
+  "EUR (€)": "EUR (€)",
+  "USD ($)": "USD ($)"
 }

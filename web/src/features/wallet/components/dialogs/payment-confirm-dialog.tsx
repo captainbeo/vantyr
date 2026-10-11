@@ -33,8 +33,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatLocalCurrencyAmount } from '@/lib/currency'
 
 import { DEFAULT_DISCOUNT_RATE } from '../../constants'
-import { formatCurrency, getPaymentIcon } from '../../lib'
-import type { PaymentMethod } from '../../types'
+import { formatCurrency, getPaymentIcon, isStripePayment } from '../../lib'
+import type { PaymentMethod, StripeCurrency } from '../../types'
+
+function getStripeCurrencySymbol(
+  isStripe: boolean,
+  currency: StripeCurrency | undefined
+): string {
+  if (!isStripe) {
+    return ''
+  }
+  return currency === 'usd' ? '$' : '€'
+}
 
 interface PaymentConfirmDialogProps {
   open: boolean
@@ -43,6 +53,7 @@ interface PaymentConfirmDialogProps {
   topupAmount: number
   paymentAmount: number
   paymentMethod: PaymentMethod | undefined
+  stripeCurrency?: StripeCurrency
   calculating: boolean
   processing: boolean
   discountRate?: number
@@ -56,6 +67,7 @@ export function PaymentConfirmDialog({
   topupAmount,
   paymentAmount,
   paymentMethod,
+  stripeCurrency,
   calculating,
   processing,
   discountRate = DEFAULT_DISCOUNT_RATE,
@@ -65,6 +77,8 @@ export function PaymentConfirmDialog({
   const hasDiscount = discountRate > 0 && discountRate < 1 && paymentAmount > 0
   const originalAmount = hasDiscount ? paymentAmount / discountRate : 0
   const discountAmount = hasDiscount ? originalAmount - paymentAmount : 0
+  const isStripe = paymentMethod ? isStripePayment(paymentMethod.type) : false
+  const currencySymbol = getStripeCurrencySymbol(isStripe, stripeCurrency)
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -101,10 +115,12 @@ export function PaymentConfirmDialog({
             ) : (
               <div className='flex items-baseline gap-2'>
                 <span className='text-2xl font-semibold'>
+                  {currencySymbol}
                   {formatCurrency(paymentAmount)}
                 </span>
                 {hasDiscount && (
                   <span className='text-muted-foreground text-sm line-through'>
+                    {currencySymbol}
                     {formatCurrency(originalAmount)}
                   </span>
                 )}

@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import type {
   RedemptionRequest,
   PaymentRequest,
+  StripeCurrencyRequest,
   AmountRequest,
   AffiliateTransferRequest,
   ApiResponse,
@@ -86,7 +87,7 @@ export async function calculateAmount(
  * Calculate payment amount for Stripe payment
  */
 export async function calculateStripeAmount(
-  request: AmountRequest
+  request: AmountRequest & Pick<StripeCurrencyRequest, 'currency'>
 ): Promise<AmountResponse> {
   const res = await api.post('/api/user/stripe/amount', request, {
     skipBusinessError: true,
@@ -125,7 +126,7 @@ export async function requestPayment(
  * Request Stripe payment
  */
 export async function requestStripePayment(
-  request: PaymentRequest
+  request: StripeCurrencyRequest
 ): Promise<StripePaymentResponse> {
   const res = await api.post('/api/user/stripe/pay', request, {
     skipBusinessError: true,

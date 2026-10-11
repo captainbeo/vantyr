@@ -6992,5 +6992,9 @@
     "Service statistics": "Статистика сервиса",
     "Requests are served by the upstream model over pooled capacity at a lower rate.": "Запросы обслуживает вышестоящая модель через объединённую мощность по сниженному тарифу.",
     "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "Содержимое главной страницы (поддерживает Markdown или JSON-карту кодов языков с переводами)"
-  }
+  },
+  "Price ID (USD)": "ID цены (USD)",
+  "Optional second price in USD; empty disables USD checkout": "Необязательная вторая цена в USD; пусто — оплата в USD отключена",
+  "EUR (€)": "EUR (€)",
+  "USD ($)": "USD ($)"
 }

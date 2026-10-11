@@ -6992,5 +6992,9 @@
     "Service statistics": "إحصاءات الخدمة",
     "Requests are served by the upstream model over pooled capacity at a lower rate.": "تُخدَّم الطلبات عبر الطراز العلوي بسعة مجمّعة وبسعر أقل.",
     "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "المحتوى المعروض في الصفحة الرئيسية (يدعم Markdown، أو خريطة JSON من رموز اللغات إلى المحتوى المترجم)"
-  }
+  },
+  "Price ID (USD)": "معرّف السعر (USD)",
+  "Optional second price in USD; empty disables USD checkout": "سعر ثانٍ اختياري بالدولار؛ تركه فارغًا يعطّل الدفع بالدولار",
+  "EUR (€)": "EUR (€)",
+  "USD ($)": "USD ($)"
 }

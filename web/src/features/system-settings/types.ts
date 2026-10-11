@@ -325,6 +325,7 @@ export type BillingSettings = {
   StripeApiSecret: string
   StripeWebhookSecret: string
   StripePriceId: string
+  StripePriceIdUsd: string
   StripeUnitPrice: number
   StripeMinTopUp: number
   StripePromotionCodesEnabled: boolean

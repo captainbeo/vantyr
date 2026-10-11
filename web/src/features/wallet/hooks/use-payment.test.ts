@@ -24,7 +24,7 @@ import { requestPaymentAmount } from './use-payment'
 describe('payment amount routing', () => {
   test('uses the dedicated Waffo amount calculator', async () => {
     const calls: string[] = []
-    const amount = await requestPaymentAmount(120, PAYMENT_TYPES.WAFFO, {
+    const amount = await requestPaymentAmount(120, PAYMENT_TYPES.WAFFO, undefined, {
       regular: async () => {
         calls.push('regular')
         return { success: true, data: '1' }

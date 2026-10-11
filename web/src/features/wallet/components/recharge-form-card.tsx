@@ -50,6 +50,7 @@ import type {
   TopupInfo,
   CreemProduct,
   WaffoPayMethod,
+  StripeCurrency,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
 
@@ -81,6 +82,9 @@ interface RechargeFormCardProps {
   waffoMinTopup?: number
   onWaffoMethodSelect?: (method: WaffoPayMethod, index: number) => void
   enableWaffoPancakeTopup?: boolean
+  stripeUsdEnabled?: boolean
+  stripeCurrency?: StripeCurrency
+  onStripeCurrencyChange?: (currency: StripeCurrency) => void
 }
 
 export function RechargeFormCard({
@@ -111,6 +115,9 @@ export function RechargeFormCard({
   waffoMinTopup,
   onWaffoMethodSelect,
   enableWaffoPancakeTopup,
+  stripeUsdEnabled,
+  stripeCurrency = 'eur',
+  onStripeCurrencyChange,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
@@ -384,6 +391,30 @@ export function RechargeFormCard({
                     })}
                   </div>
                 ) : null}
+                {stripeUsdEnabled &&
+                  topupInfo?.enable_stripe_topup &&
+                  onStripeCurrencyChange && (
+                    <div className='grid grid-cols-2 gap-1.5'>
+                      {(['eur', 'usd'] as const).map((currency) => (
+                        <Button
+                          key={currency}
+                          variant='outline'
+                          aria-pressed={stripeCurrency === currency}
+                          onClick={() => onStripeCurrencyChange(currency)}
+                          className={cn(
+                            'h-9 gap-2 rounded-lg',
+                            stripeCurrency === currency &&
+                              'border-foreground bg-foreground/5 dark:border-foreground dark:bg-foreground/10'
+                          )}
+                        >
+                          {currency === 'eur' ? '€' : '$'}
+                          <span className='text-xs'>
+                            {currency === 'eur' ? t('EUR (€)') : t('USD ($)')}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 {!hasStandardPaymentMethods && !hasWaffoPaymentMethods && (
                   <Alert>
                     <AlertDescription>

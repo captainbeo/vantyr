@@ -53,6 +53,7 @@ import type {
   PresetAmount,
   CreemProduct,
   WaffoPayMethod,
+  StripeCurrency,
 } from './types'
 
 interface WalletProps {
@@ -70,6 +71,7 @@ export function Wallet(props: WalletProps) {
   const [selectedWaffoMethodIndex, setSelectedWaffoMethodIndex] = useState<
     number | null
   >(null)
+  const [stripeCurrency, setStripeCurrency] = useState<StripeCurrency>('eur')
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
@@ -159,15 +161,28 @@ export function Wallet(props: WalletProps) {
   const handleSelectPreset = (preset: PresetAmount) => {
     setTopupAmount(preset.value)
     setSelectedPreset(preset.value)
-    calculatePaymentAmount(preset.value, getCurrentPaymentType())
+    calculatePaymentAmount(
+      preset.value,
+      getCurrentPaymentType(),
+      stripeCurrency
+    )
   }
 
   // Handle topup amount change
   const handleTopupAmountChange = (amount: number) => {
     setTopupAmount(amount)
     setSelectedPreset(null)
-    calculatePaymentAmount(amount, getCurrentPaymentType())
+    calculatePaymentAmount(amount, getCurrentPaymentType(), stripeCurrency)
   }
+
+  // Handle Stripe checkout currency selection
+  const handleStripeCurrencyChange = useCallback(
+    (currency: StripeCurrency) => {
+      setStripeCurrency(currency)
+      calculatePaymentAmount(topupAmount, getCurrentPaymentType(), currency)
+    },
+    [calculatePaymentAmount, getCurrentPaymentType, topupAmount]
+  )
 
   // Handle payment method selection
   const handlePaymentMethodSelect = async (method: PaymentMethod) => {
@@ -183,7 +198,7 @@ export function Wallet(props: WalletProps) {
       }
 
       // Calculate payment amount and show confirmation dialog
-      await calculatePaymentAmount(topupAmount, method.type)
+      await calculatePaymentAmount(topupAmount, method.type, stripeCurrency)
       setConfirmDialogOpen(true)
     } finally {
       setPaymentLoading(null)
@@ -194,12 +209,14 @@ export function Wallet(props: WalletProps) {
   const handlePaymentConfirm = async () => {
     if (!selectedPaymentMethod) return
 
+    const stripePayment = (amount: number, paymentType: string) =>
+      processPayment(amount, paymentType, stripeCurrency)
     const success = await dispatchSelectedPayment(
       selectedPaymentMethod,
       topupAmount,
       selectedWaffoMethodIndex,
       {
-        regular: processPayment,
+        regular: stripePayment,
         waffo: processWaffoPayment,
         waffoPancake: processWaffoPancakePayment,
       }
@@ -263,7 +280,11 @@ export function Wallet(props: WalletProps) {
     setPaymentLoading(loadingKey)
 
     try {
-      await calculatePaymentAmount(topupAmount, PAYMENT_TYPES.WAFFO)
+      await calculatePaymentAmount(
+        topupAmount,
+        PAYMENT_TYPES.WAFFO,
+        stripeCurrency
+      )
       setConfirmDialogOpen(true)
     } finally {
       setPaymentLoading(null)
@@ -328,6 +349,9 @@ export function Wallet(props: WalletProps) {
                   enableWaffoPancakeTopup={
                     topupInfo?.enable_waffo_pancake_topup
                   }
+                  stripeUsdEnabled={topupInfo?.stripe_usd_enabled}
+                  stripeCurrency={stripeCurrency}
+                  onStripeCurrencyChange={handleStripeCurrencyChange}
                 />
               </div>
 
@@ -359,6 +383,7 @@ export function Wallet(props: WalletProps) {
         topupAmount={topupAmount}
         paymentAmount={paymentAmount}
         paymentMethod={selectedPaymentMethod}
+        stripeCurrency={stripeCurrency}
         calculating={calculating}
         processing={processing || waffoProcessing || pancakeProcessing}
         discountRate={getDiscountRate()}

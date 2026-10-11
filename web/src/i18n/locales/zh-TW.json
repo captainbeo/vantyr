@@ -6992,5 +6992,9 @@
     "Service statistics": "服務統計",
     "Requests are served by the upstream model over pooled capacity at a lower rate.": "請求由上游模型透過共享池以更低費率提供服務。",
     "Content displayed on the home page (supports Markdown, or a JSON map of language codes to translated content)": "首頁顯示的內容（支援 Markdown，或語言代碼到已翻譯內容的 JSON 對應）"
-  }
+  },
+  "Price ID (USD)": "價格 ID (USD)",
+  "Optional second price in USD; empty disables USD checkout": "可選的第二個 USD 價格；留空則停用 USD 結帳",
+  "EUR (€)": "EUR (€)",
+  "USD ($)": "USD ($)"
 }

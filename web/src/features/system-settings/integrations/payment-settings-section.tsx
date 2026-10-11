@@ -145,6 +145,7 @@ const paymentSchema = z.object({
   StripeApiSecret: z.string(),
   StripeWebhookSecret: z.string(),
   StripePriceId: z.string(),
+  StripePriceIdUsd: z.string(),
   StripeUnitPrice: z.coerce.number().min(0),
   StripeMinTopUp: z.coerce.number().min(0),
   StripePromotionCodesEnabled: z.boolean(),
@@ -431,6 +432,7 @@ export function PaymentSettingsSection({
       StripeApiSecret: values.StripeApiSecret.trim(),
       StripeWebhookSecret: values.StripeWebhookSecret.trim(),
       StripePriceId: values.StripePriceId.trim(),
+      StripePriceIdUsd: values.StripePriceIdUsd.trim(),
       StripeUnitPrice: values.StripeUnitPrice,
       StripeMinTopUp: values.StripeMinTopUp,
       StripePromotionCodesEnabled: values.StripePromotionCodesEnabled,
@@ -475,6 +477,7 @@ export function PaymentSettingsSection({
       StripeApiSecret: initialRef.current.StripeApiSecret.trim(),
       StripeWebhookSecret: initialRef.current.StripeWebhookSecret.trim(),
       StripePriceId: initialRef.current.StripePriceId.trim(),
+      StripePriceIdUsd: initialRef.current.StripePriceIdUsd.trim(),
       StripeUnitPrice: initialRef.current.StripeUnitPrice,
       StripeMinTopUp: initialRef.current.StripeMinTopUp,
       StripePromotionCodesEnabled:
@@ -582,6 +585,13 @@ export function PaymentSettingsSection({
 
     if (sanitized.StripePriceId !== initial.StripePriceId) {
       updates.push({ key: 'StripePriceId', value: sanitized.StripePriceId })
+    }
+
+    if (sanitized.StripePriceIdUsd !== initial.StripePriceIdUsd) {
+      updates.push({
+        key: 'StripePriceIdUsd',
+        value: sanitized.StripePriceIdUsd,
+      })
     }
 
     if (sanitized.StripeUnitPrice !== initial.StripeUnitPrice) {
@@ -1279,10 +1289,18 @@ export function PaymentSettingsSection({
                       {t('Required events:')}{' '}
                       <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
                         {t('checkout.session.completed')}
-                      </code>{' '}
-                      {t('and')}{' '}
+                      </code>
+                      {', '}
                       <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
                         {t('checkout.session.expired')}
+                      </code>
+                      {', '}
+                      <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
+                        {t('checkout.session.async_payment_succeeded')}
+                      </code>
+                      {', '}
+                      <code className='rounded bg-blue-100 px-1 py-0.5 text-xs dark:bg-blue-900'>
+                        {t('checkout.session.async_payment_failed')}
                       </code>
                     </li>
                     <li>
@@ -1369,6 +1387,31 @@ export function PaymentSettingsSection({
                         </FormControl>
                         <FormDescription>
                           {t('Stripe product price ID')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='StripePriceIdUsd'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Price ID (USD)')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={t('price_xxx')}
+                            {...field}
+                            onChange={(event) =>
+                              field.onChange(event.target.value)
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t(
+                            'Optional second price in USD; empty disables USD checkout'
+                          )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

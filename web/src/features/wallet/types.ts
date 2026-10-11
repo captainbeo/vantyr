@@ -124,6 +124,8 @@ export interface TopupInfo {
   enable_online_topup: boolean
   /** Whether Stripe topup is enabled */
   enable_stripe_topup: boolean
+  /** Whether the secondary USD Stripe price is configured */
+  stripe_usd_enabled?: boolean
   /** Available payment methods */
   pay_methods: PaymentMethod[]
   /** Minimum topup amount for online topup */
@@ -177,6 +179,12 @@ export interface RedemptionRequest {
 }
 
 /**
+ * Stripe checkout currency selection: "eur" (or unset) keeps the primary
+ * price, "usd" selects the secondary USD price.
+ */
+export type StripeCurrency = 'eur' | 'usd'
+
+/**
  * Payment request parameters
  */
 export interface PaymentRequest {
@@ -184,6 +192,18 @@ export interface PaymentRequest {
   amount: number
   /** Payment method identifier */
   payment_method: string
+}
+
+/**
+ * Stripe payment request parameters (amount + optional checkout currency)
+ */
+export interface StripeCurrencyRequest {
+  /** Topup amount */
+  amount: number
+  /** Payment method identifier */
+  payment_method: string
+  /** Optional Stripe checkout currency ("usd" selects the secondary price) */
+  currency?: StripeCurrency
 }
 
 /**
