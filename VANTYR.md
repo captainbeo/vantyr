@@ -1499,3 +1499,29 @@ intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
   links; tag + branch pushed to remote 'public'.
 - Rollback: pinned-next21 retained — repoint compose.yaml + `docker
   compose up -d --no-build gateway`.
+
+## 2026-10-11 — Landing translations for fr/ru/zh/zh-TW/vi/ja (pinned-next24)
+
+`fix(i18n): translate Vantyr landing copy into fr, ru, zh, zh-TW, vi, ja`
+(edb563cc0, tag deploy/2026-10-11-landing-translations).
+
+- Scope: the Vantyr marketing keys (landing hero/stats/features/steps/
+  CTA, about page, footer columns) had been synced into the six legacy
+  locales as English placeholder values, so French, Russian, Chinese,
+  Vietnamese and Japanese visitors saw the landing in raw English.
+  Ports 833 translated values (value-only, zero key or design changes)
+  from the reference-tree commit 6d4f67c7b; the 26 redesign-only footer
+  keys (Community/Record/Top) were excluded — this deploy keeps the
+  existing design exactly (glass-glow ×8, ambient-drift ×4 live CSS;
+  no redesign markers).
+- Locale files only: 9 files changed, 833 insertions/deletions, no
+  code, no key changes. i18n:sync clean; parity suite 27/27; typecheck
+  clean. Pre-existing ja/vi placeholder drift (4 keys) unchanged.
+- Live: image pinned-next24 (f5be36030a73) built on-server from the
+  synced tree; gateway healthy; home/docs 200; live bundle
+  index.2408c9ba11.js contains fr/ru/ja/vi/zh/zh-TW landing strings
+  (verified); archive (sha256 4ca1641439…dbe027) + notice 200; Footer
+  option updated to the new tag + archive (backup
+  backups/footer-pre-next24.txt); tag + branch pushed to public.
+- Rollback: pinned-next23 retained — repoint compose.yaml + `docker
+  compose up -d --no-build gateway`.
