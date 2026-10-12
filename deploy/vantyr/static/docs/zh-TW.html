@@ -331,7 +331,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">開啟控制台</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">開啟數據看板</a>
   </div>
 </nav>
 
@@ -374,7 +374,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>為什麼有兩個 URL？</strong> Anthropic 的協定預期基底 URL 是伺服器根路徑（它會自行附加 <span class="mono">/v1/messages</span> 本身），而 OpenAI 工具預期的是帶版本號的根路徑。兩個 URL 之下都是同一把金鑰、同樣的模型、同樣的計費。</p>
   </div>
-  <p>您的金鑰：請在控制台的 <a href="https://vantyr.xyz/console">金鑰</a>。金鑰只會顯示一次——屆時請立即複製。這把金鑰在兩個 URL 上都有效。</p>
+  <p>您的金鑰：請在數據看板的 <a href="https://vantyr.xyz/dashboard">金鑰</a>。金鑰只會顯示一次——屆時請立即複製。這把金鑰在兩個 URL 上都有效。</p>
 </section>
 
 <section id="agents">
@@ -382,7 +382,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">為每個用戶端提供可直接複製貼上的設定指南。 <a href="https://vantyr.xyz/pricing">模型總覽頁面</a> 列出所有可使用的模型 ID。</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">桌面版 + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses 協定</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + 桌面應用程式</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">透過擴充功能</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">透過擴充功能</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI 相容</div></a>
@@ -428,6 +428,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <p>Codex 會從設定檔讀取 provider 區塊，並從環境變數取得金鑰。在 Codex CLI、Codex 桌面應用程式和 VS Code 擴充套件中的用法完全相同 —— 包含桌面應用程式 <span class="mono">auth.json</span> 路徑的完整逐步指南請見 <a href="#agent-codex">Codex 指南</a>。</p>
         <div class="copy-hint">~/.codex/config.toml — provider 區塊</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
@@ -440,11 +441,10 @@ env_key = "VANTYR_API_KEY"
 supports_websockets = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-        <div class="copy-hint">然後</div>
+        <div class="copy-hint">接著</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">Cline / Kilo Code 供應商設定</div>
         <div class="kv">
           <div class="k">API 供應商</div><div class="v">OpenAI Compatible</div>
@@ -533,12 +533,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>OpenAI 的終端機 Agent。Codex 使用 Responses 協定 API，並在其設定檔中需要一個 provider 項目。</p>
-    <div class="copy-hint">安裝</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — 新增 Vantyr provider</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>OpenAI 的程式設計 agent —— 終端機 CLI、桌面應用程式或 VS Code 擴充套件。三者讀取同一個 <span class="mono">config.toml</span>；差別只在金鑰的提供方式：環境變數（建議，CLI）或 Codex 管理的 <span class="mono">auth.json</span>（桌面應用程式）。選擇你的介面：</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI（建議）</button>
+      <button class="tab" data-panel="t-codex-app">Codex 桌面應用程式</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. 安裝 CLI</strong>（Node 18+）：</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. 編輯設定檔。</strong>開啟 <span class="mono">~/.codex/config.toml</span>（macOS/Linux）或 <span class="mono">%USERPROFILE%\.codex\config.toml</span>（Windows）—— 不存在就建立 —— 把以下內容放在最上方、任何 <span class="mono">[section]</span> 標頭之前：</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -553,13 +559,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">把金鑰放進環境變數</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. 把金鑰放進環境變數</strong>（上面的 <span class="mono">env_key</span> 指定了這個變數名）：</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>請保持 <span class="mono">name = "OpenAI"</span> 原樣不變——Codex 的遠端壓縮依賴這個顯示名稱來運作。provider ID（<span class="mono">vantyr</span>）才是您的 <span class="mono">model_provider</span> 所選擇的對象。如果您同時用 OpenAI 帳號使用 Codex，兩份設定可以共存——provider 區塊只會路由 Vantyr 的流量。</p></div>
-  </div>
+      <p><strong>4. 在專案目錄中執行 <span class="mono">codex</span>。</strong>如果 Codex 裡已有 ChatGPT 登入，不會被覆寫 —— provider 區塊只路由 Vantyr 流量。</p>
+      <div class="callout"><p>保持 <span class="mono">name = "OpenAI"</span> 原樣 —— Codex 的遠端壓縮依賴這個顯示名稱。provider ID（<span class="mono">vantyr</span>）才是 <span class="mono">model_provider</span> 選擇的值。模型 ID 可從 <a href="https://vantyr.xyz/pricing">模型總覽</a>自由選擇。</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>桌面應用程式和 VS Code 擴充套件無法可靠讀取 shell 環境變數，因此金鑰要放進 Codex 管理的認證檔案。共四步：</p>
+      <p><strong>1. 找到 Codex 主目錄：</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. 編輯 <span class="mono">config.toml</span></strong> —— 與上面 CLI 分頁相同的檔案與內容，僅 provider 區塊有一處不同：把 <span class="mono">env_key</span> 換成 <span class="mono">requires_openai_auth = true</span>：</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. 把金鑰放進 <span class="mono">auth.json</span></strong>（同一目錄）。如果該檔案已存在且包含 ChatGPT 工作階段，只設定 <span class="mono">OPENAI_API_KEY</span> 欄位，其餘保持不動：</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. 重新啟動 Codex 應用程式。</strong>啟動時會載入 provider 與金鑰；用 <span class="mono">/model</span> 選擇模型。</p>
+      <div class="callout warn"><p><span class="mono">auth.json</span> 保存明文金鑰：絕不要提交、截圖或傳送給任何人（包括支援人員）。如果你同時用 ChatGPT 訂閱登入 Codex，請為 Vantyr 使用獨立的 Codex 設定檔（<span class="mono">CODEX_HOME</span>），避免兩者混淆。</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>Cursor 自家的 Agent 模型無法指向自訂閘道——可靠的做法是在 Cursor <em>內部</em> 執行一個 OpenAI 相容的擴充功能。只有該擴充功能的流量會計費到您的 Vantyr 錢包；Cursor 的聊天與 Tab 仍繼續使用 Cursor 自家的模型。</p>
     <div class="copy-hint">在 Cursor 內安裝 Cline（整合式終端機）</div>
@@ -748,7 +784,7 @@ print(resp.choices[0].message.content)</pre>
   <h2>疑難排解<span class="tick">//</span> 常見問題</h2>
   <dl class="err-box">
     <dt>401 Invalid API key</dt>
-    <dd>金鑰錯誤或打錯字。金鑰只在建立時顯示一次——如果弄丟了，請在控制台建立新的。也請確認您為 Agent 設對了環境變數（例如<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>，或 <span class="mono">OPENAI_API_KEY</span> 等，視工具而定）。</dd>
+    <dd>金鑰錯誤或打錯字。金鑰只在建立時顯示一次——如果弄丟了，請在數據看板建立新的。也請確認您為 Agent 設對了環境變數（例如<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>，或 <span class="mono">OPENAI_API_KEY</span> 等，視工具而定）。</dd>
     <dt>404 / Not Found</dt>
     <dd>幾乎都是基底 URL 用錯——Anthropic 用戶端需要 <span class="mono">https://vantyr.xyz</span> （不含 <span class="mono">/v1</span>），OpenAI 用戶端則需要 <span class="mono">https://vantyr.xyz/v1</span>。請對照本頁 <a href="#base-urls">頁首</a>.</dd>
     <dt>Model not found / no channel available</dt>
@@ -780,7 +816,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">模型與定價</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
   <a href="https://github.com/captainbeo/vantyr">原始碼（AGPL）</a>
-  <span class="right">docs rev 2026-10-08</span>
+  <span class="right">docs rev 2026-10-12</span>
 </footer>
 
 </div>

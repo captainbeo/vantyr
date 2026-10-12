@@ -83,7 +83,7 @@ function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           items: getSecuritySectionNavItems(t),
         },
         {
-          title: t('Console Content'),
+          title: t('Dashboard Content'),
           icon: Layout,
           items: getContentSectionNavItems(t),
         },

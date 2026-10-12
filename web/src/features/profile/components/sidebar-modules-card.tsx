@@ -76,7 +76,7 @@ export function SidebarModulesCard() {
     },
     {
       key: 'console',
-      title: t('Console Area'),
+      title: t('Dashboard Area'),
       description: t('Data management and log viewing'),
       modules: [
         {

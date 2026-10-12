@@ -154,7 +154,7 @@ export function IoNetDeploymentSettingsSection({
                 <SettingsSwitchContent>
                   <FormLabel>{t('Enable io.net deployments')}</FormLabel>
                   <FormDescription>
-                    {t('Enable io.net model deployment service in console')}
+                    {t('Enable io.net model deployment service in dashboard')}
                   </FormDescription>
                 </SettingsSwitchContent>
                 <FormControl>

@@ -331,7 +331,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Konsole öffnen</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">Dashboard öffnen</a>
   </div>
 </nav>
 
@@ -374,7 +374,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>Warum zwei URLs?</strong> Das Anthropic-Protokoll erwartet als Basis-URL den Server-Root (es hängt <span class="mono">/v1/messages</span> selbst an), während OpenAI-Tools den versionierten Root erwarten. Gleicher Schlüssel, gleiche Modelle, gleiche Abrechnung auf beiden.</p>
   </div>
-  <p>Dein Schlüssel: Erstelle einen in der Konsole unter <a href="https://vantyr.xyz/console">Schlüssel</a>. Er wird nur einmal angezeigt — kopiere ihn dann. Der Schlüssel funktioniert auf beiden URLs.</p>
+  <p>Dein Schlüssel: Erstelle einen im Dashboard unter <a href="https://vantyr.xyz/dashboard">Schlüssel</a>. Er wird nur einmal angezeigt — kopiere ihn dann. Der Schlüssel funktioniert auf beiden URLs.</p>
 </section>
 
 <section id="agents">
@@ -382,7 +382,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">Anleitungen mit Copy-Paste-Konfiguration für jeden Client. Die <a href="https://vantyr.xyz/pricing">Modellübersicht</a> listet jede Modell-ID, die du nutzen kannst.</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Desktop + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses-API</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + Desktop-App</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">per Erweiterung</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">per Erweiterung</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI-kompatibel</div></a>
@@ -428,6 +428,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <p>Codex liest einen Provider-Block aus seiner Konfigurationsdatei und nimmt den Schlüssel aus einer Umgebungsvariablen. Das funktioniert identisch in der Codex-CLI, der Codex-Desktop-App und der VS-Code-Erweiterung — die vollständige Schritt-für-Schritt-Anleitung (inklusive des <span class="mono">auth.json</span>-Wegs für die Desktop-App) steht im <a href="#agent-codex">Codex-Guide</a>.</p>
         <div class="copy-hint">~/.codex/config.toml — Provider-Block</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
@@ -443,8 +444,7 @@ stream_max_retries = 1</pre>
         <div class="copy-hint">dann</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">Provider-Einstellungen von Cline / Kilo Code</div>
         <div class="kv">
           <div class="k">API-Provider</div><div class="v">OpenAI-kompatibel</div>
@@ -533,12 +533,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>OpenAIs Terminal-Agent. Codex spricht die Responses-API und benötigt einen Provider-Eintrag in seiner Konfiguration.</p>
-    <div class="copy-hint">Installieren</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — den Vantyr-Provider hinzufügen</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>OpenAIs Coding-Agent — Terminal-CLI, Desktop-App oder VS-Code-Erweiterung. Alle drei lesen dieselbe <span class="mono">config.toml</span>; sie unterscheiden sich nur darin, wie der Schlüssel geliefert wird: über eine Umgebungsvariable (empfohlen, CLI) oder über Codex' verwaltetes <span class="mono">auth.json</span> (Desktop-App). Wähle deine Oberfläche:</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI (empfohlen)</button>
+      <button class="tab" data-panel="t-codex-app">Codex Desktop-App</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. CLI installieren</strong> (Node 18+):</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. Konfigurationsdatei bearbeiten.</strong> Öffne <span class="mono">~/.codex/config.toml</span> (macOS/Linux) oder <span class="mono">%USERPROFILE%\.codex\config.toml</span> (Windows) — erstelle sie bei Bedarf — und setze das oben, vor allen <span class="mono">[Abschnitts]</span>-Headern:</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -553,13 +559,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">Schlüssel in der Umgebung</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. Schlüssel in die Umgebung</strong> (die <span class="mono">env_key</span>-Zeile oben benennt diese Variable):</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>Behalte <span class="mono">name = "OpenAI"</span> genau — die Remote-Kompaktierung von Codex orientiert sich an diesem Anzeigenamen. Die Provider-ID (<span class="mono">vantyr</span>) ist es, die dein <span class="mono">model_provider</span> auswählt. Wenn du Codex zusätzlich mit einem OpenAI-Konto nutzt, koexistieren die beiden Konfigurationen — der Provider-Block routet nur den Vantyr-Traffic.</p></div>
-  </div>
+      <p><strong>4. Starte <span class="mono">codex</span></strong> in deinem Projektverzeichnis. Eine bestehende ChatGPT-Anmeldung in Codex wird nicht überschrieben — der Provider-Block routet nur den Vantyr-Traffic.</p>
+      <div class="callout"><p>Behalte <span class="mono">name = "OpenAI"</span> genau — die Remote-Kompaktierung von Codex orientiert sich an diesem Anzeigenamen. Die Provider-ID (<span class="mono">vantyr</span>) ist es, die dein <span class="mono">model_provider</span> auswählt. Modell-IDs sind deine Wahl aus der <a href="https://vantyr.xyz/pricing">Modellübersicht</a>.</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>Die Desktop-App und die VS-Code-Erweiterung lesen Shell-Umgebungsvariablen nicht zuverlässig, daher kommt der Schlüssel stattdessen in Codex’ verwaltete Auth-Datei. Vier Schritte:</p>
+      <p><strong>1. Codex-Home-Verzeichnis finden:</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. Bearbeite <span class="mono">config.toml</span></strong> — dieselbe Datei, derselbe Inhalt wie im CLI-Tab oben, mit einem Unterschied im Provider-Block: ersetze <span class="mono">env_key</span> durch <span class="mono">requires_openai_auth = true</span>:</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. Schlüssel in <span class="mono">auth.json</span></strong> (gleiches Verzeichnis). Existiert die Datei schon mit einer ChatGPT-Sitzung, setze nur das Feld <span class="mono">OPENAI_API_KEY</span> und lasse den Rest unangetastet:</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. Codex-App neu starten.</strong> Sie übernimmt Provider und Schlüssel beim Start; wähle ein Modell über <span class="mono">/model</span>.</p>
+      <div class="callout warn"><p><span class="mono">auth.json</span> enthält einen Klartext-Schlüssel: niemals committen, Screenshots davon machen oder an irgendjemanden schicken (auch nicht an den Support). Nutzt du Codex zusätzlich mit einem ChatGPT-Abo, verwende ein getrenntes Codex-Profil (<span class="mono">CODEX_HOME</span>) für das Vantyr-Setup, damit sich beide nie vermischen.</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>Cursors eigene Agent-Modelle lassen sich nicht auf ein eigenes Gateway richten — der zuverlässige Weg ist eine OpenAI-kompatible Erweiterung <em>innerhalb</em> von Cursor auszuführen. Nur der Traffic der Erweiterung wird auf dein Vantyr-Wallet abgerechnet; Cursors Chat und Tab nutzen weiterhin Cursors Modelle.</p>
     <div class="copy-hint">Cline in Cursor installieren (integriertes Terminal)</div>
@@ -748,7 +784,7 @@ print(resp.choices[0].message.content)</pre>
   <h2>Fehlerbehebung<span class="tick">//</span> häufige Fehler</h2>
   <dl class="err-box">
     <dt>401 Ungültiger API-Schlüssel</dt>
-    <dd>Der Schlüssel ist falsch oder abgetippt. Schlüssel werden nur einmal bei der Erstellung angezeigt — wenn du ihn verloren hast, erstelle einen neuen in der Konsole. Prüfe auch, dass die richtige Umgebungsvariable für deinen Agenten gesetzt ist (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, oder <span class="mono">OPENAI_API_KEY</span> je nach Tool).</dd>
+    <dd>Der Schlüssel ist falsch oder abgetippt. Schlüssel werden nur einmal bei der Erstellung angezeigt — wenn du ihn verloren hast, erstelle einen neuen im Dashboard. Prüfe auch, dass die richtige Umgebungsvariable für deinen Agenten gesetzt ist (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, oder <span class="mono">OPENAI_API_KEY</span> je nach Tool).</dd>
     <dt>404 / Not Found</dt>
     <dd>Fast immer die falsche Basis-URL — Anthropic-Clients brauchen <span class="mono">https://vantyr.xyz</span> (ohne <span class="mono">/v1</span>), OpenAI-Clients brauchen <span class="mono">https://vantyr.xyz/v1</span>. Prüfe beide Karten am <a href="#base-urls">Seitenanfang</a>.</dd>
     <dt>Modell nicht gefunden / kein Kanal verfügbar</dt>
@@ -763,7 +799,7 @@ print(resp.choices[0].message.content)</pre>
 <section id="faq">
   <h2>FAQ<span class="tick">//</span></h2>
   <h3>Wo sehe ich meine Nutzung und Ausgaben?</h3>
-  <p>Nutzungs-Seite in der Konsole: jede Anfrage mit Modell, Tokens und abgerechnetem Betrag. Wallet-Seite: Guthaben und Auflade-Historie.</p>
+  <p>Nutzungs-Seite im Dashboard: jede Anfrage mit Modell, Tokens und abgerechnetem Betrag. Wallet-Seite: Guthaben und Auflade-Historie.</p>
   <h3>Welches Modell soll ich wählen?</h3>
   <p><span class="mono">claude-sonnet-5</span> für die meisten Coding- und Chat-Aufgaben (beste Qualität pro Dollar); <span class="mono">claude-fable-5</span> wenn die Aufgabe wirklich anspruchsvoll ist; <span class="mono">gpt-5-6-luna</span> oder <span class="mono">gpt-6-sol</span> wenn Volumen wichtiger ist als Spitzenqualität.</p>
   <h3>Unterstützt ihr Streaming / Tools / strukturierte Ausgaben?</h3>
@@ -780,7 +816,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">Modelle &amp; Preise</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord-Community</a>
   <a href="https://github.com/captainbeo/vantyr">Quellcode (AGPL)</a>
-  <span class="right">docs rev 2026-10-08</span>
+  <span class="right">docs rev 2026-10-12</span>
 </footer>
 
 </div>

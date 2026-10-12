@@ -331,7 +331,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Mở Bảng điều khiển</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">Mở Bảng điều khiển</a>
   </div>
 </nav>
 
@@ -374,7 +374,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>Vì sao có hai URL?</strong> Giao thức của Anthropic yêu cầu base là gốc máy chủ (nó tự nối <span class="mono">/v1/messages</span> vào), còn các công cụ OpenAI cần gốc có phiên bản. Cùng một khóa, cùng mô hình, cùng cách tính phí trên cả hai.</p>
   </div>
-  <p>Khóa của bạn: tạo khóa trong bảng điều khiển, tại mục <a href="https://vantyr.xyz/console">Khóa</a>. Khóa chỉ hiển thị một lần — hãy sao chép ngay lúc đó. Khóa dùng được cho cả hai URL.</p>
+  <p>Khóa của bạn: tạo khóa trong bảng điều khiển, tại mục <a href="https://vantyr.xyz/dashboard">Khóa</a>. Khóa chỉ hiển thị một lần — hãy sao chép ngay lúc đó. Khóa dùng được cho cả hai URL.</p>
 </section>
 
 <section id="agents">
@@ -382,7 +382,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">Hướng dẫn kèm config copy-paste cho từng client. Trang <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> liệt kê mọi model ID bạn có thể dùng.</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Desktop + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Giao thức Responses</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + ứng dụng desktop</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">qua extension</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">qua extension</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">Tương thích OpenAI</div></a>
@@ -428,7 +428,8 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
-        <div class="copy-hint">~/.codex/config.toml — provider block</div>
+        <p>Codex đọc một khối provider từ tệp cấu hình và lấy khóa từ biến môi trường. Hoạt động giống nhau trong Codex CLI, ứng dụng desktop Codex và tiện ích mở rộng VS Code — hướng dẫn từng bước đầy đủ (kể cả đường đi <span class="mono">auth.json</span> cho ứng dụng desktop) nằm trong <a href="#agent-codex">hướng dẫn Codex</a>.</p>
+        <div class="copy-hint">~/.codex/config.toml — khối provider</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
 
@@ -440,11 +441,10 @@ env_key = "VANTYR_API_KEY"
 supports_websockets = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-        <div class="copy-hint">rồi</div>
+        <div class="copy-hint">sau đó</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">Cài đặt provider của Cline / Kilo Code</div>
         <div class="kv">
           <div class="k">Nhà cung cấp API</div><div class="v">OpenAI Compatible</div>
@@ -533,12 +533,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>Agent dòng lệnh của OpenAI. Codex dùng API Responses và cần một mục provider trong config của nó.</p>
-    <div class="copy-hint">Cài đặt</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — thêm provider Vantyr</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>Agent lập trình của OpenAI — CLI terminal, ứng dụng desktop hoặc tiện ích VS Code. Cả ba đều đọc cùng một <span class="mono">config.toml</span>; chỉ khác ở cách cung cấp khóa: biến môi trường (khuyên dùng, CLI) hoặc <span class="mono">auth.json</span> do Codex quản lý (ứng dụng desktop). Chọn giao diện của bạn:</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI (khuyên dùng)</button>
+      <button class="tab" data-panel="t-codex-app">Ứng dụng desktop Codex</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. Cài CLI</strong> (Node 18+):</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. Sửa tệp cấu hình.</strong> Mở <span class="mono">~/.codex/config.toml</span> (macOS/Linux) hoặc <span class="mono">%USERPROFILE%\.codex\config.toml</span> (Windows) — tạo mới nếu chưa có — và đặt khối này lên đầu, trước mọi header <span class="mono">[section]</span>:</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -553,13 +559,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">Khóa nằm trong biến môi trường</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. Đặt khóa vào môi trường</strong> (dòng <span class="mono">env_key</span> ở trên đặt tên cho biến này):</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>Giữ nguyên <span class="mono">name = "OpenAI"</span> — tính năng nén từ xa của Codex bám vào tên hiển thị đó. ID provider (<span class="mono">vantyr</span>) chính là thứ mà <span class="mono">model_provider</span> của bạn chọn. Nếu bạn cũng dùng Codex với tài khoản OpenAI, hai config tồn tại song song — khối provider chỉ điều hướng lưu lượng tới Vantyr.</p></div>
-  </div>
+      <p><strong>4. Chạy <span class="mono">codex</span></strong> trong thư mục dự án. Nếu Codex đã có đăng nhập ChatGPT thì nó không bị ghi đè — khối provider chỉ định tuyến lưu lượng Vantyr.</p>
+      <div class="callout"><p>Giữ nguyên <span class="mono">name = "OpenAI"</span> — quá trình nén từ xa của Codex dựa trên tên hiển thị này. ID provider (<span class="mono">vantyr</span>) chính là thứ <span class="mono">model_provider</span> chọn. ID mô hình do bạn chọn từ <a href="https://vantyr.xyz/pricing">Tổng quan mô hình</a>.</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>Ứng dụng desktop và tiện ích VS Code không đọc biến môi trường shell một cách đáng tin cậy, nên khóa được đặt vào tệp xác thực do Codex quản lý. Bốn bước:</p>
+      <p><strong>1. Tìm thư mục home của Codex:</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. Sửa <span class="mono">config.toml</span></strong> — cùng tệp và cùng nội dung như tab CLI phía trên, chỉ khác một điểm trong khối provider: thay <span class="mono">env_key</span> bằng <span class="mono">requires_openai_auth = true</span>:</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. Đặt khóa vào <span class="mono">auth.json</span></strong> (cùng thư mục). Nếu tệp đã tồn tại với phiên ChatGPT, chỉ đặt trường <span class="mono">OPENAI_API_KEY</span> và để phần còn lại nguyên vẹn:</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. Khởi động lại ứng dụng Codex.</strong> Nó sẽ nhận provider và khóa khi khởi chạy; chọn mô hình qua <span class="mono">/model</span>.</p>
+      <div class="callout warn"><p><span class="mono">auth.json</span> chứa khóa dạng thô: tuyệt đối không commit, chụp màn hình hay gửi cho bất kỳ ai (kể cả bộ phận hỗ trợ). Nếu bạn cũng dùng Codex với thuê bao ChatGPT, hãy dùng một hồ sơ Codex riêng (<span class="mono">CODEX_HOME</span>) cho thiết lập Vantyr để hai thứ không trộn lẫn.</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>Các mô hình agent riêng của Cursor không thể trỏ tới gateway tùy chỉnh — cách đáng tin là chạy một extension tương thích OpenAI <em>ngay trong</em> Cursor. Chỉ lưu lượng của extension mới tính vào ví Vantyr; chat và Tab của Cursor vẫn dùng mô hình của Cursor.</p>
     <div class="copy-hint">Cài Cline ngay trong Cursor (terminal tích hợp)</div>
@@ -780,7 +816,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">mô hình &amp; bảng giá</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">cộng đồng Discord</a>
   <a href="https://github.com/captainbeo/vantyr">mã nguồn (AGPL)</a>
-  <span class="right">tài liệu bản cập nhật 2026-10-08</span>
+  <span class="right">tài liệu bản cập nhật 2026-10-12</span>
 </footer>
 
 </div>

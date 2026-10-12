@@ -331,7 +331,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">Konsolu Aç</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">Paneli Aç</a>
   </div>
 </nav>
 
@@ -374,7 +374,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>Neden iki URL?</strong> Anthropic'ın protokolü temel adresin sunucu kökü olmasını bekler (kendisi <span class="mono">/v1/messages</span> son ekini ekler), OpenAI araçları ise sürümlü kökü bekler. Her ikisinde de aynı anahtar, aynı modeller, aynı faturalandırma.</p>
   </div>
-  <p>Anahtarın: konsolda <a href="https://vantyr.xyz/console">Anahtarlar</a>. Yalnızca bir kez gösterilir — o anda kopyala. Anahtar her iki URL'de de çalışır.</p>
+  <p>Anahtarın: panelde <a href="https://vantyr.xyz/dashboard">Anahtarlar</a>. Yalnızca bir kez gösterilir — o anda kopyala. Anahtar her iki URL'de de çalışır.</p>
 </section>
 
 <section id="agents">
@@ -382,7 +382,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">Her istemci için kopyala-yapıştır yapılandırmalı rehberler. <a href="https://vantyr.xyz/pricing">Model Genel Bakış sayfası</a> kullanabileceğin tüm model ID'lerini listeler.</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">Masaüstü + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses protokolü</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + masaüstü uygulaması</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">uzantı üzerinden</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">uzantı üzerinden</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI uyumlu</div></a>
@@ -428,6 +428,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <p>Codex, yapılandırma dosyasından bir sağlayıcı bloğu okur ve anahtarı bir ortam değişkeninden alır. Codex CLI, Codex masaüstü uygulaması ve VS Code uzantısında aynı şekilde çalışır — adım adım tam rehber (masaüstü uygulamasının <span class="mono">auth.json</span> yolu dahil) <a href="#agent-codex">Codex rehberinde</a>.</p>
         <div class="copy-hint">~/.codex/config.toml — sağlayıcı bloğu</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
@@ -443,8 +444,7 @@ stream_max_retries = 1</pre>
         <div class="copy-hint">sonra</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">Cline / Kilo Code sağlayıcı ayarları</div>
         <div class="kv">
           <div class="k">API Sağlayıcı</div><div class="v">OpenAI Uyumlu</div>
@@ -533,12 +533,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>OpenAI'nin terminal ajanı. Codex, Responses protokol API'siyle konuşur ve yapılandırmasında bir sağlayıcı girdisi alır.</p>
-    <div class="copy-hint">Kurulum</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — Vantyr sağlayıcısını ekle</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>OpenAI'nin kodlama ajanı — terminal CLI, masaüstü uygulaması veya VS Code uzantısı. Üçü de aynı <span class="mono">config.toml</span>'i okur; yalnızca anahtarın verilme şekli farklıdır: bir ortam değişkeni (önerilen, CLI) veya Codex'in yönettiği <span class="mono">auth.json</span> (masaüstü uygulaması). Yüzeyini seç:</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI (önerilen)</button>
+      <button class="tab" data-panel="t-codex-app">Codex masaüstü uygulaması</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. CLI'yi kur</strong> (Node 18+):</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. Yapılandırma dosyasını düzenle.</strong> <span class="mono">~/.codex/config.toml</span> (macOS/Linux) veya <span class="mono">%USERPROFILE%\.codex\config.toml</span> (Windows) dosyasını aç — yoksa oluştur — ve bunu tüm <span class="mono">[bölüm]</span> başlıklarından önce, en üste koy:</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -553,13 +559,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">Anahtar ortam değişkeninde</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. Anahtarını ortama koy</strong> (yukarıdaki <span class="mono">env_key</span> bu değişkeni adlandırır):</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>Şunu değiştirmeden bırak: <span class="mono">name = "OpenAI"</span> — Codex'in uzak sıkıştırması bu görünen adı baz alır. Sağlayıcı ID'si (<span class="mono">vantyr</span>), <span class="mono">model_provider</span> satırının seçtiği budur. Codex'i ayrıca bir OpenAI hesabıyla kullanıyorsan iki yapılandırma yan yana var olur — sağlayıcı bloğu yalnızca Vantyr trafiğini yönlendirir.</p></div>
-  </div>
+      <p><strong>4. Proje dizininde <span class="mono">codex</span>'i çalıştır.</strong> Codex'te zaten bir ChatGPT oturumu varsa üzerine yazılmaz — sağlayıcı bloğu yalnızca Vantyr trafiğini yönlendirir.</p>
+      <div class="callout"><p><span class="mono">name = "OpenAI"</span> değerini aynen koru — Codex'in uzak sıkıştırması bu görünen adı temel alır. Sağlayıcı kimliği (<span class="mono">vantyr</span>), <span class="mono">model_provider</span>'in seçtiği şeydir. Model kimliklerini <a href="https://vantyr.xyz/pricing">Model Genel Bakış</a>'tan dilediğin gibi seç.</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>Masaüstü uygulaması ve VS Code uzantısı kabuk ortam değişkenlerini güvenilir biçimde okumaz; bu yüzden anahtar Codex'in yönettiği kimlik doğrulama dosyasına gider. Dört adım:</p>
+      <p><strong>1. Codex ana dizinini bul:</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. <span class="mono">config.toml</span> dosyasını düzenle</strong> — yukarıdaki CLI sekmesiyle aynı dosya ve aynı içerik, sağlayıcı bloğunda tek farkla: <span class="mono">env_key</span> yerine <span class="mono">requires_openai_auth = true</span> yaz:</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. Anahtarı <span class="mono">auth.json</span> dosyasına koy</strong> (aynı dizin). Dosyada zaten bir ChatGPT oturumu varsa yalnızca <span class="mono">OPENAI_API_KEY</span> alanını ayarla, gerisine dokunma:</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. Codex uygulamasını yeniden başlat.</strong> Sağlayıcıyı ve anahtarı açılışta alır; <span class="mono">/model</span> komutuyla bir model seç.</p>
+      <div class="callout warn"><p><span class="mono">auth.json</span> düz bir sır içerir: asla commit etme, ekran görüntüsü alma veya kimseye (destek dahil) gönderme. Codex'i aynı zamanda bir ChatGPT aboneliğiyle kullanıyorsan, ikisi karışmasın diye Vantyr kurulumu için ayrı bir Codex profili (<span class="mono">CODEX_HOME</span>) kullan.</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>Cursor'ın kendi ajan modelleri özel bir ağ geçidine yönlendirilemiyor — güvenilir yol, Cursor <em>içinde</em> içinde OpenAI uyumlu bir uzantı çalıştırmaktır. Yalnızca uzantının trafiği Vantyr cüzdanına faturalanır; Cursor'ın sohbeti ve Tab'ı Cursor'ın modellerini kullanmaya devam eder.</p>
     <div class="copy-hint">Cline'ı Cursor içine kur (tümleşik terminal)</div>
@@ -748,7 +784,7 @@ print(resp.choices[0].message.content)</pre>
   <h2>Sorun Giderme<span class="tick">//</span> yaygın sorunlar</h2>
   <dl class="err-box">
     <dt>401 Geçersiz API anahtarı</dt>
-    <dd>Anahtar hatalı veya yanlış yazılmış. Anahtarlar oluşturulurken yalnızca bir kez gösterilir — kaybettiysen konsolda yeni bir tane oluştur. Ayrıca ajanın için doğru ortam değişkeninin ayarlandığını kontrol et (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, veya <span class="mono">OPENAI_API_KEY</span> — araca göre değişir).</dd>
+    <dd>Anahtar hatalı veya yanlış yazılmış. Anahtarlar oluşturulurken yalnızca bir kez gösterilir — kaybettiysen panelde yeni bir tane oluştur. Ayrıca ajanın için doğru ortam değişkeninin ayarlandığını kontrol et (<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>, veya <span class="mono">OPENAI_API_KEY</span> — araca göre değişir).</dd>
     <dt>404 / Not Found</dt>
     <dd>Neredeyse her zaman yanlış temel URL'dir — Anthropic istemcileri <span class="mono">https://vantyr.xyz</span> (olmadan <span class="mono">/v1</span>) ister; OpenAI istemcileri <span class="mono">https://vantyr.xyz/v1</span>. Sayfanın başındaki <a href="#base-urls">iki kartı da kontrol et</a>.</dd>
     <dt>Model bulunamadı / uygun kanal yok</dt>
@@ -763,7 +799,7 @@ print(resp.choices[0].message.content)</pre>
 <section id="faq">
   <h2>FAQ<span class="tick">//</span></h2>
   <h3>Kullanımımı ve harcamamı nerede görürüm?</h3>
-  <p>Konsoldaki Usage sayfası: model, token ve faturalanan tutarla birlikte her istek. Wallet sayfası: bakiye ve yükleme geçmişi.</p>
+  <p>Paneldeki Usage sayfası: model, token ve faturalanan tutarla birlikte her istek. Wallet sayfası: bakiye ve yükleme geçmişi.</p>
   <h3>Hangi modeli seçmeliyim?</h3>
   <p><span class="mono">claude-sonnet-5</span> çoğu kodlama ve sohbet için (dolar başına en iyi kalite); <span class="mono">claude-fable-5</span> iş gerçekten zorsa; <span class="mono">gpt-5-6-luna</span> veya <span class="mono">gpt-6-sol</span> hacim en yüksek kaliteden daha önemliyse.</p>
   <h3>Akış, araç çağrıları ve yapılandırılmış çıktı destekliyor musunuz?</h3>
@@ -780,7 +816,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">modeller &amp; fiyatlandırma</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord topluluğu</a>
   <a href="https://github.com/captainbeo/vantyr">kaynak (AGPL)</a>
-  <span class="right">docs rev 2026-10-08</span>
+  <span class="right">docs rev 2026-10-12</span>
 </footer>
 
 </div>

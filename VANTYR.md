@@ -1569,3 +1569,42 @@ intro` (0844f3962, tag `deploy/2026-10-09-page-unification`).
 - Rollback: pinned-next23 (8e6862dbb66d) is the prior verified
   rollback point — repoint compose.yaml + `docker compose up -d
   --no-build gateway`.
+## 2026-10-12 — Console → Dashboard rename + Codex desktop-app guide
+
+**Scope (files-only, NOT deployed):** user-visible "Console" wording
+renamed to "Dashboard" across the web app, /docs static site (all 12
+languages), and the ticket-bot plans string. Codex guide on /docs
+restructured as a step-by-step with two tabs (CLI env-key; desktop app
+via `requires_openai_auth` + `auth.json`), mirroring the codex-
+everywhere pattern but with our compat contract (spec 4.3/4.4: base_url
+/v1, name "OpenAI" for remote compaction, never overwrite an existing
+ChatGPT auth.json).
+
+- Web app: top-nav link, admin Header/Sidebar module labels, passkey
+  placeholder, two sentence keys — 7 i18n keys swapped in all 13 locale
+  files (en + 12 translations, per-locale product word: 数据看板/Panel/
+  لوحة التحكم/etc.), static-keys.ts updated. The JSON config keys
+  (HeaderNavModules.console, sidebar console group) and the /console →
+  /dashboard legacy redirect are unchanged — rename is display-only.
+  WebPreview "Console" (terminal log panel) and io.net's own console
+  strings stay as-is (different meaning).
+- /docs: "Open Console" CTA → "Open Dashboard", hrefs vantyr.xyz/console
+  → /dashboard (legacy redirect covers old inbound links), prose in 4
+  spots per language; Codex section now CLI + desktop app tabs with
+  copy-paste config.toml (both auth modes), auth.json JSON block, 4
+  numbered steps, and a secret-handling warning; docs rev stamps bumped
+  to 2026-10-12. Pricing "as of" date untouched.
+- Ticket bot: "available from the console" → "dashboard" (bot.py
+  render_plans_block).
+- Verification: new use-top-nav-links hook test (fails pre-change,
+  passes post: title Dashboard, route /dashboard, module toggle) +
+  locale-parity 29/29, maintenance/profile/home suites 26/26,
+  tsgo -b clean, scoped oxlint clean, oxfmt clean. Docs pages verified
+  in browser (EN/AR/zh-CN): tabs switch, auth.json block present, RTL
+  intact, CTA updated. Old "Console" keys/wording: 0 occurrences left
+  in locales and docs tree.
+
+Deploy: web changes ride the next image build; /docs tree + bot.py
+sync to the server per the usual rsync + `docker compose restart`
+round. Nothing here touches HomePageContent DB option (standing owner
+decision).

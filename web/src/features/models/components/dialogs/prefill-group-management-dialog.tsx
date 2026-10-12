@@ -394,7 +394,7 @@ export function PrefillGroupManagementDialog({
           </>
         }
         description={t(
-          'Create reusable bundles of models, tags, endpoints, and user groups to speed up configuration elsewhere in the console.'
+          'Create reusable bundles of models, tags, endpoints, and user groups to speed up configuration elsewhere in the dashboard.'
         )}
         contentClassName={cn(
           'w-[calc(100vw-2rem)] sm:max-w-[52rem]',

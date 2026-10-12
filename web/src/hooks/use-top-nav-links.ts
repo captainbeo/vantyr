@@ -67,9 +67,9 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Home'), href: '/' })
   }
 
-  // Console -> /dashboard (new console path)
+  // Console module -> /dashboard (the product surface is named Dashboard)
   if (modules?.console !== false) {
-    links.push({ title: t('Console'), href: '/dashboard' })
+    links.push({ title: t('Dashboard'), href: '/dashboard' })
   }
 
   // Pricing
