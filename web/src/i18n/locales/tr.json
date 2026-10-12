@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "Fiyat Kimliği (USD)",
   "Optional second price in USD; empty disables USD checkout": "İsteğe bağlı ikinci USD fiyatı; boş bırakılırsa USD ödeme devre dışı kalır",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "İkincil Epay ağ geçidi (isteğe bağlı)",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "Burada listelenen ödeme yöntemleri USD fiyatlandırmalı ikinci bir Epay uyumlu ağ geçidine (örn. BEpusdt) yönlendirilir; diğerleri yukarıdaki birincil ağ geçidini kullanır.",
+  "Secondary gateway address": "İkincil ağ geçidi adresi",
+  "Secondary gateway merchant ID": "İkincil ağ geçidi işyeri kimliği",
+  "Secondary gateway secret key": "İkincil ağ geçidi gizli anahtarı",
+  "Secondary gateway payment methods": "İkincil ağ geçidi ödeme yöntemleri",
+  "Site root of the secondary gateway": "İkincil ağ geçidinin site kök adresi",
+  "Comma-separated payment method types routed to the secondary gateway": "İkincil ağ geçidine yönlendirilen, virgülle ayrılmış ödeme yöntemi türleri",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

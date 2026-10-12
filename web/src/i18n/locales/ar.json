@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "معرّف السعر (USD)",
   "Optional second price in USD; empty disables USD checkout": "سعر ثانٍ اختياري بالدولار؛ تركه فارغًا يعطّل الدفع بالدولار",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "بوابة Epay الثانوية (اختيارية)",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "طرق الدفع المدرجة هنا تُوجَّه إلى بوابة ثانية متوافقة مع Epay (مثل BEpusdt) بأسعار بالدولار؛ وغيرها يستخدم البوابة الأساسية أعلاه.",
+  "Secondary gateway address": "عنوان البوابة الثانوية",
+  "Secondary gateway merchant ID": "معرّف التاجر للبوابة الثانوية",
+  "Secondary gateway secret key": "المفتاح السري للبوابة الثانوية",
+  "Secondary gateway payment methods": "طرق الدفع للبوابة الثانوية",
+  "Site root of the secondary gateway": "الجذر الرئيسي لموقع البوابة الثانوية",
+  "Comma-separated payment method types routed to the secondary gateway": "أنواع طرق الدفع المفصولة بفواصل والموجهة إلى البوابة الثانوية",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

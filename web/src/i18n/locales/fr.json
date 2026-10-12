@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "ID de prix (USD)",
   "Optional second price in USD; empty disables USD checkout": "Deuxième prix optionnel en USD ; vide désactive le paiement en USD",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "Passerelle Epay secondaire (optionnelle)",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "Les moyens de paiement listés ici sont routés vers une seconde passerelle compatible Epay (ex. BEpusdt) avec tarification en USD ; les autres utilisent la passerelle principale ci-dessus.",
+  "Secondary gateway address": "Adresse de la passerelle secondaire",
+  "Secondary gateway merchant ID": "ID marchand de la passerelle secondaire",
+  "Secondary gateway secret key": "Clé secrète de la passerelle secondaire",
+  "Secondary gateway payment methods": "Moyens de paiement de la passerelle secondaire",
+  "Site root of the secondary gateway": "Racine du site de la passerelle secondaire",
+  "Comma-separated payment method types routed to the secondary gateway": "Types de moyens de paiement séparés par des virgules routés vers la passerelle secondaire",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

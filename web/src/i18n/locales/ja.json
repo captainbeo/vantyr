@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "価格ID (USD)",
   "Optional second price in USD; empty disables USD checkout": "任意の2つ目のUSD価格。空欄にするとUSD決済が無効になります",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "セカンダリ Epay ゲートウェイ（任意）",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "ここに列挙された支払い方法は、USD 価格の第2の Epay 互換ゲートウェイ（例: BEpusdt）にルーティングされます。その他は上のプライマリゲートウェイを使用します。",
+  "Secondary gateway address": "セカンダリゲートウェイのアドレス",
+  "Secondary gateway merchant ID": "セカンダリゲートウェイの加盟店ID",
+  "Secondary gateway secret key": "セカンダリゲートウェイの秘密鍵",
+  "Secondary gateway payment methods": "セカンダリゲートウェイの支払い方法",
+  "Site root of the secondary gateway": "セカンダリゲートウェイのサイトルート",
+  "Comma-separated payment method types routed to the secondary gateway": "セカンダリゲートウェイにルーティングする支払い方法タイプ（カンマ区切り）",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

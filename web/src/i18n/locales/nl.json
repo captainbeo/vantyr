@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "Prijs-ID (USD)",
   "Optional second price in USD; empty disables USD checkout": "Optionele tweede prijs in USD; leeg schakelt USD-afrekenen uit",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "Secundaire Epay-gateway (optioneel)",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "Betaalmethoden die hier staan worden naar een tweede Epay-compatibele gateway (bijv. BEpusdt) met USD-prijzen gerouteerd; alle andere gebruiken de primaire gateway hierboven.",
+  "Secondary gateway address": "Adres secundaire gateway",
+  "Secondary gateway merchant ID": "Merchant-ID secundaire gateway",
+  "Secondary gateway secret key": "Geheime sleutel secundaire gateway",
+  "Secondary gateway payment methods": "Betaalmethoden secundaire gateway",
+  "Site root of the secondary gateway": "Hoofdadres van de secundaire gateway",
+  "Comma-separated payment method types routed to the secondary gateway": "Komma-gescheiden betaalmethodetypes die naar de secundaire gateway gaan",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

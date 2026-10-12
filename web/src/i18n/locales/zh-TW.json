@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "價格 ID (USD)",
   "Optional second price in USD; empty disables USD checkout": "可選的第二個 USD 價格；留空則停用 USD 結帳",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "副易支付閘道（可選）",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "此處列出的支付方式將被路由到第二個相容易支付的閘道（如 BEpusdt）並以美元計價；其餘方式仍使用上方的主閘道。",
+  "Secondary gateway address": "副閘道地址",
+  "Secondary gateway merchant ID": "副閘道商戶號",
+  "Secondary gateway secret key": "副閘道密鑰",
+  "Secondary gateway payment methods": "副閘道支付方式",
+  "Site root of the secondary gateway": "副閘道站點根地址",
+  "Comma-separated payment method types routed to the secondary gateway": "以逗號分隔、路由到副閘道的支付方式類型",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

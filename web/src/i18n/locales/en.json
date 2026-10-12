@@ -6995,5 +6995,14 @@
   "Price ID (USD)": "Price ID (USD)",
   "Optional second price in USD; empty disables USD checkout": "Optional second price in USD; empty disables USD checkout",
   "EUR (€)": "EUR (€)",
-  "USD ($)": "USD ($)"
+  "USD ($)": "USD ($)",
+  "Secondary Epay gateway (optional)": "Secondary Epay gateway (optional)",
+  "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.": "Pay methods listed here are routed to a second Epay-compatible gateway (e.g. BEpusdt) with USD pricing; all others use the primary gateway above.",
+  "Secondary gateway address": "Secondary gateway address",
+  "Secondary gateway merchant ID": "Secondary gateway merchant ID",
+  "Secondary gateway secret key": "Secondary gateway secret key",
+  "Secondary gateway payment methods": "Secondary gateway payment methods",
+  "Site root of the secondary gateway": "Site root of the secondary gateway",
+  "Comma-separated payment method types routed to the secondary gateway": "Comma-separated payment method types routed to the secondary gateway",
+  "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
 }

@@ -311,6 +311,10 @@ export type BillingSettings = {
   PayAddress: string
   EpayId: string
   EpayKey: string
+  EpaySecondaryAddress: string
+  EpaySecondaryId: string
+  EpaySecondaryKey: string
+  EpaySecondaryTypes: string
   Price: number
   MinTopUp: number
   CustomCallbackAddress: string
