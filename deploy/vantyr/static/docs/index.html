@@ -31,7 +31,7 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: var(--font-sans); line-height: 1.65; font-size: 16px;
 }
-.wrap { max-width: 1000px; margin: 0 auto; padding: 0 20px 110px; position: relative; z-index: 1; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px 110px; position: relative; z-index: 1; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, pre, .mono { font-family: var(--font-mono); font-size: 0.85em; }
@@ -50,12 +50,6 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 0.85em; }
   text-transform: uppercase; color: var(--ink); font-size: 17px; white-space: nowrap;
 }
 .topnav .brand .tick { color: var(--accent); }
-.topnav .links { display: flex; gap: 18px; flex-wrap: wrap; }
-.topnav .links a {
-  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--ink-muted);
-}
-.topnav .links a:hover { color: var(--accent); text-decoration: none; }
 .topnav .cta {
   margin-left: auto; font-family: var(--font-mono); font-size: 12px;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent);
@@ -291,8 +285,58 @@ footer .right { margin-left: auto; }
   .kv { grid-template-columns: 110px 1fr; }
   table { font-size: 12px; }
   th, td { padding: 7px 8px; }
-  .topnav .links { display: none; }
+  }
+
+/* ---------- page overview sidebar (left) ---------- */
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 40px; align-items: start; }
+.toc {
+  position: sticky; top: 86px; max-height: calc(100vh - 110px); overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); padding: 16px 14px;
+  scrollbar-width: thin;
 }
+.toc-title {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-muted); margin: 0 0 10px;
+}
+.toc-list { display: flex; flex-direction: column; }
+.toc-item {
+  display: flex; align-items: center; gap: 10px; padding: 7px 8px;
+  border-radius: 4px; color: var(--ink-muted); font-size: 14px;
+  text-decoration: none; line-height: 1.3;
+}
+.toc-item:hover { color: var(--ink); background: var(--surface-2); text-decoration: none; }
+.toc-item.active { color: var(--accent); background: var(--accent-soft); }
+.toc-num {
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);
+  min-width: 20px; opacity: 0.9;
+}
+.toc-item.active .toc-num { color: var(--accent); }
+.toc-badge {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--accent-ink);
+  background: var(--accent); border-radius: 3px; padding: 2px 6px;
+  margin-left: auto; white-space: nowrap;
+}
+.toc-sub {
+  display: block; padding: 4px 8px 4px 38px; border-radius: 4px;
+  color: var(--ink-muted); font-size: 13px; text-decoration: none;
+}
+.toc-sub:hover { color: var(--ink); background: var(--surface-2); text-decoration: none; }
+.toc-sub.active { color: var(--accent); }
+.toc-toggle { display: none; }
+@media (max-width: 1000px) {
+  .layout { display: block; }
+  .toc { position: static; max-height: none; margin: 0 0 24px; }
+  .toc-toggle { display: none; }
+}
+html { scroll-padding-top: 90px; }
+[dir="rtl"] .layout { grid-template-columns: minmax(0, 1fr) 260px; }
+[dir="rtl"] .toc { order: 2; }
+[dir="rtl"] .main { order: 1; }
+[dir="rtl"] .toc-sub { padding-left: 8px; padding-right: 38px; }
+[dir="rtl"] .toc-badge { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .toc-num { text-align: left; }
 
 /* language switcher */
 .lang-switch { display: flex; gap: 4px; margin-left: 12px; }
@@ -322,21 +366,35 @@ footer .right { margin-left: auto; }
 <nav class="topnav">
   <div class="inner">
     <div class="brand">VANTYR<span class="tick">//</span></div>
-    <div class="links">
-      <a href="#base-urls">Base URLs</a>
-      <a href="#agents">Agents</a>
-      <a href="#setup">Setup</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#payments">Payments</a>
-      <a href="#faq">FAQ</a>
-      <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
-    </div>
     <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">Open Dashboard</a>
   </div>
 </nav>
 
 <div class="wrap">
 
+<div class="layout">
+<aside class="toc" aria-label="On this page">
+      <div class="toc-title">On this page</div>
+      <nav class="toc-list">
+        <a class="toc-item" href="#base-urls"><span class="toc-num">01</span>Base URLs</a>
+        <a class="toc-item" href="#agents"><span class="toc-num">02</span>Agents</a>
+        <a class="toc-item" href="#setup"><span class="toc-num">03</span>Setup<span class="toc-badge">Start here</span></a>
+        <a class="toc-item" href="#guides"><span class="toc-num">04</span>Agent guides</a>
+          <a class="toc-sub" href="#agent-claude-code">Claude Code</a>
+          <a class="toc-sub" href="#agent-codex">Codex</a>
+          <a class="toc-sub" href="#agent-cursor">Cursor</a>
+          <a class="toc-sub" href="#agent-windsurf">Windsurf</a>
+          <a class="toc-sub" href="#agent-cline">Cline</a>
+          <a class="toc-sub" href="#agent-aider">Aider</a>
+          <a class="toc-sub" href="#agent-kilocode">Kilo Code</a>
+          <a class="toc-sub" href="#agent-opencode">OpenCode</a>
+        <a class="toc-item" href="#pricing"><span class="toc-num">05</span>Pricing</a>
+        <a class="toc-item" href="#payments"><span class="toc-num">06</span>Payments</a>
+        <a class="toc-item" href="#troubleshooting"><span class="toc-num">07</span>Troubleshooting</a>
+        <a class="toc-item" href="#faq"><span class="toc-num">08</span>FAQ</a>
+      </nav>
+    </aside>
+    <main class="main">
 <header>
   <div class="inner">
     <h1>One key.<br>Every agent<span class="tick">.</span></h1>
@@ -345,7 +403,7 @@ footer .right { margin-left: auto; }
       <span class="chip hot">8 agent guides</span>
       <span class="chip">OpenAI + Anthropic compatible</span>
       <span class="chip">from $0.02 / 1M tokens</span>
-      <span class="chip">crypto top-up from $1</span>
+      <span class="chip">card, iDEAL, crypto or TRY</span>
     </div>
   </div>
 </header>
@@ -774,9 +832,11 @@ print(resp.choices[0].message.content)</pre>
 </section>
 
 <section id="payments">
-  <h2>Payments<span class="tick">//</span> crypto top-up</h2>
+  <h2>Payments<span class="tick">//</span> four ways to top up</h2>
   <ul>
-    <li>USDT / USDC at 1:1 against the dollar, on 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
+    <li>Card &amp; iDEAL|Wero (EUR/USD): pay on the Wallet page with any major card — checkout runs in euros or US dollars (your choice), and Dutch customers can pay straight from their bank via iDEAL|Wero.</li>
+    <li>Turkish lira (TRY): want to pay in lira? Open a ticket in our Discord or email support — we reply with our Turkish IBAN and the exact ₺ amount at the current rate, and your credit is added manually after the transfer lands (usually within a few hours).</li>
+    <li><strong>Crypto (USDT / USDC):</strong> USDT / USDC at 1:1 against the dollar, on 8 networks: TRON (TRC20), Solana, Ethereum, BNB Chain, Polygon, Plasma, TON, Aptos.</li>
     <li>Minimum top-up <strong>$1</strong>, no maximum. Wallet credit never expires.</li>
     <li>After clicking Top Up you get an address and exact amount — send exactly that amount. Credit lands automatically on network confirmation (typically 1–3 minutes; TON can take longer).</li>
     <li>Payment stuck (sent but not credited after 30 minutes)? Note the transaction hash and contact support — every order is recorded and can be reconciled manually.</li>
@@ -819,8 +879,11 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">models &amp; pricing</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
   <a href="https://github.com/captainbeo/vantyr">source (AGPL)</a>
-  <span class="right">docs rev 2026-10-12</span>
+  <span class="right">docs rev 2026-10-12b</span>
 </footer>
+    </main>
+</div>
+
 
 </div>
 
@@ -884,6 +947,48 @@ function legacyCopy(btn, text) {
   try { document.execCommand('copy'); flash(btn, true); } catch (e) { flash(btn, false); }
   document.body.removeChild(ta);
 }
+
+// Page overview: highlight the section currently in view.
+(function() {
+  var toc = document.querySelector('.toc-list');
+  if (!toc) return;
+  var links = toc.querySelectorAll('a[href^="#"]');
+  var map = {};
+  links.forEach(function(l) { map[l.getAttribute('href').slice(1)] = l; });
+  var sections = [];
+  Object.keys(map).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) sections.push(el);
+  });
+  if (!sections.length) return;
+  var byId = {};
+  sections.forEach(function(s) { byId[s.id] = true; });
+  function setActive(id) {
+    links.forEach(function(l) { l.classList.remove('active'); });
+    var link = map[id];
+    if (link) {
+      link.classList.add('active');
+      if (link.parentElement && link.parentElement.closest('.toc')) {
+        var wrap = link.closest('.toc');
+        if (wrap && wrap.scrollHeight > wrap.clientHeight) {
+          var top = link.offsetTop - wrap.clientHeight / 2;
+          wrap.scrollTop = Math.max(0, top);
+        }
+      }
+    }
+  }
+  setActive('setup');
+  var observer = new IntersectionObserver(function(entries) {
+    var visible = entries.filter(function(e) { return e.isIntersecting; });
+    if (!visible.length) return;
+    // Pick the top-most visible section.
+    var best = visible.reduce(function(acc, e) {
+      return e.boundingClientRect.top < acc.boundingClientRect.top ? e : acc;
+    });
+    if (byId[best.target.id]) setActive(best.target.id);
+  }, { rootMargin: '-90px 0px -70% 0px', threshold: 0 });
+  sections.forEach(function(s) { observer.observe(s); });
+})();
 </script>
 </body>
 </html>
