@@ -30,6 +30,12 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          expands to every channel whose name starts with
                          the entry name). Production has 6 channels over
                          2 seller keys (selora-* and a6-*).
+                         Selora's sk-gw- key only authenticates from our
+                         gateway's Go client (TLS-fingerprint-gated) — for
+                         selora, point the URL at the gateway itself
+                         (https://vantyr.xyz) with a Vantyr relay token;
+                         checks then ride the real customer path and
+                         channel attribution comes from the usage log.
   MODEL_PREFIXES         comma list, default "claude,gpt"
   USAGE_WINDOW_HOURS     traffic gate, default 168 (7 days)
   CYCLE_MINUTES          default 10
@@ -55,12 +61,13 @@ LOG = logging.getLogger("cctest-monitor")
 
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 
-# Verdict categories from cctest.ai/docs (score ranges documented there).
-# Their /api/v1/check request/response field names are NOT published —
-# the shapes below are C0 placeholders and fail open on mismatch.
-PASS_VERDICTS = {"official"}
+# Verdict categories from cctest.ai/docs (full mode) plus the live-observed
+# attribution-mode values (attr_match / attr_swapped, verdictKey field).
+# Live observation 2026-10-12: A6 attribution check on claude-fable-5-1
+# returned verdictKey attr_swapped, attribution.prediction claude-opus-4-6.
+PASS_VERDICTS = {"official", "attr_match"}
 SOFT_VERDICTS = {"official_flawed"}
-BAD_VERDICTS = {"unofficial", "reversed", "not_claude"}
+BAD_VERDICTS = {"unofficial", "reversed", "not_claude", "attr_swapped"}
 
 CHANNEL_ENABLED = 1
 CHANNEL_MANUALLY_DISABLED = 2
@@ -69,7 +76,10 @@ CHANNEL_MANUALLY_DISABLED = 2
 def http_json(method, url, token=None, body=None, timeout=30.0):
     """Returns (parsed_payload, http_status); status 0 = transport error."""
     data = None
-    headers = {}
+    headers = {
+        # Cloudflare blocks the default Python-urllib UA (error 1010).
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    }
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if body is not None:
@@ -159,12 +169,33 @@ class Gateway:
             raise RuntimeError(f"log query failed: {status} {payload}")
         return ((payload.get("data") or {}).get("total") or 0) > 0
 
+    def last_channel_for_model(self, model, window_minutes=10):
+        """For gateway-routed checks: find which channel recently served
+        this model (usage log lookup, newest first). Returns channel_id
+        or None."""
+        since = int(time.time()) - window_minutes * 60
+        query = urllib.parse.urlencode({
+            "p": 1, "page_size": 20, "type": 2,
+            "model_name": model, "start_timestamp": since,
+        })
+        payload, status = self._request("GET", f"/api/log/?{query}")
+        if status != 200 or not payload.get("success"):
+            raise RuntimeError(f"log query failed: {status} {payload}")
+        for entry in (payload.get("data") or {}).get("items") or []:
+            # our own monitor's checks bill to the sidecar user's token;
+            # pick entries from the recent window
+            cid = entry.get("channel_id") or (entry.get("other") and None)
+            if cid:
+                return int(cid)
+        return None
+
 
 class CCTest:
-    def __init__(self, base, key, full_check=False):
+    def __init__(self, base, key, full_check=False, http_client=None):
         self.base = base.rstrip("/")
         self.key = key
         self.full_check = full_check
+        self.http = http_client or http_json
 
     def check(self, base_url, seller_key, model):
         """Submit one check and poll for its result.
@@ -177,7 +208,7 @@ class CCTest:
         url auto-appends the provider's path (/v1/messages for claude,
         /v1/responses for codex). attributionOnly=true is the cheap mode:
         3 requests, fingerprint-swap detection, no full scoring."""
-        payload, status = http_json(
+        payload, status = self.http(
             "POST",
             self.base + "/api/v1/check",
             self.key,
@@ -191,7 +222,7 @@ class CCTest:
             },
         )
         if status != 200:
-            LOG.warning("cctest submit failed: %s %s", status, payload)
+            LOG.warning("cctest submit failed: http=%s %s", status, payload)
             return None
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
         task_id = data.get("taskId") or data.get("task_id")
@@ -201,23 +232,26 @@ class CCTest:
         deadline = time.time() + 300
         while time.time() < deadline:
             time.sleep(5)
-            result, status = http_json("GET", f"{self.base}/api/v1/check/{task_id}", self.key)
+            result, status = self.http("GET", f"{self.base}/api/v1/check/{task_id}", self.key)
             if status != 200:
-                LOG.warning("cctest poll failed: %s %s", status, result)
+                LOG.warning("cctest poll failed: http=%s %s", status, result)
                 return None
             polled = result.get("data") if isinstance(result.get("data"), dict) else result
             state = polled.get("status") or polled.get("state")
             if state in ("done", "completed", "finished", "success"):
                 return polled
             if state in ("failed", "error", "cancelled"):
-                LOG.warning("cctest task %s failed: %s", task_id, result)
+                LOG.warning("cctest task %s ended with error: %s", task_id, (polled.get("error") or "")[:200])
                 return None
         LOG.warning("cctest task %s timed out", task_id)
         return None
 
     @staticmethod
     def verdict_category(result):
-        for key in ("verdict", "category", "result", "level"):
+        # attributionOnly mode returns verdictKey (attr_match / attr_swapped);
+        # full mode returns verdict (official / official_flawed / unofficial /
+        # reversed / not_claude).
+        for key in ("verdict", "verdictKey", "category", "result", "level"):
             value = result.get(key)
             if isinstance(value, str) and value:
                 return value.lower()
