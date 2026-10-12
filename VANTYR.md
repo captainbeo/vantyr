@@ -1840,6 +1840,46 @@ ever wanted, the native mechanism exists: `ModelPrice` (quota_type
 1) on a dedicated alias served only by the Mia channel (e.g. an
 "-economy" per-request SKU) — per-token names stay untouched.
 
+**Capacity math + routing plan (2026-10-12, 50-user scenario):**
+Selora = ONE `sk-gw-` key shared by all 3 selora-* channels, upstream
+cap ~30 req/min per key (plus their 402 payment throttle on tight
+parallel bursts) — the observed latency root-cause (Selora 429
+saturation → A6 merchant lottery). Our own limiter is per-user (30
+req/min default, 60 unlimited) and does NOT bound aggregate: 50 users
+can legally demand 1,500 req/min; realistic concurrent-agent load is
+~1–6 req/min per active session, so Selora saturates at roughly 5–30
+concurrently active agents. A6 absorbs attempt-2 overflow (per-key
+cap unknown; 429 saturation + merchant lottery observed). Mia adds
+100 req/min per key — 3–7× total ceiling once live.
+
+Routing rollout (staged, evidence-gated):
+
+1. **Verify (now):** channel at lowest priority, `RetryTimes=1`
+   untouched — Mia receives zero traffic while the battery runs
+   (channel test, real requests per wire format incl. a Codex CLI
+   turn, cctest attribution check per flagship model, latency via
+   the test button's `response_time` + `other->>'frt'` in logs).
+2. **Failover-live:** raise `RetryTimes` to 2 (3-tier ladder:
+   primary → fallback → mia). Mia absorbs Selora saturation and A6
+   quarantine; wallet-drain 402s retry through cleanly.
+3. **Load-share (optional, gated):** only after a clean cctest week
+   + measured latency, consider same-tier weights for the default
+   group (Selora/Mia e.g. 3:1 — the exact mechanism of the original
+   Selora=3/A6=1 split) or per-model assignment. Unlimited group
+   stays Selora/A6 only (isolation principle until Mia is proven).
+   No context-length routing exists in New API (levers are channel
+   model list, groups, priority, weights only) — "long context to
+   Mia" cannot be expressed; per-model is the finest native
+   granularity. Watch usage-log channel attribution before each
+   step.
+
+**Second Mia key:** if Mia's RPM is per-key AND two keys can draw
+one wallet, add the key to the SAME channel as multi-key random
+(native: per-request key pick, per-key auto-disable on 401, no
+second channel to manage) → 200 req/min. Verify both facts with Mia
+first; if each key needs its own top-up, defer the second key until
+sustained Mia traffic approaches 100 req/min.
+
 **Channel config (owner action, admin UI, no code):**
 
 - New channel `mia-failover` (type 60 "New API"), base URL
