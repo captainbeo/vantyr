@@ -20,8 +20,6 @@ import { ClientOnly } from '@tanstack/react-router'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import mark from '@/assets/vantyr-mark.png'
-
 // The 3D mark needs WebGL2. Loaded lazily so the three.js stack stays out
 // of the landing bundle until this scene actually mounts.
 const Logo3D = lazy(() =>
@@ -144,14 +142,6 @@ export function IntroReveal() {
 
   if (done) return null
 
-  const still = (
-    <img
-      src={mark}
-      alt=''
-      className='h-40 w-40 object-contain md:h-56 md:w-56'
-    />
-  )
-
   return (
     <>
       {/* Scroll distance for the transition */}
@@ -166,14 +156,16 @@ export function IntroReveal() {
           className='absolute inset-0 flex flex-col items-center justify-center will-change-transform'
         >
           <div className='flex h-[62svh] w-full max-w-3xl items-center justify-center'>
-            <ClientOnly fallback={still}>
+            {/* No mark fallback while the 3D scene streams in: showing the
+             * flat PNG here made the intro flash a static logo before the
+             * canvas popped in. The void stays empty for that moment
+             * instead — the wordmark and hint are what carry the intro. */}
+            <ClientOnly fallback={null}>
               {canRender3D ? (
-                <Suspense fallback={still}>
+                <Suspense fallback={null}>
                   <Logo3D shadow={false} />
                 </Suspense>
-              ) : (
-                still
-              )}
+              ) : null}
             </ClientOnly>
           </div>
           <span className='font-display text-foreground text-2xl font-semibold tracking-[0.4em] md:text-3xl'>
