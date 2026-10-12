@@ -182,9 +182,8 @@ class Gateway:
         if status != 200 or not payload.get("success"):
             raise RuntimeError(f"log query failed: {status} {payload}")
         for entry in (payload.get("data") or {}).get("items") or []:
-            # our own monitor's checks bill to the sidecar user's token;
-            # pick entries from the recent window
-            cid = entry.get("channel_id") or (entry.get("other") and None)
+            # The log's channel field serializes as "channel" (model/log.go).
+            cid = entry.get("channel")
             if cid:
                 return int(cid)
         return None
