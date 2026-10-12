@@ -1608,3 +1608,37 @@ Deploy: web changes ride the next image build; /docs tree + bot.py
 sync to the server per the usual rsync + `docker compose restart`
 round. Nothing here touches HomePageContent DB option (standing owner
 decision).
+
+## 2026-10-12 — Console → Dashboard rename + Codex desktop-app guide (pinned-next26)
+
+`feat(web,docs): rename Console wording to Dashboard + Codex desktop-app
+guide` (c1f09bee2, tag deploy/2026-10-12-dashboard-rename; cherry-pick of
+2e0eece95 from feat/payment-rails onto vantyr/main — payment work NOT
+included).
+
+- Deploy (owner-approved): cherry-picked onto vantyr/main (VANTYR.md
+  merge conflict vs next25 record resolved: both entries kept, payment-
+  rails entry dropped), branch + tag pushed to public. Source archive
+  (sha256 cc07f361…32b5986) uploaded to static/source/; source-notice.txt
+  updated (backup /tmp/source-notice-pre-next26.txt). /opt/vantyr web
+  tree rsynced from the tag archive (node_modules preserved; web backup
+  /opt/vantyr-backup-web-pre-next26); /docs tree + bot.py synced; md5
+  3-file verified. Image pinned-next26 (ce46fe53ec4f) built on-server;
+  compose.yaml repointed (backup compose.yaml.bak-next25); ticket-bot
+  image rebuilt (bot.py baked into image) + restarted. Footer option
+  updated to new tag/archive (backup /opt/vantyr/backups/footer-pre-
+  next26.txt; gateway restart). Note: compose build retagged the old
+  next25 to the new build; pre-deploy next25 image was 39460ffde8dd
+  (lives on as next24) — tag-based rollback remains next23
+  (8e6862dbb66d).
+- Live verification: gateway healthy on pinned-next26, zero errors;
+  /, /docs/, /pricing, /about, /rankings, /login all 200. /docs live:
+  "Open Dashboard" CTA + requires_openai_auth + auth.json blocks in all
+  12 languages (de/tr/zh spot-checked). Live bundle index.be9888b336.js
+  carries "Dashboard area" ×14 locales, t("e.g. Vantyr Dashboard"),
+  nav title t("Dashboard") href /dashboard; zero old Console keys.
+  Legacy /console client-side redirect map confirmed in bundle. Bot up
+  (pricing synced); archive + notice 200; footer serves dashboard-rename
+  links via api/status.
+- /docs updated immediately (Caddy serves the static tree directly);
+  the gateway restart was only for the web-app rename + footer reload.
