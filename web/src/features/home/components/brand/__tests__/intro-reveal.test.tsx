@@ -78,13 +78,11 @@ describe('IntroReveal', () => {
     expect(screen.getByText('Endless coding with AI')).toBeInTheDocument()
     expect(screen.getByText('Scroll')).toBeInTheDocument()
 
-    // No WebGL2 → no 3D canvas context is ever requested and the flat
-    // mark image is shown instead (decorative: empty alt, so query by
-    // class rather than role).
+    // No WebGL2 → no 3D canvas context is ever requested and no mark of
+    // any kind is shown (the flat PNG fallback was removed: it made the
+    // intro flash a static logo before the 3D canvas appeared).
     expect(HTMLCanvasElement.prototype.getContext).not.toHaveBeenCalled()
-    const still = document.querySelector('img.h-40')
-    expect(still).not.toBeNull()
-    expect(still?.getAttribute('src')).toBeTruthy()
+    expect(document.querySelector('.bg-void img')).toBeNull()
   })
 
   it('fades the overlay while scrolling, then removes the intro and shifts the scroll position without a jump', async () => {

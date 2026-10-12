@@ -1606,6 +1606,50 @@ The two system-settings suite failures (pricing-sync tier display,
 routing invalid-locale) pre-exist on the vantyr/main baseline
 (verified by stash-and-rerun).
 
+## 2026-10-12 — 3D mark always rotates; flat fallback removed (pinned-next25)
+
+`fix(brand): always rotate the 3D mark and drop the flat fallback`
+(aedb87a9d, tag deploy/2026-10-12-logo-rotation).
+
+- Scope: the homepage intro's 3D mark froze (no 360° rotation) for any
+  visitor whose OS reports `prefers-reduced-motion: reduce` — the
+  autoRotate OrbitControls prop was gated on it. On the owner's
+  machine Windows animation effects are off, so the gate silently
+  fired; the deployed bundle was byte-identical to the repo (no deploy
+  regression). The Lovable reference design spins unconditionally, so
+  the gate was removed (callers can still pass autoRotate={false}).
+  Second fix: the intro flashed the flat vantyr-mark.png as the
+  Suspense/ClientOnly fallback while the three.js chunk lazy-loaded;
+  fallbacks are now empty — the void stays quiet, no static second
+  logo before the canvas appears.
+- Verification: browser pane under prefers-reduced-motion: reduce —
+  mark rotates ~12°/s, no flat img in the overlay during load; brand
+  vitest 4/4 (new autoRotate regression test, updated intro test);
+  tsgo clean, oxfmt clean; scoped oxlint unchanged from baseline
+  (4 pre-existing geometry non-null assertions).
+- Deploy (owner-approved): committed on vantyr/main → pushed to public
+  repo main + tag deploy/2026-10-12-logo-rotation; source archive
+  (sha256 798b8671…85c78) + refreshed source-notice.txt uploaded to
+  static/source/; /opt/vantyr build tree patched (web/ only, applied
+  clean); image pinned-next25 (39460ffde8dd) built on-server;
+  compose.yaml repointed (backup compose.yaml.bak-next24); Footer
+  option updated to the new tag + archive link (backup
+  backups/footer-pre-next25.txt; gateway restart to reload cached
+  options). Note: the compose build retagged pinned-next24 to the new
+  build; the pre-deploy next24 image ID is f5be36030a73 (still
+  referenced by the old container snapshot) — prefer next23 for
+  tag-based rollback.
+- Live verification: gateway healthy on pinned-next25; /, /rankings,
+  /pricing, /about, legal pages 200; zero gateway errors; live bundle
+  index.fd825ddadf.js; home chunk 64791.430f14ad89.js contains
+  vantyr.intro-seen, no h-40 fallback, VantyrLogo3D lazy import; 3D
+  chunk 98344.b078baf4bb.js serves `autoRotate:!1!==e.autoRotate` with
+  zero prefers-reduced-motion refs; archive + notice 200 with the new
+  sha256; footer serves the new tag links via api/status.
+- Rollback: pinned-next23 (8e6862dbb66d) is the prior verified
+  rollback point — repoint compose.yaml + `docker compose up -d
+  --no-build gateway`.
+
 ## 2026-10-12 — Console → Dashboard rename + Codex desktop-app guide
 
 **Scope (files-only, NOT deployed):** user-visible "Console" wording
@@ -2032,4 +2076,30 @@ traffic exposure.
 it; nothing else references it. cctest monitor code: remove the mia
 entry from SELLER_CHANNELS in .env; state entries for mia-* channels
 are additive.
+
+## 2026-10-12 — /docs left page-overview sidebar (rev 2026-10-12b)
+
+`feat(docs): left page-overview sidebar, rookie-friendly navigation`
+(c4a71cf42, tag deploy/2026-10-12-docs-sidebar).
+
+- Scope: /docs section nav moved out of the header into a sticky left
+  "On this page" sidebar — numbered 01–08 sections, agent-guide
+  sub-links, "Start here" badge on Setup, active-section highlight
+  (IntersectionObserver), scroll-padding so anchors clear the header.
+  Language switcher + Open Dashboard CTA unchanged in the header. 260px
+  + fluid grid (wrap widened 1000→1160px), collapses to a static card
+  above the hero at ≤1000px; Arabic keeps the TOC on the left via
+  mirrored RTL grid rules. All 12 languages, sidebar chrome translated
+  (On this page / Start here / section titles).
+- Deploy: static-only — no image rebuild (image stays pinned-next26;
+  the gateway binary does not serve these files, Caddy does). Committed
+  on vantyr/main, pushed to public with tag; 12 HTML files scp'd to the
+  server and copied into /opt/vantyr/deploy/vantyr/static/docs/ (backup
+  /opt/vantyr-backup-docs-pre-sidebar); md5 verified index.html
+  27f3b9218e…; live /docs + de/ar/zh serve 8 TOC items + sub-links.
+- Browser verification (local preview): TOC sticky left at 86px, active
+  item follows scroll (setup→pricing), anchor click navigates with
+  smooth scroll + hash, mobile 375px collapses to static card above
+  hero, RTL Arabic TOC stays left with Arabic labels, zh-CN localized
+  (本页导航/从这里开始). No console errors, no failed requests.
 

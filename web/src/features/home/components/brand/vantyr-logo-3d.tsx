@@ -27,6 +27,14 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 
 /**
+ * The mark always spins (like the Lovable reference this was ported from):
+ * the OS-level "reduce motion" setting says the visitor wants UI animation
+ * dialed down, not that a brand sculpture should freeze as a flat image —
+ * freezing it here is what made the site look broken (no rotation at all).
+ * Callers that want a still mark pass autoRotate={false}.
+ */
+
+/**
  * Fully 3D Vantyr mark, traced from the rendered 3D icon
  * (vantyr-icon-3d.png): two long faceted gunmetal blades forming the V,
  * with a glowing orange lightning shard set into the right blade. Points
@@ -158,20 +166,12 @@ function Mark() {
   )
 }
 
-function usePrefersReducedMotion(): boolean {
-  return useMemo(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return false
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  }, [])
-}
-
 interface VantyrLogo3DProps {
   autoRotate?: boolean
   shadow?: boolean
 }
 
 export function VantyrLogo3D(props: VantyrLogo3DProps) {
-  const reducedMotion = usePrefersReducedMotion()
   return (
     <Canvas
       shadows
@@ -219,7 +219,7 @@ export function VantyrLogo3D(props: VantyrLogo3DProps) {
         />
       )}
       <OrbitControls
-        autoRotate={props.autoRotate !== false && !reducedMotion}
+        autoRotate={props.autoRotate !== false}
         autoRotateSpeed={3}
         enablePan={false}
         enableZoom={false}
