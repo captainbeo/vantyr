@@ -337,7 +337,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">افتح لوحة التحكم</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">افتح لوحة التحكم</a>
   </div>
 </nav>
 
@@ -380,7 +380,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>لماذا عنوانان؟</strong> يتوقع بروتوكول Anthropic أن يكون الأساس جذر الخادم (فهو يضيف <span class="mono">/v1/messages</span> بنفسه)، بينما تتوقع أدوات OpenAI الجذر المُرقَّم. المفتاح نفسه والطُّرز نفسها ونظام الفوترة نفسه على كليهما.</p>
   </div>
-  <p>مفتاحك: أنشئ واحدًا من لوحة التحكم في صفحة <a href="https://vantyr.xyz/console">المفاتيح</a>. يظهر مرة واحدة فقط — انسخه حينها. يعمل المفتاح على كلا العنوانين.</p>
+  <p>مفتاحك: أنشئ واحدًا من لوحة التحكم في صفحة <a href="https://vantyr.xyz/dashboard">المفاتيح</a>. يظهر مرة واحدة فقط — انسخه حينها. يعمل المفتاح على كلا العنوانين.</p>
 </section>
 
 <section id="agents">
@@ -388,7 +388,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">أدلة بإعدادات جاهزة للنسخ واللصق لكل عميل. تعرض صفحة <a href="https://vantyr.xyz/pricing">صفحة نظرة عامة على الطُّرز</a> كل معرّفات الطُّرز التي يمكنك استخدامها.</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">سطح المكتب + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">بروتوكول Responses</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + تطبيق سطح المكتب</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">عبر إضافة</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">عبر إضافة</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">متوافق مع OpenAI</div></a>
@@ -434,6 +434,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <p>يقرأ Codex كتلة مزوّد من ملف الإعدادات ويأخذ المفتاح من متغير بيئة. يعمل بنفس الطريقة في Codex CLI وتطبيق Codex لسطح المكتب وامتداد VS Code — الدليل الكامل خطوة بخطوة (بما في ذلك مسار <span class="mono">auth.json</span> لتطبيق سطح المكتب) في <a href="#agent-codex">دليل Codex</a>.</p>
         <div class="copy-hint">~/.codex/config.toml — كتلة المزوّد</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
@@ -449,8 +450,7 @@ stream_max_retries = 1</pre>
         <div class="copy-hint">ثم</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">إعدادات المزوّد في Cline / Kilo Code</div>
         <div class="kv">
           <div class="k">مزوّد API</div><div class="v">OpenAI Compatible</div>
@@ -539,12 +539,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>وكيل OpenAI الطرفي. يستخدم Codex واجهة Responses البرمجية ويحتاج إدخال مزوّد في إعداداته.</p>
-    <div class="copy-hint">التثبيت</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — إضافة مزوّد Vantyr</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>وكيل البرمجة من OpenAI — واجهة CLI الطرفية أو تطبيق سطح المكتب أو امتداد VS Code. الثلاثة تقرأ نفس <span class="mono">config.toml</span>؛ والفرق الوحيد هو كيفية تزويد المفتاح: متغير بيئة (موصى به، لواجهة CLI) أو ملف <span class="mono">auth.json</span> الذي يديره Codex (تطبيق سطح المكتب). اختر واجهتك:</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI (موصى به)</button>
+      <button class="tab" data-panel="t-codex-app">تطبيق Codex لسطح المكتب</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. ثبّت واجهة CLI</strong> (Node 18+):</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. حرّر ملف الإعدادات.</strong> افتح <span class="mono">~/.codex/config.toml</span> (macOS/Linux) أو <span class="mono">%USERPROFILE%\.codex\config.toml</span> (Windows) — أنشئه إن لم يكن موجودًا — وضع هذا في الأعلى، قبل أي ترويسات <span class="mono">[أقسام]</span>:</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -559,13 +565,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">المفتاح في البيئة</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. ضع مفتاحك في البيئة</strong> (سطر <span class="mono">env_key</span> أعلاه يسمّي هذا المتغير):</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>أبقِ على <span class="mono">name = "OpenAI"</span> كما هي تمامًا — تعتمد ميزة الضغط البعيد في Codex على اسم العرض هذا. معرّف المزوّد (<span class="mono">vantyr</span>) هو ما يحدده <span class="mono">model_provider</span> الخاص بك. وإذا كنت تستخدم Codex أيضًا مع حساب OpenAI، فالإعدادان يتعايشان — كتلة المزوّد توجّه حركة Vantyr فقط.</p></div>
-  </div>
+      <p><strong>4. شغّل <span class="mono">codex</span></strong> في مجلد مشروعك. إن كانت لديك جلسة ChatGPT سابقة في Codex فلن تُستبدل — كتلة المزوّد توجّه حركة Vantyr فقط.</p>
+      <div class="callout"><p>أبقِ <span class="mono">name = "OpenAI"</span> كما هو تمامًا — الضغط البعيد في Codex يعتمد على هذا الاسم الظاهر. معرّف المزوّد (<span class="mono">vantyr</span>) هو ما يختاره <span class="mono">model_provider</span>. معرّفات الطُّرز تختارها من <a href="https://vantyr.xyz/pricing">نظرة عامة على الطُّرز</a>.</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>تطبيق سطح المكتب وامتداد VS Code لا يقرآن متغيرات بيئة الصدفة بشكل موثوق، لذا يوضع المفتاح في ملف المصادقة الذي يديره Codex. أربع خطوات:</p>
+      <p><strong>1. اعثر على مجلد Codex الرئيسي:</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. حرّر <span class="mono">config.toml</span></strong> — نفس الملف ونفس المحتوى كما في تبويب CLI أعلاه، مع اختلاف واحد في كتلة المزوّد: استبدل <span class="mono">env_key</span> بـ <span class="mono">requires_openai_auth = true</span>:</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. ضع المفتاح في <span class="mono">auth.json</span></strong> (نفس المجلد). إن كان الملف موجودًا مسبقًا بجلسة ChatGPT، فاضبط حقل <span class="mono">OPENAI_API_KEY</span> فقط واترك الباقي كما هو:</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. أعد تشغيل تطبيق Codex.</strong> يلتقط المزوّد والمفتاح عند الإطلاق؛ اختر طرازًا عبر <span class="mono">/model</span>.</p>
+      <div class="callout warn"><p>يحتوي <span class="mono">auth.json</span> على سر بصيغته الخام: لا ترسله إلى مستودع أبدًا ولا تلتقط له لقطات شاشة ولا ترسله لأي شخص (بما في ذلك الدعم). إن كنت تستخدم Codex أيضًا باشتراك ChatGPT، فاستخدم ملف تعريف Codex منفصلًا (<span class="mono">CODEX_HOME</span>) لإعداد Vantyr حتى لا يختلطا أبدًا.</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>لا يمكن توجيه طُرز وكيل Cursor الأصلي إلى بوابة مخصصة — الطريق الموثوق هو تشغيل إضافة متوافقة مع OpenAI <em>داخل</em> داخل Cursor. حركة الإضافة فقط تُحسب على محفظتك في Vantyr؛ بينما يواصل محادثة Cursor وميزة Tab استخدام طُرز Cursor.</p>
     <div class="copy-hint">ثبّت Cline داخل Cursor (الطرفية المدمجة)</div>
@@ -788,7 +824,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">الطُّرز والتسعير</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">مجتمع Discord</a>
   <a href="https://github.com/captainbeo/vantyr">المصدر (AGPL)</a>
-  <span class="right">إصدار الوثائق 2026-10-08</span>
+  <span class="right">إصدار الوثائق 2026-10-12</span>
 </footer>
 
 </div>

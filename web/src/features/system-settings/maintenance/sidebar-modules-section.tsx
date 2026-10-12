@@ -70,7 +70,7 @@ export function SidebarModulesSection({
       description: t('Playground experiments and live conversations.'),
     },
     console: {
-      title: t('Console area'),
+      title: t('Dashboard area'),
       description: t('Dashboards, tokens, and usage analytics.'),
     },
     personal: {

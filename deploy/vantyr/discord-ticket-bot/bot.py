@@ -253,7 +253,7 @@ def render_plans_block(plans: list[dict]) -> str:
     lines = ["**Plans**"]
     for p in plans:
         price = f"${p['price']:,.2f}"
-        status = "available from the console" if p["enabled"] else "self-purchase paused — granted by staff"
+        status = "available from the dashboard" if p["enabled"] else "self-purchase paused — granted by staff"
         lines.append(
             f"• **{p['title']}** — **{price} {p['currency']} / {p['period']}** — {p['subtitle']} _({status})_"
         )

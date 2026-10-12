@@ -180,7 +180,7 @@ export const STATIC_I18N_KEYS = [
 
   // Header navigation
   'Home',
-  'Console',
+  'Dashboard',
   'Model Overview',
   'Rankings',
   'Docs',
@@ -627,7 +627,7 @@ export const STATIC_I18N_KEYS = [
   'Important',
   'Image not available',
   'Back to footnote {{id}} reference',
-  'Console Area',
+  'Dashboard Area',
   'Data management and log viewing',
   'Dashboard',
   'System data statistics',

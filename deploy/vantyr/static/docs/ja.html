@@ -331,7 +331,7 @@ footer .right { margin-left: auto; }
       <a href="#faq">FAQ</a>
       <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Community</a>
     </div>
-    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/console">コンソールを開く</a>
+    <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/" class="on">EN</a><a href="/docs/de.html">DE</a><a href="/docs/nl.html">NL</a><a href="/docs/tr.html">TR</a><a href="/docs/es.html">ES</a><a href="/docs/ar.html">AR</a><a href="/docs/fr.html">FR</a><a href="/docs/ru.html">RU</a><a href="/docs/ja.html">JA</a><a href="/docs/vi.html">VI</a><a href="/docs/zh-CN.html" hreflang="zh-Hans">简</a><a href="/docs/zh-TW.html" hreflang="zh-Hant">繁</a></div><a class="cta" href="https://vantyr.xyz/dashboard">ダッシュボードを開く</a>
   </div>
 </nav>
 
@@ -374,7 +374,7 @@ footer .right { margin-left: auto; }
   <div class="callout">
     <p><strong>なぜURLが2つあるのか?</strong> Anthropicのプロトコルはベースをサーバールートとして扱い(自身で <span class="mono">/v1/messages</span> を付加します)。一方、OpenAIツールはバージョン付きルートを期待します。どちらでもキー、モデル、課金は同じです。</p>
   </div>
-  <p>キーはコンソールの <a href="https://vantyr.xyz/console">キー</a>で作成します。表示は1度きりなので、その場でコピーしてください。キーはどちらのURLでも使えます。</p>
+  <p>キーはダッシュボードの <a href="https://vantyr.xyz/dashboard">キー</a>で作成します。表示は1度きりなので、その場でコピーしてください。キーはどちらのURLでも使えます。</p>
 </section>
 
 <section id="agents">
@@ -382,7 +382,7 @@ footer .right { margin-left: auto; }
   <p class="sec-sub">各クライアント向けの、コピー&ペーストで使える設定ガイドです。 <a href="https://vantyr.xyz/pricing">モデル概要ページ</a> には利用可能なすべてのモデルIDが一覧表示されます。</p>
   <div class="agents">
     <a class="agent-card" href="#agent-claude-code"><span class="arrow">→</span><div class="name">Claude Code</div><div class="kind">デスクトップ + CLI</div></a>
-    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex CLI</div><div class="kind">Responses方式</div></a>
+    <a class="agent-card" href="#agent-codex"><span class="arrow">→</span><div class="name">Codex</div><div class="kind">CLI + デスクトップアプリ</div></a>
     <a class="agent-card" href="#agent-cursor"><span class="arrow">→</span><div class="name">Cursor</div><div class="kind">拡張機能経由</div></a>
     <a class="agent-card" href="#agent-windsurf"><span class="arrow">→</span><div class="name">Windsurf</div><div class="kind">拡張機能経由</div></a>
     <a class="agent-card" href="#agent-cline"><span class="arrow">→</span><div class="name">Cline</div><div class="kind">OpenAI互換</div></a>
@@ -428,6 +428,7 @@ footer .right { margin-left: auto; }
 }</pre>
       </div></div>
       <div class="tabpanel" id="t-codex"><div class="panel-box">
+        <p>Codex は設定ファイルからプロバイダブロックを読み取り、キーを環境変数から受け取ります。Codex CLI、Codex デスクトップアプリ、VS Code 拡張機能のいずれでも同じように動作します — デスクトップアプリの <span class="mono">auth.json</span> を使う手順を含む完全なステップバイステップガイドは <a href="#agent-codex">Codex ガイド</a>にあります。</p>
         <div class="copy-hint">~/.codex/config.toml — プロバイダブロック</div>
         <pre>model_provider = "vantyr"
 model = "claude-sonnet-5"
@@ -443,8 +444,7 @@ stream_max_retries = 1</pre>
         <div class="copy-hint">その後</div>
         <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># or setx on Windows</span>
 codex</pre>
-      </div></div>
-      <div class="tabpanel" id="t-cline"><div class="panel-box">
+      </div></div>      <div class="tabpanel" id="t-cline"><div class="panel-box">
         <div class="copy-hint">Cline / Kilo Codeのプロバイダ設定</div>
         <div class="kv">
           <div class="k">APIプロバイダ</div><div class="v">OpenAI Compatible</div>
@@ -533,12 +533,18 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-vantyr-key"</pre>
   </div>
 
   <div id="agent-codex">
-    <h3>Codex CLI</h3>
-    <p>OpenAIのターミナルエージェント。CodexはResponses API方式で通信し、設定にプロバイダエントリを追加します。</p>
-    <div class="copy-hint">インストール</div>
-    <pre>npm install -g @openai/codex</pre>
-    <div class="copy-hint">~/.codex/config.toml — Vantyrプロバイダを追加</div>
-    <pre>model_provider = "vantyr"
+    <h3>Codex</h3>
+    <p>OpenAI のコーディングエージェント — ターミナル CLI、デスクトップアプリ、VS Code 拡張機能のいずれか。3つとも同じ <span class="mono">config.toml</span> を読みます。違いはキーの渡し方だけです。環境変数（推奨、CLI）か、Codex が管理する <span class="mono">auth.json</span>（デスクトップアプリ）か。使う画面を選んでください：</p>
+
+    <div class="tabs">
+      <button class="tab active" data-panel="t-codex-cli">Codex CLI（推奨）</button>
+      <button class="tab" data-panel="t-codex-app">Codex デスクトップアプリ</button>
+    </div>
+    <div class="tabpanel active" id="t-codex-cli"><div class="panel-box">
+      <p><strong>1. CLI をインストール</strong>（Node 18+）：</p>
+      <pre>npm install -g @openai/codex</pre>
+      <p><strong>2. 設定ファイルを編集します。</strong> <span class="mono">~/.codex/config.toml</span>（macOS/Linux）または <span class="mono">%USERPROFILE%\.codex\config.toml</span>（Windows）を開き（なければ作成）、以下をすべての <span class="mono">[セクション]</span> ヘッダーより前の先頭に置きます：</p>
+      <pre>model_provider = "vantyr"
 model = "claude-fable-5"
 review_model = "claude-sonnet-5"
 model_reasoning_effort = "high"
@@ -553,13 +559,43 @@ supports_websockets = false
 supports_standalone_web_search = false
 request_max_retries = 1
 stream_max_retries = 1</pre>
-    <div class="copy-hint">キーを環境変数に設定</div>
-    <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
+      <p><strong>3. キーを環境変数に設定します</strong>（上の <span class="mono">env_key</span> がこの変数名を指定しています）：</p>
+      <pre>export VANTYR_API_KEY="sk-your-vantyr-key"   <span class="cm"># macOS/Linux</span>
 [Environment]::SetEnvironmentVariable('VANTYR_API_KEY','sk-your-vantyr-key','User')   <span class="cm"># Windows</span></pre>
-    <div class="callout"><p>は必ず <span class="mono">name = "OpenAI"</span> のままにしてください。Codexのリモート圧縮はこの表示名を基準に動作します。プロバイダID(<span class="mono">vantyr</span>)が <span class="mono">model_provider</span> で選択する対象です。OpenAIアカウントでもCodexを使う場合、2つの設定は共存できます。プロバイダブロックはVantyrのトラフィックだけをルーティングします。</p></div>
-  </div>
+      <p><strong>4. プロジェクトディレクトリで <span class="mono">codex</span> を実行します。</strong> Codex に既存の ChatGPT ログインがあっても上書きされません — プロバイダブロックは Vantyr のトラフィックだけをルーティングします。</p>
+      <div class="callout"><p><span class="mono">name = "OpenAI"</span> は必ずそのままにしてください。Codex のリモート圧縮はこの表示名を基準に動作します。プロバイダID（<span class="mono">vantyr</span>）が <span class="mono">model_provider</span> で選択する対象です。モデルIDは <a href="https://vantyr.xyz/pricing">モデル概要</a>から自由に選べます。</p></div>
+    </div></div>
+    <div class="tabpanel" id="t-codex-app"><div class="panel-box">
+      <p>デスクトップアプリと VS Code 拡張機能はシェルの環境変数を確実に読めないため、代わりにキーを Codex 管理の認証ファイルに置きます。4つのステップ：</p>
+      <p><strong>1. Codex のホームディレクトリを確認：</strong></p>
+      <div class="kv">
+        <div class="k">macOS / Linux</div><div class="v">~/.codex/</div>
+        <div class="k">Windows</div><div class="v">%USERPROFILE%\.codex\</div>
+      </div>
+      <p><strong>2. <span class="mono">config.toml</span> を編集します</strong> — 上の CLI タブと同じファイル・同じ内容で、プロバイダブロックの1点だけが異なります：<span class="mono">env_key</span> を <span class="mono">requires_openai_auth = true</span> に置き換えます：</p>
+      <pre>model_provider = "vantyr"
+model = "claude-fable-5"
+review_model = "claude-sonnet-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
 
-  <div id="agent-cursor">
+[model_providers.vantyr]
+name = "OpenAI"
+base_url = "https://vantyr.xyz/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 1
+stream_max_retries = 1</pre>
+      <p><strong>3. キーを <span class="mono">auth.json</span> に置きます</strong>（同じディレクトリ）。ChatGPT セッション入りのファイルが既にある場合は、<span class="mono">OPENAI_API_KEY</span> フィールドだけを設定し、残りはそのままにします：</p>
+      <pre>{
+  "OPENAI_API_KEY": "sk-your-vantyr-key"
+}</pre>
+      <p><strong>4. Codex アプリを再起動します。</strong> 起動時にプロバイダとキーを読み込みます。モデルは <span class="mono">/model</span> で選択します。</p>
+      <div class="callout warn"><p><span class="mono">auth.json</span> には生の秘密鍵が入ります：コミットも、スクリーンショットも、誰かへの送信も（サポート宛ても）絶対にしないでください。ChatGPT サブスクリプションでも Codex を使う場合は、混ざらないよう Vantyr 用に別の Codex プロファイル（<span class="mono">CODEX_HOME</span>）を使ってください。</p></div>
+    </div></div>
+  </div>  <div id="agent-cursor">
     <h3>Cursor</h3>
     <p>Cursor独自のエージェントモデルはカスタムゲートウェイを指定できないため、確実な方法はOpenAI互換の拡張機能を <em>Cursor 内で</em> 動かすことです。拡張機能のトラフィックだけがVantyrのウォレットに課金され、CursorのチャットとTabは引き続きCursorのモデルを使用します。</p>
     <div class="copy-hint">Cursor内にClineをインストール(統合ターミナル)</div>
@@ -750,7 +786,7 @@ print(resp.choices[0].message.content)</pre>
   <h2>トラブルシューティング<span class="tick">//</span> よくある失敗</h2>
   <dl class="err-box">
     <dt>401 Invalid API key</dt>
-    <dd>キーが間違っているか入力ミスがあります。キーは作成時に1度だけ表示されるため、紛失した場合はコンソールで新しいキーを作成してください。また、エージェントに合う環境変数が設定されているかも確認してください(<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>、または <span class="mono">OPENAI_API_KEY</span> 。ツールによって異なります)。</dd>
+    <dd>キーが間違っているか入力ミスがあります。キーは作成時に1度だけ表示されるため、紛失した場合はダッシュボードで新しいキーを作成してください。また、エージェントに合う環境変数が設定されているかも確認してください(<span class="mono">VANTYR_API_KEY</span>, <span class="mono">ANTHROPIC_AUTH_TOKEN</span>、または <span class="mono">OPENAI_API_KEY</span> 。ツールによって異なります)。</dd>
     <dt>404 / Not Found</dt>
     <dd>ほぼ常にベースURLの誤りです。Anthropicクライアントは <span class="mono">https://vantyr.xyz</span> (末尾 <span class="mono">/v1</span>なし)、OpenAIクライアントは <span class="mono">https://vantyr.xyz/v1</span>が必要です。両カードの内容は <a href="#base-urls">ページ上部</a>.</dd>
     <dt>Model not found / no channel available</dt>
@@ -765,7 +801,7 @@ print(resp.choices[0].message.content)</pre>
 <section id="faq">
   <h2>FAQ<span class="tick">//</span></h2>
   <h3>使用量と支出はどこで確認できますか?</h3>
-  <p>コンソールの使用量ページで、各リクエストのモデル、トークン数、課金額を確認できます。ウォレットページでは残高とチャージ履歴を確認できます。</p>
+  <p>ダッシュボードの使用量ページで、各リクエストのモデル、トークン数、課金額を確認できます。ウォレットページでは残高とチャージ履歴を確認できます。</p>
   <h3>どのモデルを選べばいいですか?</h3>
   <p><span class="mono">claude-sonnet-5</span> を大半のコーディングとチャットに(1ドルあたりの品質が最良)、 <span class="mono">claude-fable-5</span> は本当に難しいタスクに、 <span class="mono">gpt-5-6-luna</span> か <span class="mono">gpt-6-sol</span> は量が品質より重要な場合に。</p>
   <h3>ストリーミング / ツール / 構造化出力には対応していますか?</h3>
@@ -782,7 +818,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">モデル &amp; 価格</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discordコミュニティ</a>
   <a href="https://github.com/captainbeo/vantyr">ソース(AGPL)</a>
-  <span class="right">docs rev 2026-10-08</span>
+  <span class="right">docs rev 2026-10-12</span>
 </footer>
 
 </div>

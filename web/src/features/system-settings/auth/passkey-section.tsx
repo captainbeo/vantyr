@@ -369,7 +369,7 @@ export function PasskeySection(props: PasskeySectionProps) {
                 <FormLabel>{t('Passkey display name')}</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={t('e.g. Vantyr Console')}
+                    placeholder={t('e.g. Vantyr Dashboard')}
                     value={field.value ?? ''}
                     onChange={(event) => field.onChange(event.target.value)}
                     name={field.name}
