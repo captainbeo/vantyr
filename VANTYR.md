@@ -1880,6 +1880,58 @@ second channel to manage) → 200 req/min. Verify both facts with Mia
 first; if each key needs its own top-up, defer the second key until
 sustained Mia traffic approaches 100 req/min.
 
+**Who sets the ~30 req/min + the 4-unlimited-user scenario
+(2026-10-12):** two separate layers. Selora's seller-side per-key cap
+(~30 req/min, plus a 402 payment throttle on tight parallel bursts —
+both observed live, R4/VANTYR.md rate-limits entry) is the AGGREGATE
+binding constraint. Vantyr's own limiter (30/min default, 60/min
+unlimited per user) is per-USER and additive — it never bounds
+aggregate demand. Today ALL selora-* channels (default + unlimited
+groups) share the ONE `sk-gw-` key: 4 unlimited users can legally
+demand 240 req/min (8× the key) and their sustained agent load alone
+(~2–6 req/min each) brushes the cap before any PAYG traffic. 429s
+overflow to the next priority tier, currently a6-* — the channel
+family carrying the attr_swapped fable finding. Fixes in value
+order: (1) apply the staged Selora key rotation
+(/opt/vantyr/backups/rotate_selora.sh, awaiting owner key) — moves
+selora-unlimited onto the flat-rate unlimited-account key, splitting
+the cohorts AND doubling aggregate Selora capacity at ~zero cost;
+(2) Mia $72 wallet for the default group (comes WITH $5,500 credits,
+100 RPM — capacity that pays for itself); (3) the 60 RPM key upgrade
+LAST, targeted at whichever key still shows 429 saturation in the
+logs after (1)+(2) — most likely the unlimited-account key with
+heavy $180 subscribers, where extra RPM costs zero marginal request
+cost (flat-billed upstream). Ask Selora whether the upgrade also
+lifts the 402 payment throttle; it is a separate limiter.
+
+**Correctness-ranked ladder (design, 2026-10-12):** principle — a
+channel serving the wrong model has negative value at any price
+(refund + trust incident), so correctness ranks channels and price
+differentiates among correctness-equal ones. Evidence state is ONE
+day of quick-mode verdicts: A6 fable-5-1→opus-4-6 swap (96%, strong
+signal), Selora single quick attr_swapped (weak, needs full mode),
+A6 sonnet-5-5 attr_match (good), Mia unverified (gate pending).
+Tiers — not channels — are the failover unit (attempt N = Nth
+distinct priority tier; weights share within a tier). Target shape
+for the default group once Mia passes its gate: tier 1
+selora-default-primary (w3) + a6-default-primary minus flagged
+models (w1); tier 2 mia + selora-default-fallback; tier 3
+a6-default-fallback (verified models only). Per-model lever =
+channel model list: pull fable-5/5-1 from a6-* channels if the
+full-mode re-test confirms the swap (~$0.3/check — buy the
+confirmation before reranking); sonnet-5/5-5 stays A6-eligible
+(verified + cheapest per-token + A6 is the only cache-token-reporting
+source). Unlimited group: selora-unlimited primary (flat account,
+RPM upgrade if the ≤4 subscribers saturate it) → a6-unlimited as
+fallback; Mia joins unlimited ONLY while deal-rate credits last
+($0.0079/request keeps a heavy 10k-requests/month subscriber at ~$79
+vs $180 revenue) and MUST be revisited when the wallet runs dry —
+at list rate it is $0.60/request, ruinous for flat-billed users.
+Latency decides tier-1 weight share vs tier-2 placement for Mia:
+measure FRT via the channel test + `other->>'frt'` in the battery;
+~1–2s can share tier 1, 3s+ stays tier 2. Ladder depth = attempts:
+3 tiers needs RetryTimes=2.
+
 **Channel config (owner action, admin UI, no code):**
 
 - New channel `mia-failover` (type 60 "New API"), base URL
