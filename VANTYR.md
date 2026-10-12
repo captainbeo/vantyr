@@ -1904,7 +1904,44 @@ heavy $180 subscribers, where extra RPM costs zero marginal request
 cost (flat-billed upstream). Ask Selora whether the upgrade also
 lifts the 402 payment throttle; it is a separate limiter.
 
-**Correctness-ranked ladder (design, 2026-10-12):** principle — a
+**A6 merchant attribution + marketplace intelligence (2026-10-12):**
+cctest verdicts on A6 attribute to the POOL, not the merchant: our
+request rides A6's auto-routing (their key's group → cheap-merchant
+tier), and neither the relay response nor our usage log carries the
+serving merchant ID — A6's routing decision is invisible to us.
+Attribution paths, by cost: (1) A6-side data (free): the owner's A6
+dashboard/support — their marketplace tracks per-listing telemetry;
+ask whether customer-side logs name the serving merchant per
+request, then cross-reference cctest check timestamps. (2) Tier
+narrowing (free, immediate): our group draws the CHEAP tier, so the
+fable-5-1 swap merchant is one of ~8-10 cheap listings, not 70.
+(3) Per-merchant pinning (definitive): per-supplier tokens from A6 →
+one New API channel per merchant → exact attribution for cctest
+checks AND customer traffic; a bad merchant can then be quarantined
+individually instead of nuking the pool. `GET
+/api/marketplace/public/channels/search?model=claude-fable-5-1` is a
+rich intelligence feed (no auth): 70 listings, per-listing
+input/output/cache prices, `p50_ttft_ms`, `recent_success_rate`
+(with success buckets), `last_failure_code`, supplier id/name,
+`authenticity_guaranteed` flag (19/70 for fable-5-1), and
+`smart_routing_labels` (cheap 35 / stable 16 / fast 17 / quality
+10). Price distribution: cheap tier $0.12–0.38 input, auth-guaranteed
+tier $1.20–1.80 (cheapest auth: ch-5630 $1.20/$6.00, 90% success;
+ch-5932 $1.44/$7.20, 100% success, 2057ms TTFT — faster than most
+of the cheap tier). Their site-level "model detection" feature is
+enabled+public but 0/70 fable listings currently support it — watch
+for rollout; per-listing detection results would answer merchant
+authenticity directly. **Strategic read:** the swap merchant is a
+cheap-tier draw; don't hunt the individual merchant — design so no
+single merchant can hurt customers. For fable-5/5-1 either pin A6 to
+auth-guaranteed listings (per-supplier token, ~52% margin at our
+$2.50/$12.50 sell vs ch-5630's $1.20/$6.00 cost — still 8× cheaper
+than official input) or pull fable from A6 entirely (ladder design
+above already leans this way). Note ch-331 (the R2-era price-match
+merchant) no longer appears in the fable-5-1 pool — the pool churns;
+pin to merchants, not memories.
+
+
 channel serving the wrong model has negative value at any price
 (refund + trust incident), so correctness ranks channels and price
 differentiates among correctness-equal ones. Evidence state is ONE
