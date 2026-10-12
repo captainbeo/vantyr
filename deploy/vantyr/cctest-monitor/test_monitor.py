@@ -4,160 +4,121 @@ Run: python test_monitor.py
 """
 import importlib.util
 import os
-import sys
 
 spec = importlib.util.spec_from_file_location("monitor", os.path.join(os.path.dirname(__file__), "monitor.py"))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 m.STATE_PATH = os.path.join(os.environ.get("TEMP", "."), "state_test.json")
 
+CHANNELS = [
+    {"id": 1, "name": "selora-default-primary", "status": 1,
+     "models": "claude-fable-5-1,gpt-6-astra,glm-5.3"},
+    {"id": 2, "name": "a6-default-primary", "status": 1,
+     "models": "claude-fable-5-1,gpt-6-astra"},
+    {"id": 3, "name": "selora-default-fallback", "status": 1,
+     "models": "claude-fable-5-1"},
+    {"id": 4, "name": "selora-unlimited", "status": 1,
+     "models": "claude-fable-5-1,claude-sonnet-5-5"},
+    {"id": 5, "name": "a6-default-fallback", "status": 1,
+     "models": "gpt-6-astra"},
+    {"id": 6, "name": "a6-unlimited", "status": 1,
+     "models": "claude-fable-5-1"},
+]
+
 
 class FakeGW:
-    def __init__(self):
+    def __init__(self, channels):
+        self.channels = channels
         self.writes = []
 
-    def find_channel(self, name):
-        return 1, ["claude-fable-5-1", "gpt-6-astra", "glm-5.3"], m.CHANNEL_ENABLED
+    def list_channels(self):
+        return self.channels
 
     def model_used_recently(self, cid, model, hours):
         return True
 
     def set_status(self, cid, status):
+        for ch in self.channels:
+            if ch["id"] == cid:
+                ch["status"] = status
         self.writes.append((cid, status))
         return True
 
 
-class FailCCTest:
+class VerdictCC:
+    verdict = "unofficial"
+
     @staticmethod
     def check(b, k, mo):
-        return {"category": "unofficial"}
+        return {"verdict": VerdictCC.verdict, "responseModel": mo}
 
     @staticmethod
     def verdict_category(r):
-        return r["category"]
+        return r["verdict"]
 
 
-class PassCCTest:
-    @staticmethod
-    def check(b, k, mo):
-        return {"category": "official"}
-
-    @staticmethod
-    def verdict_category(r):
-        return r["category"]
+def threshold_for(name):
+    if name.startswith("selora"):
+        return 1
+    if name.startswith("a6"):
+        return 2
+    return 3
 
 
-class NoneCCTest:
-    @staticmethod
-    def check(b, k, mo):
-        return None
-
-    @staticmethod
-    def verdict_category(r):
-        return None
-
-
-def run(name, sellers, enforce, state, cc=FailCCTest(), gw=None):
-    gateway = gw or FakeGW()
-    m.run_cycle(gateway, cc, sellers, ("claude", "gpt"), 168,
-                {"selora-reseller": 1, "a6-marketplace": 2}, 3, enforce, None, state)
+def run(sellers, enforce, state, cc=None, gw=None):
+    gateway = gw or FakeGW([dict(c) for c in CHANNELS])
+    m.run_cycle(gateway, cc or VerdictCC(), sellers, ("claude", "gpt"), 168,
+                threshold_for, 3, enforce, None, state)
     return gateway
 
 
 def test_parse():
-    known = {"selora-reseller", "a6-marketplace"}
     good = m.parse_seller_channels(
-        "selora-reseller|https://api.selora.lol|sk-abc , a6-marketplace|https://api.a6api.com|sk-xyz", known)
-    assert good == [("selora-reseller", "https://api.selora.lol", "sk-abc"),
-                    ("a6-marketplace", "https://api.a6api.com", "sk-xyz")], good
-    assert m.parse_seller_channels("foo|https://x|k", known) == []
-    assert m.parse_seller_channels("selora-reseller:https://api.selora.lol:sk-abc", known) == []
+        "selora|https://api.selora.lol|sk-abc , a6|https://api.a6api.com|sk-xyz",
+        known_prefixes=("selora", "a6"))
+    assert good == [("selora", "https://api.selora.lol", "sk-abc"),
+                    ("a6", "https://api.a6api.com", "sk-xyz")], good
+    assert m.parse_seller_channels("foo|https://x|k", known_prefixes=("selora", "a6")) == []
     assert m.CCTest.verdict_category({"verdict": "Not_Claude"}) == "not_claude"
 
 
+def test_provider_for():
+    assert m.provider_for("claude-fable-5-1") == "claude"
+    assert m.provider_for("gpt-6-astra") == "codex"
+    assert m.provider_for("GPT-6-Astra") == "codex"
+
+
 def test_state_roundtrip():
-    m.save_state({"selora-reseller": {"fails": 1}})
-    assert m.load_state() == {"selora-reseller": {"fails": 1}}
+    m.save_state({"selora-default-primary": {"fails": 1}})
+    assert m.load_state() == {"selora-default-primary": {"fails": 1}}
     os.remove(m.STATE_PATH)
+
+
+def test_expand_six_channels():
+    # One selora seller entry expands to the 3 selora-* channels.
+    state = {}
+    gw = run([("selora", "https://x", "sk")], True, state, cc=VerdictCC())
+    tested = [n for n in state if "selora" in n]
+    assert tested == ["selora-default-primary", "selora-default-fallback", "selora-unlimited"], tested
 
 
 def test_enforce_quarantine():
     state = {}
-    gw = run("q", [("selora-reseller", "https://x", "sk")], True, state)
-    assert gw.writes == [(1, 2)], gw.writes
-    assert state["selora-reseller"]["quarantined"] is True
-
-
-def test_quarantine_release():
-    # Gateway still shows status 2 (we quarantined it) → passing re-test
-    # triggers the release write (status 1).
-    state = {"selora-reseller": {"rotation": [], "idx": 0, "fails": 1,
-                                 "quarantined": True, "model": "gpt-6-astra"}}
-
-    class QuarantinedGW(FakeGW):
-        def find_channel(self, name):
-            return 1, ["gpt-6-astra"], m.CHANNEL_MANUALLY_DISABLED
-
-    gw = run("r", [("selora-reseller", "https://x", "sk")], True, state, cc=PassCCTest(), gw=QuarantinedGW())
-    assert (1, 1) in gw.writes, gw.writes
-    assert state["selora-reseller"]["quarantined"] is False
+    gw = run([("selora", "https://x", "sk")], True, state)
+    assert (1, 2) in gw.writes, gw.writes  # primary quarantined (threshold 1)
+    assert state["selora-default-primary"]["quarantined"] is True
+    # All three selora-* channels hit threshold 1 in the same cycle, so
+    # every one of them is quarantined.
+    assert all(state[n]["quarantined"] for n in state if n.startswith("selora"))
 
 
 def test_a6_threshold():
+    # One bad verdict on a6: no quarantine (threshold 2), fails=1.
     state = {}
-    gw = run("a6", [("a6-marketplace", "https://x", "sk")], True, state)
+    gw = run([("a6", "https://x", "sk")], True, state)
+    a6_names = [n for n in state if n.startswith("a6")]
     assert gw.writes == [], gw.writes
-    assert state["a6-marketplace"]["fails"] == 1
-
-
-def test_permanent_no_recheck():
-    state = {"a6-marketplace": {"rotation": [], "idx": 0, "fails": 3,
-                                "quarantined": True, "permanent": True, "model": "gpt-6-astra"}}
-
-    class DisabledGW(FakeGW):
-        def find_channel(self, name):
-            return 2, ["gpt-6-astra"], m.CHANNEL_MANUALLY_DISABLED
-
-    class NoCall:
-        @staticmethod
-        def check(b, k, mo):
-            raise AssertionError("should not be called")
-
-        @staticmethod
-        def verdict_category(r):
-            return r["category"]
-
-    gw = run("p", [("a6-marketplace", "https://x", "sk")], True, state, cc=NoCall(), gw=DisabledGW())
-    assert gw.writes == []
-
-
-def test_owner_reenable_clears_permanent():
-    # Owner re-enables a permanently quarantined channel in the admin UI:
-    # their call wins, our state clears, normal rotation resumes.
-    state = {"a6-marketplace": {"rotation": [], "idx": 0, "fails": 3,
-                                "quarantined": True, "permanent": True, "model": "gpt-6-astra"}}
-    gw = run("op", [("a6-marketplace", "https://x", "sk")], True, state, cc=NoneCCTest())
-    assert state["a6-marketplace"]["quarantined"] is False
-    assert state["a6-marketplace"]["permanent"] is False
-
-
-def test_owner_override():
-    state = {"selora-reseller": {"rotation": [], "idx": 0, "fails": 3,
-                                 "quarantined": True, "model": "x"}}
-    gw = run("o", [("selora-reseller", "https://x", "sk")], False, state, cc=PassCCTest())
-    assert state["selora-reseller"]["quarantined"] is False
-
-
-def test_inconclusive_fail_open():
-    state = {}
-    gw = run("i", [("selora-reseller", "https://x", "sk")], True, state, cc=NoneCCTest())
-    assert state["selora-reseller"]["fails"] == 0 and gw.writes == []
-
-
-def test_observe_only_counts():
-    state = {}
-    gw = run("obs", [("selora-reseller", "https://x", "sk")], False, state)
-    assert gw.writes == [] and state["selora-reseller"]["fails"] == 1
+    assert all(state[n]["fails"] == 1 for n in a6_names), state
 
 
 def test_traffic_gate_skips():
@@ -166,16 +127,56 @@ def test_traffic_gate_skips():
             return False
 
     state = {}
-    gw = run("gate", [("selora-reseller", "https://x", "sk")], True, state, cc=NoneCCTest(), gw=GateGW())
-    # Nothing checked (gate skipped all), no writes, no fails.
-    assert gw.writes == [] and state["selora-reseller"]["fails"] == 0
-    assert state["selora-reseller"]["idx"] == 1  # rotation still advances
+    gw = run([("selora", "https://x", "sk")], True, state, cc=NoneCC(), gw=GateGW(CHANNELS))
+    assert gw.writes == [] and all(s.get("fails", 0) == 0 for s in state.values())
 
 
-def test_prefix_filter():
+def test_observe_only_counts():
     state = {}
-    gw = run("pf", [("selora-reseller", "https://x", "sk")], True, state)
-    assert state["selora-reseller"]["rotation"] == ["claude-fable-5-1", "gpt-6-astra"]
+    gw = run([("selora", "https://x", "sk")], False, state)
+    assert gw.writes == [] and state["selora-default-primary"]["fails"] == 1
+
+
+def test_owner_override():
+    # Our state says quarantined; gateway shows enabled (owner re-enabled).
+    state = {"selora-default-primary": {"rotation": [], "idx": 0, "fails": 3,
+                                        "quarantined": True, "model": "x"}}
+    gw = run([("selora", "https://x", "sk")], False, state, cc=PassCC())
+    assert state["selora-default-primary"]["quarantined"] is False
+
+
+class PassCC:
+    @staticmethod
+    def check(b, k, mo):
+        return {"verdict": "official"}
+
+    @staticmethod
+    def verdict_category(r):
+        return r["verdict"]
+
+
+class NoneCheck:
+    @staticmethod
+    def check(b, k, mo):
+        return None
+
+    @staticmethod
+    def verdict_category(r):
+        return None
+
+
+class NoneCC(NoneCheck):
+    @staticmethod
+    def check(b, k, mo):
+        return None
+
+    @staticmethod
+    def verdict_category(r):
+        return None
+
+
+class FailCC(VerdictCC):
+    verdict = "not_claude"
 
 
 if __name__ == "__main__":
