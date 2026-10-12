@@ -2007,6 +2007,52 @@ cuts the good sonnet path on the same channel; split a6 channels
 per model-set if that starts to bite. Fable-5/5-1 stays off the
 cheap tier regardless (standing ladder decision).
 
+**Channel assignment map (2026-10-13, proposed — cctest deferred;
+owner: model scanning goes live at a later stage):**
+
+Seller restrictions honored: Selora — ONE `sk-gw-` key, ~30 req/min
+aggregate, 402 payment throttle on bursts, catalog lacks
+sonnet-5-5 (key rotation staged to split default/unlimited onto two
+keys, doubling capacity). A6 — merchant lottery (quality risk;
+fable-5-1 swap observed, sonnet-5-5 verified) but cache-token
+reporting and all-models catalog. Mia — 100 RPM per key, flat
+per-request wallet ($72→$5,500, terms confirmation pending),
+catalog fable-5/5-1, opus-5/5-5, sonnet-5 (+astra), all three wire
+formats.
+
+Default (PAYG) group, per model — tier 1 → tier 2:
+
+| Model | Tier 1 | Tier 2 |
+|---|---|---|
+| claude-fable-5 / 5-1 | selora-default-primary | mia |
+| claude-opus-5 / 5-5 | selora-default-primary | a6-default-primary |
+| claude-sonnet-5 | selora-default-primary | a6-default-primary |
+| claude-sonnet-5-5 | a6-default-primary | mia |
+| gpt-6-astra / sol / luna | selora-default-primary | a6-default-primary |
+
+Rationale: fable's tier-2 is Mia (not A6) because the swap was
+observed on A6's cheap tier and Mia is the only un-flagged
+alternative with the SKU; sonnet-5-5's tier-1 is A6 because Selora
+lacks the SKU and A6 verified it (attr_match) at the cheapest
+per-token price, Mia tier-2 on price ($0.25 flat); everything else
+keeps Selora primary (fastest, TLS-keyed) with A6 second.
+Implementation with the existing 6 channels + 1 new `mia`
+channel — default-group priorities: selora-default-primary P10
+(w3) / a6-default-primary P5 (w1) / selora-default-fallback P0 /
+mia-failover P-10, then per-model pruning of each channel's model
+list (fable-5/5-1 removed from a6-*; sonnet-5-5 removed from
+selora-*; sonnet-5 removed from mia since A6 is tier-2 there —
+Mia's list: fable-5, fable-5-1, opus-5, opus-5-5, sonnet-5-5).
+Mechanics relied on (verified in pinned source): abilities are per
+(group, model, channel); attempt N = Nth distinct priority tier;
+weights share within a tier; a model absent from a channel's list
+can never receive it. Unlimited group unchanged: selora-unlimited
+P10 → a6-unlimited P0, Mia excluded (flat-rate cost risk).
+Implementation = admin-UI edits only; no code, no deploy, no
+options. RetryTimes=2 when Mia's channel goes live (2 tiers per
+model in the default group → attempt 3 exhausts tiers, clamps to
+lowest).
+
 **Correctness-ranked ladder (2026-10-12):** a
 (refund + trust incident), so correctness ranks channels and price
 differentiates among correctness-equal ones. Evidence state is ONE
