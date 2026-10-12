@@ -1808,6 +1808,38 @@ exposure to failover volume and keeps Mia as a resilience rail, not a
 margin rail. Re-evaluate after observing real failover volume and
 Mia's actual invoices.
 
+**Package decision (2026-10-12, owner call — recommendation A):**
+two purchase options from Mia. A: $72 → $5,500 wallet credit,
+per-request billing, 100 RPM. B: $50 → 3-day unlimited Claude, 20
+RPM. Analysis: A's multiplier (~76×) is far above their published
+pack curve (Team $80→$2,750 ≈ 34×; Enterprise $3k→$500k ≈ 167×) —
+confirm terms in writing before paying: credit amount, expiry, RPM,
+whether failed requests bill. At A's effective rate (1.31¢ per $1
+of list), per-request cost: fable-5-1 $0.0079, fable-5 $0.0059,
+opus-5/5-5 $0.0039, sonnet-5 $0.0033; the pool covers 9,167
+fable-5-1 / 18,333 opus requests, and their credits do not expire
+(docs) — so A converts unknown volume into a bounded $72 permanent
+pool. B only beats A above ~2,100–4,300 requests/day through Mia
+for all 3 days (A-equivalent of $50), and only if that volume stays
+under the 20 RPM shared ceiling — too tight to absorb failover
+bursts (the exact scenario Mia exists for), and the credit decays
+while authenticity is unproven. 100 RPM (A) also makes Mia our
+highest-capacity rail (Selora caps ~30 RPM/key). B only makes sense
+later as a deliberate burst purchase once volume and cctest verdicts
+are known. **Customer billing is unchanged either way:** New API
+pricing is model-keyed (ratio maps), not channel-keyed — the serving
+channel never affects what the customer pays; per-request cost is
+our cost basis only. Margin at 10:1 in:out: break-even ≈2.1k input
+tokens (fable-5-1), ~4–5k (opus-5/5-5), ~8.5k (sonnet-5) — short
+requests on the cheaper models lose cents-scale money, agent-size
+requests run 83–98% margin. Mia-wallet drain fails safe: 402 sits
+inside the default retry ranges (401–407,
+setting/operation_setting/status_code_ranges.go) → the attempt walks
+to the next tier and Selora/A6 serve. If a flat-rate customer SKU is
+ever wanted, the native mechanism exists: `ModelPrice` (quota_type
+1) on a dedicated alias served only by the Mia channel (e.g. an
+"-economy" per-request SKU) — per-token names stay untouched.
+
 **Channel config (owner action, admin UI, no code):**
 
 - New channel `mia-failover` (type 60 "New API"), base URL
