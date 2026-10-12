@@ -1679,3 +1679,89 @@ included).
   links via api/status.
 - /docs updated immediately (Caddy serves the static tree directly);
   the gateway restart was only for the web-app rename + footer reload.
+
+## 2026-10-12 — Dual-gateway Epay: BEpusdt secondary (Arbitrum/X-Layer/Base/TON/GRAM)
+
+Owner decision: crypto splits across two gateways. GM Pay keeps its 7
+chains (TRON, Ethereum, BNB, Polygon, Plasma, Solana, Aptos); **BEpusdt**
+(github.com/v03413/BEpusdt, GPL-3.0, actively maintained) serves
+**Arbitrum One (usdt/usdc.arbitrum), X Layer (usdt/usdc.xlayer), Base
+(usdc.base only — no USDT type exists there), TON (usdt.ton) and native
+GRAM (ton.gram)**. All TON-network payments move to BEpusdt; GM Pay's
+TON row gets disabled ("GM Pay will not support TON"). Same receive
+addresses re-used: EVM 0x1dd5…ed54 for the three new EVM L2s, TON
+UQBzGz…6aea for both TON types. Crypto checkouts display **USD only**
+(owner decision; EUR never enters the crypto flow — wallet display and
+1:1 pricing stay USD).
+
+**Fork change (documented gap): New API has one Epay gateway.** The
+`PayAddress`/`EpayId`/`EpayKey` globals are single; a second gateway
+needs per-method routing. Added options
+`EpaySecondary{Address,Id,Key,Types}` (options table, admin-UI fields in
+payment settings):
+
+- `resolveEpayGateway(paymentMethod)`: methods listed in
+  `EpaySecondaryTypes` (comma-separated BEpusdt trade types) route to
+  the secondary client; everything else keeps the primary. Unconfigured
+  secondary + routed method → **fail-closed** before any DB access or
+  order creation (same pattern as Stripe USD).
+- Secondary submit forms are built locally (not go-epay `Purchase()`)
+  to carry **`fiat=USD`**: BEpusdt's Epay handler defaults to CNY when
+  the field is absent — without this, a $10 top-up would be priced as
+  ¥10 (~7× mispricing). fiat participates in the MD5 signature, so
+  on-the-wire tampering breaks the signature.
+- `EpayNotify` **dual-verifies**: primary key first, secondary key on
+  failure. Callback params carry no gateway identity; each key only
+  verifies its own gateway's signature, so ordered attempts
+  discriminate safely. Both gateways share the `epay` payment-provider
+  identity; `RechargeEpay` remains the single credited path (row lock +
+  status check; credits from `topUp.Amount`, never callback money).
+- BEpusdt facts (source-verified): Epay endpoint at site root
+  `/submit.php`, pid fixed `1000`, `EpayKey` = its `api_auth_token`,
+  notify back = GET with fixed params (money/name/out_trade_no/pid/
+  trade_no/trade_status/type) + MD5, requires literal `success` ack
+  (our EpayNotify writes exactly that). **Epay-origin orders cannot
+  reselect payment method in BEpusdt's cashier** (`CanReselectPayment`
+  false for epay API orders) → each chain = one pay-method button on
+  our side via `PayMethods` entries with `type=<trade type>`.
+- Also exported `model.InitColumnNamesForTest` (initCol wrapper) for
+  controller tests needing raw `group`-column selects.
+
+Tests: routing table, secondary form (fiat=USD, signature round-trip,
+tamper-breaks), dual-verify (secondary-signed verifies via secondary
+AND NOT via primary; garbage fails), fail-closed (no order row).
+Epay/payment controller suite green (188s); model/setting green.
+
+**Deployment (owner approval gate before prod):**
+
+- compose service `bepusdt` (image `v03413/bepusdt:<tag>`, digest-pin
+  on first pull, SQLite volume `./data/bepusdt` → /var/lib/bepusdt).
+- Caddy: **new site `pay2.vantyr.xyz` → bepusdt:8080** (pay.vantyr.xyz
+  keeps GM Pay untouched — zero risk to the live rail; rollback = drop
+  the block + clear EpaySecondary* options). Owner: DNS A record
+  `pay2` → server IP on Namecheap.
+- BEpusdt admin (setup wizard at its random secure path): strong admin
+  password (no login rate limit, like GM Pay); `ApiAppUri=
+  https://pay2.vantyr.xyz` (checkout URLs https + right host);
+  payment_timeout=900, payment_min_amount=1; wallets registered per
+  trade type (EVM address ×5 EVM types, TON address ×2 TON types) —
+  unregistered types are auto-unavailable in its cashier.
+  Rates: rate_float_USDT_USD=1 / USDC_USD=1 (GM Pay 1:1 parity);
+  GRAM via CoinGecko auto (kills the manual 0.625 TON forced-rate
+  drift risk). TronGrid API key recommended for TON scanning.
+- New API options at cutover: EpaySecondary* as above +
+  `EpaySecondaryTypes=usdt.arbitrum,usdc.arbitrum,usdt.xlayer,
+  usdc.xlayer,usdc.base,usdt.ton,ton.gram`; extend `PayMethods` JSON
+  with one entry per new chain.
+- GM Pay: disable its TON wallet row once BEpusdt TON is verified.
+- Backup: extend nightly backup + stuck-order watchdog to BEpusdt
+  SQLite (same one-shot alpine online-backup pattern as GM Pay).
+- Live battery before trust: signed form POST both directions, replay
+ /idempotency, then real $1 test orders on every new rail (Arbitrum
+  USDT+USDC, X-Layer USDT+USDC, Base USDC, TON USDT, TON GRAM), each
+  credited exactly (Amount × 500,000) + usage-log reconcile; one TRC20
+  order to confirm GM Pay regression-free.
+
+Docs: /docs crypto bullet + setup sections across 12 languages now
+list 11 networks + GRAM note; Turkish guide mentions GRAM; guide-map
+rebuilt (files-only, DB option untouched per standing decision).
