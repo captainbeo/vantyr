@@ -232,22 +232,33 @@ func buildSecondaryEpaySubmitForm(
 // verifyEpayCallbackSignature 对回调参数依次用主、副网关密钥验签，
 // 返回验签成功的客户端与结果。两个网关使用不同密钥时仅其中一方通过；
 // 主密钥先试（现网全部历史订单均为主网关订单），失败再试副密钥。
+// 注意：每次 Verify 都在传入的 map 上原地重算 sign（go-epay 的
+// GenerateParams 直接写回 map），所以每次尝试必须传副本，否则第一个
+// 客户端写入的 sign 会污染第二次比较。
 func verifyEpayCallbackSignature(params map[string]string) (*epay.Client, *epay.VerifyRes, error) {
 	primary := GetEpayClient()
 	if primary != nil {
-		verifyInfo, err := primary.Verify(params)
+		verifyInfo, err := primary.Verify(copyEpayParams(params))
 		if err == nil && verifyInfo.VerifyStatus {
 			return primary, verifyInfo, nil
 		}
 	}
 	secondary := getSecondaryEpayClient()
 	if secondary != nil {
-		verifyInfo, err := secondary.Verify(params)
+		verifyInfo, err := secondary.Verify(copyEpayParams(params))
 		if err == nil && verifyInfo.VerifyStatus {
 			return secondary, verifyInfo, nil
 		}
 	}
 	return nil, nil, errors.New("验签失败")
+}
+
+func copyEpayParams(params map[string]string) map[string]string {
+	copied := make(map[string]string, len(params))
+	for k, v := range params {
+		copied[k] = v
+	}
+	return copied
 }
 
 func getPayMoney(amount int64, group string) float64 {

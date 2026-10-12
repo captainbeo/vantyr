@@ -188,10 +188,27 @@ func TestEpayNotifyDualVerify(t *testing.T) {
 	assert.False(t, primaryVerify.VerifyStatus)
 
 	// Verify via the dual-verify helper: primary fails, secondary succeeds.
-	dualClient, dualInfo, err := verifyEpayCallbackSignature(signed)
+	// Regression guard for go-epay's in-place mutation: Verify() rewrites
+	// params["sign"] with its own computation, so the helper must copy the
+	// map before each attempt — verify against a FRESH map that has already
+	// been mutated by a prior primary Verify (the live failure shape).
+	fresh := map[string]string{}
+	for k, v := range notifyParams {
+		fresh[k] = v
+	}
+	fresh = epay.GenerateParams(fresh, "secondary-secret")
+	// Simulate a prior primary attempt mutating the map (as the old helper did).
+	_, _ = primaryClient.Verify(fresh)
+	dualClient, dualInfo, err := verifyEpayCallbackSignature(fresh)
 	require.NoError(t, err)
 	require.NotNil(t, dualClient)
 	assert.True(t, dualInfo.VerifyStatus)
+
+	// And on the originally-signed map (unmutated).
+	dualClient2, dualInfo2, err := verifyEpayCallbackSignature(signed)
+	require.NoError(t, err)
+	require.NotNil(t, dualClient2)
+	assert.True(t, dualInfo2.VerifyStatus)
 
 	// Garbage signature fails both.
 	garbage := map[string]string{}
