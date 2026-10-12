@@ -1985,8 +1985,29 @@ above already leans this way). Note ch-331 (the R2-era price-match
 merchant) no longer appears in the fable-5-1 pool — the pool churns;
 pin to merchants, not memories.
 
+**A6 multi-merchant routes vs cctest coverage (2026-10-13):** the
+owner is configuring A6 per-model routes with multiple merchants
+(A6 API/dashboard) so A6 switches internally when a merchant
+degrades — the right tool for AVAILABILITY. But cctest only scans
+whatever the route serves at check time: failover-style routes keep
+standbys dark (only the active merchant is ever verified), and
+load-balanced routes blur verdicts across merchants (a quarantine
+re-test pass can come from a different merchant than the failing
+one, releasing the channel while the bad merchant stays in the
+pool). Timing gap: A6's success-rate telemetry switches DOWN
+merchants in minutes, but a promoted wrong-model merchant serves
+customers ~1–2 h before quarantine (one model per channel per
+10-min cycle × 2-fail threshold). Design rules: standbys must come
+from the `authenticity_guaranteed` tier so the dark window is
+low-risk; accept pool-level attribution with the 2-fail threshold;
+surgical per-merchant quarantine is the per-supplier-token
+escalation path. Granularity note: A6 routes are per-model, our
+quarantine is per-channel (all models) — a bad fable merchant also
+cuts the good sonnet path on the same channel; split a6 channels
+per model-set if that starts to bite. Fable-5/5-1 stays off the
+cheap tier regardless (standing ladder decision).
 
-channel serving the wrong model has negative value at any price
+**Correctness-ranked ladder (2026-10-12):** a
 (refund + trust incident), so correctness ranks channels and price
 differentiates among correctness-equal ones. Evidence state is ONE
 day of quick-mode verdicts: A6 fable-5-1→opus-4-6 swap (96%, strong
