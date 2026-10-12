@@ -1765,3 +1765,110 @@ Epay/payment controller suite green (188s); model/setting green.
 Docs: /docs crypto bullet + setup sections across 12 languages now
 list 11 networks + GRAM note; Turkish guide mentions GRAM; guide-map
 rebuilt (files-only, DB option untouched per standing decision).
+
+## 2026-10-12 — Mia Router: third upstream seller (miarouter.online)
+
+Owner decision: add a third upstream. Mia Router
+(https://miarouter.online, New API deployment by AzarLogic LLC, status
+endpoint identical in shape to ours) joins Selora and A6 as a type-60
+"New API" channel — base URL + key, zero gateway code, exactly the
+Selora/A6 pattern.
+
+**Probed facts (2026-10-12, public endpoints only, no key):** catalog
+via `GET /api/pricing` — our exact SKU names, no model mapping needed:
+claude-fable-5 $0.45, claude-fable-5-1 $0.60, claude-opus-5/5-5 $0.30,
+claude-sonnet-5 $0.25, claude-opus-4-6/-4-8 $0.28, gpt-6-astra $0.60;
+their `/v1/responses` advertised in docs (and 401-gated live probe)
+supports OpenAI Responses for Codex-style clients; `/v1/messages`
+(Anthropic) and `/v1/chat/completions` also live. **Billing is
+flat-per-request (quota_type 1)**, not per-token: a 10-token ping and
+a 100k-token turn cost the same. Their `/api/status` also advertises
+`context_discount` tiers (5000/10000/15000 tokens → 0.1/0.2/0.5
+multipliers) — a field absent from our pinned v1.0.0-rc.41, so they
+run newer or modified New API code; their docs' credits page
+describes pure flat billing with no tiers. Treat context_discount as
+unverified until a real invoice shows its effect; if real, it would
+*further reduce* their price on long-context requests (multipliers
+under 1), which would reverse the long-turn loss math — one live
+50k-token test request settles it.
+Supports check-in credits, Telegram trial, credit packs ($2→$60 up to
+$3k→$500k) with bonus — reseller economics unknown; treat cost as the
+flat price.
+
+**Economics (why failover-only at launch):** our sell side is
+per-token (fable-5-1 $2.50/$12.50 per MTok in/out). One fable-5-1
+request through Mia costs $0.60 flat regardless of tokens. A
+customer's 1k-in/1k-out turn bills ~$0.015 on our side → ~$0.59
+margin if a "turn" is 1 request (typical agent turn = 1 request).
+But a long-context turn (50k in/5k out) bills us $0.19 while Mia
+charges $0.60 → **loss on long turns**. A6-style load-sharing would
+put 25% of PAYG turns through a rail that loses money on big turns;
+failover-only (Mia serves only when Selora+A6 fail) caps the loss
+exposure to failover volume and keeps Mia as a resilience rail, not a
+margin rail. Re-evaluate after observing real failover volume and
+Mia's actual invoices.
+
+**Channel config (owner action, admin UI, no code):**
+
+- New channel `mia-failover` (type 60 "New API"), base URL
+  `https://miarouter.online`, key = the owner's Mia API key (enter in
+  admin UI only, never chat), groups `default` (NOT `unlimited` —
+  same isolation rationale as A6: keep flat-priced/unknown-depth
+  upstreams away from the $180 flat-rate plan), **priority strictly
+  below every existing default-group channel serving those models**.
+  Verified in the pinned source (`model/ability.go`
+  `getChannelQuery`/`getPriority`): attempt N uses the Nth distinct
+  priority tier (DESC), so Mia only receives traffic after all
+  tiers above it fail. Consequence for `RetryTimes`: if the 6
+  production channels form 2 distinct tiers (primary + fallback, as
+  the names suggest — verify in the channel admin UI), Mia is the
+  3rd tier and needs **`RetryTimes=2`** (3 attempts) to ever serve;
+  at the current `RetryTimes=1` it is a cold spare that cannot even
+  absorb failover traffic. Decide at setup: raise `RetryTimes` to
+  match the tier count (one extra retry hop on hard failures), or
+  leave Mia unreachable-by-design until authenticity is proven and
+  then raise it.
+- Models: the four owner-targeted SKUs
+  `claude-fable-5,claude-fable-5-1,claude-opus-5,claude-opus-5-5`
+  (matching our sold-models list; add sonnet-5 later if wanted).
+- No param_override for developer roles (Mia's docs advertise Codex
+  support and their `/v1/responses` exists; verify with one real
+  Codex CLI turn before trusting — if they 500 on developer-role
+  input items, apply the same gjson query-path override as Selora).
+- Channel test button after creation → then one real end-to-end
+  request per model per wire format (chat/completions + /v1/messages
+  + /v1/responses with a Codex CLI turn) with billing reconcile:
+  our usage log quota vs published price table for that model.
+- Watch billing on the flat rail: our usage logs record token
+  counts; Mia's invoice is per request. Cost bookkeeping = request
+  count × flat price, not token math — the usage log's per-request
+  row count on the channel is the reconcile key.
+- Pricing: our ratios already cover all four SKUs (no new pricing
+  work; Model Overview shows live prices already).
+
+**cctest monitor (this branch, code):** SELLER_CHANNELS gains a
+`mia|https://miarouter.online|<monitoring-key>` entry (prefix
+expansion covers `mia-*` channels); threshold prefix `mia` = 2 (same
+noise tolerance as A6 until live verdicts justify tightening); env
+knob `CCTEST_FAIL_THRESHOLD_MIA=2` added to compose/.env.example.
+Mia's catalog lists `claude-*`/`gpt-*` models only among our sold
+models — the monitor's claude/gpt prefix gate covers them as-is.
+
+**Authenticity (open until verified):** public info only — no cctest
+check has run against Mia yet. Their docs say nothing about upstream
+sourcing, and their platform page mentions "dedicated pools" with
+frozen model lists without describing the default pool's upstream
+depth. The standing A6 lesson (2026-10-12: attribution check on
+claude-fable-5-1 through A6 returned `attr_swapped`, serving
+opus-4-6) says catalog listings prove nothing. Gate for Mia: at C0
+calibration, run one cctest attribution check per flagship model
+against `https://miarouter.online` and record verdict +
+responseModel here before promoting it from cold spare to trusted
+failover. Until then it sits as a cold spare with `retry`-only
+traffic exposure.
+
+**Rollback:** disable the `mia-failover` channel (status 2) or delete
+it; nothing else references it. cctest monitor code: remove the mia
+entry from SELLER_CHANNELS in .env; state entries for mia-* channels
+are additive.
+

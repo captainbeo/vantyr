@@ -74,7 +74,9 @@ logged; 3+ within 24 h → Discord alert. `unofficial` / `reversed` /
 
 **Fail thresholds.** selora: 1 fail → quarantine (single dedicated
 upstream; a fail is unambiguous). a6: 2 consecutive fails → quarantine
-(the merchant lottery makes single-draw verdicts noisy).
+(the merchant lottery makes single-draw verdicts noisy). mia (Mia
+Router, https://miarouter.online): 2 consecutive fails — same noise
+tolerance as a6 until live verdicts justify tightening.
 
 **Quarantine.** Set status 2 via the admin API and record it in the
 state file. Re-test the failing model every cycle; pass → status 1,

@@ -23,6 +23,8 @@ CHANNELS = [
      "models": "gpt-6-astra"},
     {"id": 6, "name": "a6-unlimited", "status": 1,
      "models": "claude-fable-5-1"},
+    {"id": 7, "name": "mia-failover", "status": 1,
+     "models": "claude-fable-5-1,claude-opus-5-5,claude-sonnet-5"},
 ]
 
 
@@ -60,7 +62,7 @@ class VerdictCC:
 def threshold_for(name):
     if name.startswith("selora"):
         return 1
-    if name.startswith("a6"):
+    if name.startswith("a6") or name.startswith("mia"):
         return 2
     return 3
 
@@ -78,7 +80,11 @@ def test_parse():
         known_prefixes=("selora", "a6"))
     assert good == [("selora", "https://api.selora.lol", "sk-abc"),
                     ("a6", "https://api.a6api.com", "sk-xyz")], good
-    assert m.parse_seller_channels("foo|https://x|k", known_prefixes=("selora", "a6")) == []
+    mia = m.parse_seller_channels(
+        "mia|https://miarouter.online|sk-mia",
+        known_prefixes=("selora", "a6", "mia"))
+    assert mia == [("mia", "https://miarouter.online", "sk-mia")], mia
+    assert m.parse_seller_channels("foo|https://x|k", known_prefixes=("selora", "a6", "mia")) == []
     assert m.CCTest.verdict_category({"verdict": "Not_Claude"}) == "not_claude"
 
 
@@ -119,6 +125,16 @@ def test_a6_threshold():
     a6_names = [n for n in state if n.startswith("a6")]
     assert gw.writes == [], gw.writes
     assert all(state[n]["fails"] == 1 for n in a6_names), state
+
+
+def test_mia_threshold():
+    # One bad verdict on mia: no quarantine (threshold 2), fails=1.
+    state = {}
+    gw = run([("mia", "https://x", "sk")], True, state)
+    mia_names = [n for n in state if n.startswith("mia")]
+    assert mia_names == ["mia-failover"], mia_names
+    assert gw.writes == [], gw.writes
+    assert all(state[n]["fails"] == 1 for n in mia_names), state
 
 
 def test_traffic_gate_skips():

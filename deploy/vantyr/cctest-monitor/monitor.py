@@ -28,8 +28,10 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          per seller key: all gateway channels using that
                          same seller key share the entry (channel lookup
                          expands to every channel whose name starts with
-                         the entry name). Production has 6 channels over
-                         2 seller keys (selora-* and a6-*).
+                         the entry name). Production runs three sellers:
+                         selora-*/a6-* (6 channels over 2 seller keys)
+                         and mia-* (Mia Router failover channels,
+                         https://miarouter.online).
                          Selora's sk-gw- key only authenticates from our
                          gateway's Go client (TLS-fingerprint-gated) — for
                          selora, point the URL at the gateway itself
@@ -41,7 +43,7 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
   CYCLE_MINUTES          default 10
   ENFORCE                false (observe-only) / true
   FAIL_THRESHOLD         consecutive fails before quarantine: default 1
-                         for selora-* channels, 2 for a6-* channels
+                         for selora-* channels, 2 for a6-*/mia-* channels
   PERMANENT_FAILS        consecutive fails before credit spend stops, default 3
   DISCORD_WEBHOOK        optional alerts
 """
@@ -283,8 +285,9 @@ def parse_seller_channels(raw, known_prefixes):
     """Parse SELLER_CHANNELS entries "name|base_url|seller_key". The name is
     a prefix matched against gateway channel names at runtime: one entry
     covers every gateway channel whose name starts with it (production
-    runs 6 channels over 2 seller keys: selora-*/a6-* primary, fallback,
-    and unlimited variants)."""
+    runs three sellers: selora-*/a6-* primary, fallback, and unlimited
+    variants over 2 seller keys, plus mia-* failover channels from
+    Mia Router)."""
     sellers = []
     for entry in raw.split(","):
         parts = [p.strip() for p in entry.split("|") if p.strip()]
@@ -319,7 +322,7 @@ def main():
         return 1
     sellers = parse_seller_channels(
         os.environ.get("SELLER_CHANNELS", ""),
-        known_prefixes=("selora", "a6"),
+        known_prefixes=("selora", "a6", "mia"),
     )
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")
@@ -336,10 +339,12 @@ def main():
     permanent_fails = max(2, int(os.environ.get("PERMANENT_FAILS", "3")))
     # Threshold by channel-name prefix: selora-* = dedicated upstream (a
     # single bad verdict is unambiguous), a6-* = merchant lottery (noise
-    # tolerant: 2 consecutive fails required).
+    # tolerant), mia-* = flat-priced seller, unknown routing depth —
+    # same noise tolerance as a6 until live verdicts say otherwise.
     fail_threshold_prefixes = (
         ("selora", max(1, int(os.environ.get("FAIL_THRESHOLD_SELORA", "1")))),
         ("a6", max(1, int(os.environ.get("FAIL_THRESHOLD_A6", "2")))),
+        ("mia", max(1, int(os.environ.get("FAIL_THRESHOLD_MIA", "2")))),
     )
 
     def threshold_for(channel_name):
