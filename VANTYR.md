@@ -1642,3 +1642,29 @@ included).
   links via api/status.
 - /docs updated immediately (Caddy serves the static tree directly);
   the gateway restart was only for the web-app rename + footer reload.
+
+## 2026-10-12 — /docs left page-overview sidebar (rev 2026-10-12b)
+
+`feat(docs): left page-overview sidebar, rookie-friendly navigation`
+(c4a71cf42, tag deploy/2026-10-12-docs-sidebar).
+
+- Scope: /docs section nav moved out of the header into a sticky left
+  "On this page" sidebar — numbered 01–08 sections, agent-guide
+  sub-links, "Start here" badge on Setup, active-section highlight
+  (IntersectionObserver), scroll-padding so anchors clear the header.
+  Language switcher + Open Dashboard CTA unchanged in the header. 260px
+  + fluid grid (wrap widened 1000→1160px), collapses to a static card
+  above the hero at ≤1000px; Arabic keeps the TOC on the left via
+  mirrored RTL grid rules. All 12 languages, sidebar chrome translated
+  (On this page / Start here / section titles).
+- Deploy: static-only — no image rebuild (image stays pinned-next26;
+  the gateway binary does not serve these files, Caddy does). Committed
+  on vantyr/main, pushed to public with tag; 12 HTML files scp'd to the
+  server and copied into /opt/vantyr/deploy/vantyr/static/docs/ (backup
+  /opt/vantyr-backup-docs-pre-sidebar); md5 verified index.html
+  27f3b9218e…; live /docs + de/ar/zh serve 8 TOC items + sub-links.
+- Browser verification (local preview): TOC sticky left at 86px, active
+  item follows scroll (setup→pricing), anchor click navigates with
+  smooth scroll + hash, mobile 375px collapses to static card above
+  hero, RTL Arabic TOC stays left with Arabic labels, zh-CN localized
+  (本页导航/从这里开始). No console errors, no failed requests.
