@@ -156,31 +156,46 @@ class Gateway:
 
 
 class CCTest:
-    def __init__(self, base, key):
+    def __init__(self, base, key, full_check=False):
         self.base = base.rstrip("/")
         self.key = key
+        self.full_check = full_check
 
     def check(self, base_url, seller_key, model):
         """Submit one check and poll for its result.
         Returns the result dict, or None when inconclusive (submit error,
-        task failure, timeout) — never quarantines on its own errors."""
+        task failure, timeout) — never quarantines on its own errors.
+
+        Request schema recovered from cctest's web bundle (their docs page
+        renders from embedded i18n strings): POST /api/v1/check with
+        {url, apiKey, model, provider, attributionOnly, concurrency}.
+        url auto-appends the provider's path (/v1/messages for claude,
+        /v1/responses for codex). attributionOnly=true is the cheap mode:
+        3 requests, fingerprint-swap detection, no full scoring."""
         payload, status = http_json(
             "POST",
             self.base + "/api/v1/check",
             self.key,
-            {"endpoint": base_url, "key": seller_key, "model": model},
+            {
+                "url": base_url,
+                "apiKey": seller_key,
+                "model": model,
+                "provider": provider_for(model),
+                "attributionOnly": not self.full_check,
+                "concurrency": 1,
+            },
         )
         if status != 200:
             LOG.warning("cctest submit failed: %s %s", status, payload)
             return None
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-        task_id = data.get("task_id") or data.get("taskId")
+        task_id = data.get("taskId") or data.get("task_id")
         if not task_id:
             LOG.warning("cctest submit response has no task id: %s", payload)
             return None
-        deadline = time.time() + 180
+        deadline = time.time() + 300
         while time.time() < deadline:
-            time.sleep(10)
+            time.sleep(5)
             result, status = http_json("GET", f"{self.base}/api/v1/check/{task_id}", self.key)
             if status != 200:
                 LOG.warning("cctest poll failed: %s %s", status, result)
@@ -197,11 +212,17 @@ class CCTest:
 
     @staticmethod
     def verdict_category(result):
-        for key in ("category", "verdict", "result", "level"):
+        for key in ("verdict", "category", "result", "level"):
             value = result.get(key)
             if isinstance(value, str) and value:
                 return value.lower()
         return None
+
+
+def provider_for(model):
+    """cctest detection line: claude → Anthropic /v1/messages, codex →
+    OpenAI /v1/responses. GPT-family models ride the codex line."""
+    return "codex" if model.lower().startswith("gpt-") else "claude"
 
 
 def discord_alert(webhook, text):
@@ -269,7 +290,11 @@ def main():
     }
 
     gateway = Gateway(gateway_url, gateway_token)
-    cctest = CCTest(os.environ.get("CCTEST_BASE", "https://cctest.ai"), cctest_key)
+    cctest = CCTest(
+        os.environ.get("CCTEST_BASE", "https://cctest.ai"),
+        cctest_key,
+        full_check=os.environ.get("CCTEST_FULL_CHECK", "false").lower() in ("1", "true", "yes"),
+    )
     discord = os.environ.get("DISCORD_WEBHOOK") or None
 
     LOG.info(

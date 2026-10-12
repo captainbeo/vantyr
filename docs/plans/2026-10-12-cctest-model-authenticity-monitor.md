@@ -108,35 +108,46 @@ halves both if C0 says so.
 
 ### C0 — calibration (owner actions, before any build)
 
-1. Nail the `POST /api/v1/check` request/response schema: their docs
-   page documents auth, endpoints, and the verdict categories only —
-   **no request field names are published.** Get the real shape either
-   by email (admin@oryntis.ai) or by running the web form once with
-   browser devtools open and copying the request it sends. Also confirm
-   quick/full mode selection via API and that fingerprints exist for
-   our SKUs (fable-5.1, gpt-6-astra).
-2. Create the cctest account + API key; buy the ¥50 pack.
-3. Create capped monitoring keys at Selora and A6 (or reuse the channel
-   keys for calibration only).
-4. Run 3–5 quick-mode checks (one per flagship model per channel) and
+**Schema recovered (2026-10-12)** — cctest's docs page renders from
+i18n strings embedded in their public JS bundle; mining it gave the
+full field set. Request: `POST /api/v1/check` with
+`{url, apiKey, model, provider, attributionOnly, concurrency}` —
+`url` auto-appends the provider path (`/v1/messages` for claude,
+`/v1/responses` for codex), `provider` is `claude` | `codex` (GPT
+models must use `codex`), `attributionOnly: true` is the cheap quick
+mode (3 requests, swap-detection only), `concurrency` 1–5. Response:
+task returns `taskId`; poll `GET /api/v1/check/:taskId` every 2–3 s
+until `status` is `done`/`error`; result fields include `verdict`
+(official / official_flawed / unofficial / reversed / not_claude),
+`responseModel`, `expectedModel`, `scores`, `progress`, `step`, and
+with `tokenUsage` enabled a token audit. The monitor now sends this
+exact schema (CCTEST_FULL_CHECK env selects full vs quick mode).
+
+1. ~~Nail the check-API schema~~ (done — see above).
+2. ~~Create the cctest account + buy the ¥50 pack~~ (done 2026-10-12).
+3. **Generate the API key** in the cctest console's API Key page
+   (Account → API Key). Key shows once; store it in the VPS `.env`.
+4. Create capped monitoring keys at Selora and A6 (~$5, claude+gpt
+   restricted) — or reuse the channel keys for calibration only.
+5. Run 3–5 quick-mode checks (one per flagship model per channel) and
    record the token cost from seller-side billing / our channel
    accounting.
-5. Ask cctest whether their console scheduled monitoring can run our
+6. Ask cctest whether their console scheduled monitoring can run our
    cadence with the free `/api/v1/status` endpoints — if yes, Phase C3
    replaces our scheduler and per-check credits may drop away.
 
-   Exit: real per-check cost + confirmed schema → final cadence decision.
+   Exit: real per-check cost → final cadence decision.
 
-Calibration flow (field names to be confirmed at C0.1 — cctest does not
-publish them; the shapes below are placeholders):
+Calibration flow (verified schema):
 
 ```bash
 CHECK=$(curl -s https://cctest.ai/api/v1/check \
   -H "Authorization: Bearer $CCTEST_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"endpoint":"<seller-base-url>","key":"<seller-key>","model":"claude-fable-5-1"}')
-curl -s "https://cctest.ai/api/v1/check/$TASK_ID" \
+  -d '{"url":"https://api.selora.lol","apiKey":"<seller-key>","model":"claude-fable-5-1","provider":"claude","attributionOnly":true,"concurrency":1}')
+curl -s "https://cctest.ai/api/v1/check/<taskId from CHECK>" \
   -H "Authorization: Bearer $CCTEST_KEY"
+# poll until status is done; read "verdict"
 ```
 
 ### C1 — observe-only sidecar (1 week)
@@ -147,11 +158,11 @@ curl -s "https://cctest.ai/api/v1/check/$TASK_ID" \
 policy suite (12 mocked-gateway/cctest tests — quarantine, release,
 thresholds, permanent, owner-override incl. status-3 native auto-disable,
 traffic gate, fail-open) passes, and the image builds from the pinned
-pattern (`docker compose build cctest-monitor`). **Deploy is gated on
-C0**: with the real check-API field names still unpublished, the
-submit/poll code paths are C0 placeholders that fail open; wire the real
-schema into `CCTest.check`/`verdict_category` (or confirm the guess)
-before the observe week starts.
+pattern (`docker compose build cctest-monitor`). The check request now
+sends the verified schema (recovered from cctest's JS bundle, see C0);
+`verdict_category` falls back through alias keys if the live response
+differs. **Deploy is gated on C0 remaining steps:** generate the API
+key, calibrate cost, create the monitoring PAT + seller keys.
 
 Deploy steps (owner, on the VPS): commit + push, pull, set the real
 CCTEST_* values in `.env`, `docker compose up -d cctest-monitor`,
@@ -173,11 +184,12 @@ If cctest console scheduling suffices, shrink the sidecar to a
 
 ## Open questions
 
-- cctest request/response schemas are **not published** (only auth,
-  endpoints, and verdict categories). Their contact is
-  admin@oryntis.ai; alternatively capture the web form's request once
-  via browser devtools. Quick/full mode selection field unknown (C0.1).
-- Fingerprint coverage for our exact SKUs (C0.1).
+- ~~cctest request/response schemas~~ — recovered from their JS bundle
+  (see C0). The result poll's exact JSON key for the verdict is
+  `verdict`; if the live response differs, the monitor's
+  `verdict_category` falls back through `category`/`result`/`level`.
+- Fingerprint coverage for our exact SKUs (C0.5 — run one check per
+  flagship model and look at `responseModel`).
 - A6 verdict attribution under the merchant lottery — mitigated by the
   2-fail threshold; per-merchant pinning (per-supplier tokens) is the
   later lever if it stays noisy.
