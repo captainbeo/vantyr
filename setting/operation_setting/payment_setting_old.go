@@ -13,6 +13,16 @@ var PayAddress = ""
 var CustomCallbackAddress = ""
 var EpayId = ""
 var EpayKey = ""
+
+// EpaySecondary* 副易支付网关（BEpusdt）：EpaySecondaryTypes 中的支付方式
+// 路由到副网关，其余仍走主网关（PayAddress）。
+// EpaySecondaryAddress = 网关站点根地址（如 https://pay2.vantyr.xyz）；
+// EpaySecondaryId / EpaySecondaryKey = 副网关商户号与签名密钥。
+var EpaySecondaryAddress = ""
+var EpaySecondaryId = ""
+var EpaySecondaryKey = ""
+var EpaySecondaryTypes = ""
+
 var Price = 7.3
 var MinTopUp = 1
 var USDExchangeRate = 7.3

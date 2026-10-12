@@ -149,6 +149,107 @@ func GetEpayClient() *epay.Client {
 	return withUrl
 }
 
+// getSecondaryEpayClient 返回副易支付网关（BEpusdt）客户端，未配置时返回 nil。
+func getSecondaryEpayClient() *epay.Client {
+	if operation_setting.EpaySecondaryAddress == "" ||
+		operation_setting.EpaySecondaryId == "" ||
+		operation_setting.EpaySecondaryKey == "" {
+		return nil
+	}
+	withUrl, err := epay.NewClient(&epay.Config{
+		PartnerID: operation_setting.EpaySecondaryId,
+		Key:       operation_setting.EpaySecondaryKey,
+	}, operation_setting.EpaySecondaryAddress)
+	if err != nil {
+		return nil
+	}
+	return withUrl
+}
+
+// epaySecondaryTypesSet 解析 EpaySecondaryTypes（逗号分隔的支付方式）为集合。
+func epaySecondaryTypesSet() map[string]bool {
+	types := make(map[string]bool)
+	for _, t := range strings.Split(operation_setting.EpaySecondaryTypes, ",") {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			types[t] = true
+		}
+	}
+	return types
+}
+
+// resolveEpayGateway 按支付方式选择易支付网关：EpaySecondaryTypes 命中的
+// 方式路由到副网关，其余走主网关。副网关未配置却命中其类型时 fail-closed
+// 返回错误（禁止静默改走主网关——主网关不认识这些交易类型，订单必失败）。
+func resolveEpayGateway(paymentMethod string) (*epay.Client, bool, error) {
+	secondary := getSecondaryEpayClient()
+	if epaySecondaryTypesSet()[paymentMethod] {
+		if secondary == nil {
+			return nil, false, errors.New("支付网关未配置")
+		}
+		return secondary, true, nil
+	}
+	primary := GetEpayClient()
+	if primary == nil {
+		return nil, false, errors.New("支付网关未配置")
+	}
+	return primary, false, nil
+}
+
+// buildSecondaryEpaySubmitForm 构建发往副网关（BEpusdt）的易支付提交表单。
+// 与 go-epay 的 Purchase() 参数一致，但额外携带 fiat=USD：BEpusdt 的易支付
+// 提交默认按 CNY 计价，只有显式传 fiat 才会按 USD 汇率折算加密货币金额。
+// fiat 参与 MD5 签名（GenerateParams 过滤空值后对全部参数签名）。
+func buildSecondaryEpaySubmitForm(
+	paymentMethod string,
+	tradeNo string,
+	name string,
+	money string,
+	notifyUrl *url.URL,
+	returnUrl *url.URL,
+) (string, map[string]string, error) {
+	requestParams := map[string]string{
+		"pid":          operation_setting.EpaySecondaryId,
+		"type":         paymentMethod,
+		"out_trade_no": tradeNo,
+		"name":         name,
+		"money":        money,
+		"fiat":         "USD",
+		"device":       string(epay.PC),
+		"sign_type":    "MD5",
+		"notify_url":   notifyUrl.String(),
+		"return_url":   returnUrl.String(),
+		"sign":         "",
+	}
+	base, err := url.Parse(strings.TrimRight(operation_setting.EpaySecondaryAddress, "/"))
+	if err != nil {
+		return "", nil, err
+	}
+	uri := base.String() + "/submit.php"
+	return uri, epay.GenerateParams(requestParams, operation_setting.EpaySecondaryKey), nil
+}
+
+// verifyEpayCallbackSignature 对回调参数依次用主、副网关密钥验签，
+// 返回验签成功的客户端与结果。两个网关使用不同密钥时仅其中一方通过；
+// 主密钥先试（现网全部历史订单均为主网关订单），失败再试副密钥。
+func verifyEpayCallbackSignature(params map[string]string) (*epay.Client, *epay.VerifyRes, error) {
+	primary := GetEpayClient()
+	if primary != nil {
+		verifyInfo, err := primary.Verify(params)
+		if err == nil && verifyInfo.VerifyStatus {
+			return primary, verifyInfo, nil
+		}
+	}
+	secondary := getSecondaryEpayClient()
+	if secondary != nil {
+		verifyInfo, err := secondary.Verify(params)
+		if err == nil && verifyInfo.VerifyStatus {
+			return secondary, verifyInfo, nil
+		}
+	}
+	return nil, nil, errors.New("验签失败")
+}
+
 func getPayMoney(amount int64, group string) float64 {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
@@ -301,27 +402,50 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 
+	// 副网关配置校验（fail-closed）：命中副网关类型但副网关未配置时，
+	// 在任何数据库访问与订单创建之前拒绝——与 Stripe USD fail-closed 同模式。
+	if _, _, resolveErr := resolveEpayGateway(req.PaymentMethod); resolveErr != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": resolveErr.Error()})
+		return
+	}
+
 	callBackAddress := service.GetCallbackAddress()
 	returnUrl, _ := url.Parse(paymentReturnPath("/usage-logs"))
 	notifyUrl, _ := url.Parse(callBackAddress + "/api/user/epay/notify")
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)
-	client := GetEpayClient()
-	if client == nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "当前管理员未配置支付信息"})
+	client, isSecondary, resolveErr := resolveEpayGateway(req.PaymentMethod)
+	if resolveErr != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 网关解析失败 user_id=%d payment_method=%s error=%q", id, req.PaymentMethod, resolveErr.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": resolveErr.Error()})
 		return
 	}
-	uri, params, err := client.Purchase(&epay.PurchaseArgs{
-		Type:           req.PaymentMethod,
-		ServiceTradeNo: tradeNo,
-		Name:           fmt.Sprintf("TUC%d", req.Amount),
-		Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
-		Device:         epay.PC,
-		NotifyUrl:      notifyUrl,
-		ReturnUrl:      returnUrl,
-	})
+	var uri string
+	var params map[string]string
+	if isSecondary {
+		// 副网关（BEpusdt）：手动构建表单以携带 fiat=USD（go-epay 的
+		// Purchase() 不支持 fiat 参数，而 BEpusdt 默认按 CNY 计价）。
+		uri, params, err = buildSecondaryEpaySubmitForm(
+			req.PaymentMethod,
+			tradeNo,
+			fmt.Sprintf("TUC%d", req.Amount),
+			strconv.FormatFloat(payMoney, 'f', 2, 64),
+			notifyUrl,
+			returnUrl,
+		)
+	} else {
+		uri, params, err = client.Purchase(&epay.PurchaseArgs{
+			Type:           req.PaymentMethod,
+			ServiceTradeNo: tradeNo,
+			Name:           fmt.Sprintf("TUC%d", req.Amount),
+			Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
+			Device:         epay.PC,
+			NotifyUrl:      notifyUrl,
+			ReturnUrl:      returnUrl,
+		})
+	}
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 拉起支付失败 user_id=%d trade_no=%s payment_method=%s amount=%d error=%q", id, tradeNo, req.PaymentMethod, req.Amount, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 拉起支付失败 user_id=%d trade_no=%s payment_method=%s amount=%d secondary=%t error=%q", id, tradeNo, req.PaymentMethod, req.Amount, isSecondary, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
@@ -427,25 +551,16 @@ func EpayNotify(c *gin.Context) {
 		_, _ = c.Writer.Write([]byte("fail"))
 		return
 	}
-	client := GetEpayClient()
-	if client == nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 client 未初始化 path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
-		_, err := c.Writer.Write([]byte("fail"))
-		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-		}
-		return
-	}
-	verifyInfo, err := client.Verify(params)
-	if err != nil || !verifyInfo.VerifyStatus {
+	// 双网关验签：先主网关（历史订单全部为主网关订单），失败再试副网关
+	// （BEpusdt）。回调参数不携带网关标识，订单号是唯一的区分依据；
+	// 两个密钥各自仅能验签自己网关发出的回调，互验必然失败——所以按
+	// “先主后副”顺序尝试即可安全区分。
+	_, verifyInfo, verifyErr := verifyEpayCallbackSignature(params)
+	if verifyErr != nil || verifyInfo == nil {
 		if _, writeErr := c.Writer.Write([]byte("fail")); writeErr != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), writeErr.Error()))
 		}
-		if err != nil {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-		} else {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_status=false", c.Request.RequestURI, c.ClientIP()))
-		}
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s error=%v", c.Request.RequestURI, c.ClientIP(), verifyErr))
 		return
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签成功 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))

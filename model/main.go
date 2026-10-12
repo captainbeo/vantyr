@@ -63,6 +63,13 @@ func initCol() {
 	}
 }
 
+// InitColumnNamesForTest exposes initCol for out-of-package tests that run
+// handlers hitting raw column queries (e.g. GetUserGroup's `group` select).
+// Production callers already run initCol via InitDB/InitLogDB.
+func InitColumnNamesForTest() {
+	initCol()
+}
+
 var DB *gorm.DB
 
 var LOG_DB *gorm.DB
