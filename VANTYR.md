@@ -2461,3 +2461,89 @@ Remaining money-path gate: ONE real $1 customer order per rail
 (all 7 BEpusdt types) with credit + usage-log reconciliation, then
 GM Pay TON row can be fully removed if desired. Wallet now offers all
 8 crypto buttons to customers.
+
+## 2026-10-13 — Single BEpusdt button + HTTPS checkout (pinned-next28)
+
+Owner report: too many USDC/USDT buttons (two providers → 9 buttons),
+and BEpusdt checkouts failed in the browser — "The information you're
+about to submit is not secure" then "This site can't be reached —
+bepusdt's server IP address could not be found."
+
+**Root cause (both symptoms):** the Epay protocol is browser-mediated —
+the customer's browser POSTs a signed form to `EpaySecondaryAddress`,
+which was `http://bepusdt:8080` (internal Docker hostname, plain HTTP).
+Firefox flagged the un-encrypted form POST, and after clicking past it
+the hostname `bepusdt` is unresolvable outside the Docker network.
+
+**Fix (fork change, commit de0041ac1, image pinned-next28
+1ef896dad246):** `RequestEpay`'s secondary branch now calls BEpusdt's
+**native create-order API** (`POST /api/v1/order/create-order`, JSON +
+EpusdtSign MD5 over sorted non-empty fields with Go %v value
+formatting) and returns a `pay_link`. The browser GETs the HTTPS
+payment_url — no form POST at all. The cashier at pay2.vantyr.xyz has
+a network picker (`reselect: true`), so **one button covers all 7
+rails**. `PayMethods` consolidated to two crypto buttons:
+
+- "Crypto (USDT / USDC)" → GM Pay (alipay type, 7 chains, own picker)
+- "Crypto L2 (Arbitrum / X Layer / Base / TON / GRAM)" → `bepusdt`
+
+`EpaySecondaryTypes=bepusdt` (single method; the 7 per-chain types
+were the old per-button routing). `EpaySecondaryAddress=
+https://pay2.vantyr.xyz` (public TLS host — the gateway calls it over
+the internet, not the internal hostname; either works, public keeps
+one code path).
+
+**Notify:** new route `POST /api/user/bepusdt/notify` handles BEpusdt's
+native JSON callback (same EpusdtSign algorithm; trade_id + status
+present — verified against BEpusdt source app/task/notify/notify.go:
+amount is float64, signature over the unmarshaled map). status=2 →
+RechargeEpay (row-lock idempotent, quota from order-row Amount — never
+callback money); status=3 → mark expired; status=1 → ack only. All
+replies are literal `success`. Epay notify (GM Pay) path unchanged;
+dual-verify retained for Epay-shaped callbacks.
+
+**Frontend:** use-payment.ts opens `pay_link` in a new tab when
+present (before the generic form-POST branch).
+
+**Tests (server-run, all green):** TestBepusdtSignVector (signature
+vector, signature-key exclusion, token-sensitivity),
+TestCreateSecondaryNativeOrder (httptest stub gateway — asserts
+order_id/fiat/currencies/amount/notify/redirect params, re-signs
+correctly, failure path), TestBepusdtNotifyCredits (status=2 credits
+exactly 5×500,000; replay idempotent; status=1 no credit; bad
+signature rejected), TestBepusdtNotifyExpires (status=3 → expired,
+no credit). Plus Epay/TopUp/Topup/model/router suites, web typecheck
++ wallet tests 8/8.
+
+**Live verification (2026-10-13, full chain through the real Go
+path):**
+
+1. Python probe (token read via subprocess from BEpusdt sqlite — NOT
+   shell-quoted heredoc, which had silently emptied it and caused the
+   earlier 签名错误): create-order 200 with payment_url, 7 networks,
+   USD pricing, expiration 899s.
+2. Real user flow: registered test user (Turnstile + email
+   verification temporarily disabled for the battery, both restored
+   + gateway restarted after; test user `vantyr_paytest` (id 31)
+   disabled status=2, its pending $1 order USR31NO… left to expire):
+   login → auth/refresh → `POST /api/user/pay` {amount:1,
+   payment_method:"bepusdt"} → **success with pay_link** to
+   https://pay2.vantyr.xyz/pay/checkout/… (200). top_ups row
+   verified: user 31, amount 1, money 1, method bepusdt, provider
+   epay, pending.
+3. **Notify leg live:** BEpusdt pushes status=1 callbacks every
+   minute — gateway log shows `BEpusdt webhook 验签成功` + 订单等待
+   支付 + 200 for the real order. Signature verification, JSON
+   parsing, and the ack all work against real BEpusdt traffic.
+   status=2 credit is covered by unit tests (exact quota, idempotent,
+   tamper-reject) and awaits only the real-money battery.
+
+**Deploy note:** next28 tree sync overwrote compose.yaml's image line
+to `pinned` — fixed with anchored sed to `pinned-next28` before swap.
+Gateway healthy on pinned-next28; /api/status 200.
+
+Remaining: same money-path gate — ONE real $1 order per rail (now
+through the single button, any of its 7 networks) with credit +
+usage-log reconcile. BEpusdt first boot credentials unchanged
+(root-only file). Old per-chain probe orders in top_ups (usdc.base
+etc.) simply expire.
