@@ -79,6 +79,11 @@ STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 PASS_VERDICTS = {"official", "attr_match"}
 SOFT_VERDICTS = {"official_flawed", "reversed"}
 BAD_VERDICTS = {"unofficial", "not_claude", "attr_swapped"}
+# attr_uncertain (live-observed 2026-10-13): attribution could not decide
+# (e.g. a 60/40 split). Neither pass nor fail — no state change. Listed
+# only for documentation; unknown verdicts already fall through as
+# inconclusive.
+INCONCLUSIVE_VERDICTS = {"attr_uncertain"}
 
 CHANNEL_ENABLED = 1
 CHANNEL_MANUALLY_DISABLED = 2
