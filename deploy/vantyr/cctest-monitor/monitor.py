@@ -386,6 +386,16 @@ def main():
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")
         return 1
+    # Optional per-seller model restriction, "prefix|models" entries:
+    # a6|gpt-6-astra,gpt-6-sol — lets a dedicated monitoring key with
+    # limited model permissions check only what it can call.
+    seller_model_filter = {}
+    for entry in os.environ.get("SELLER_MODEL_FILTERS", "").split(","):
+        parts = [p.strip() for p in entry.split("|") if p.strip()]
+        if len(parts) == 2:
+            seller_model_filter[parts[0]] = [
+                m.strip() for m in parts[1].split(";") if m.strip()
+            ]
 
     enforce = os.environ.get("ENFORCE", "false").lower() in ("1", "true", "yes")
     cycle_minutes = max(1, int(os.environ.get("CYCLE_MINUTES", "10")))
@@ -432,6 +442,7 @@ def main():
             run_cycle(
                 gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 threshold_for, permanent_fails, enforce, discord, state,
+                seller_model_filter,
             )
         except Exception:
             LOG.exception("cycle failed")
@@ -439,7 +450,9 @@ def main():
 
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
-              threshold_for, permanent_fails, enforce, discord, state):
+              threshold_for, permanent_fails, enforce, discord, state,
+              seller_model_filter=None):
+    seller_model_filter = seller_model_filter or {}
     channels = None
     for name, base_url, seller_key in sellers:
         if channels is None:
@@ -448,24 +461,29 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             except Exception as e:
                 LOG.warning("channel list failed (%s); skipping this cycle", e)
                 return
+        allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
             process_channel(
                 gateway, cctest, channel, base_url, seller_key, model_prefixes,
                 usage_window_hours, threshold_for, permanent_fails, enforce,
-                discord, state, channels,
+                discord, state, channels, allowed,
             )
             save_state(state)
 
 
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
                     usage_window_hours, threshold_for, permanent_fails, enforce,
-                    discord, state, channels_snapshot):
+                    discord, state, channels_snapshot, model_allowlist=None):
     name = channel["name"]
     channel_id = int(channel["id"])
     ch_state = state.setdefault(
     name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
     )
     models = [m.strip() for m in (channel.get("models") or "").split(",") if m.strip()]
+    if model_allowlist is not None:
+        # Restrict to the models this seller entry's key may call (a
+        # dedicated monitoring key with limited model permissions).
+        models = [m for m in models if m in model_allowlist]
     status = int(channel.get("status") or 0)
 
     if ch_state.get("quarantined") and status != CHANNEL_MANUALLY_DISABLED:
