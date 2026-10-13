@@ -24,6 +24,9 @@ vantyr.xyz {
         redir https://vantyr.xyz/docs/ 308
     }
     handle /docs/* {
+        # Strip /docs so zh-CN.html etc. resolve under root (was missing:
+        # localized pages silently served the English index fallback).
+        uri strip_prefix /docs
         root * /srv/vantyr-static/docs
         file_server
         try_files {path} /index.html
