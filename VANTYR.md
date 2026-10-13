@@ -204,21 +204,68 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   (`POST /api/user/login`) rather than debugging 401s from option
   updates.
 
-## Pricing (2026-10-02, owner decision)
+## Pricing (2026-10-02, owner decision — superseded 2026-10-13, see next section)
 
-PAYG per-token prices, set via the four ratio maps
-(`ModelRatio`/`CompletionRatio`/`CacheRatio`; New API bills input at
-$2×ratio/MTok, output at input×completion, cache read at input×cache):
+Original 2026-10-02 sheet (input/output/cache-read $/MTok): fable-5/5-1
+2.50/12.50/0.25, opus-5 0.65/3.25/0.065, opus-5-5 0.52/2.60/0.026,
+sonnet-5 0.26/1.30/0.026, gpt-6-astra 0.08/0.16/0.04, gpt-6-sol
+0.02/0.10/0.02, gpt-5-6-luna 0.02/0.08/0.002.
 
-| Model | Input $/MTok | Output $/MTok | Cache read |
-|---|---|---|---|
-| claude-fable-5 / 5-1 | 2.50 | 12.50 | 0.25 / 0.0625 |
-| claude-opus-5 | 0.65 | 3.25 | 0.065 |
-| claude-opus-5-5 | 0.52 | 2.60 | 0.026 |
-| claude-sonnet-5 | 0.26 | 1.30 | 0.026 |
-| gpt-6-astra | 0.08 | 0.16 | 0.04 |
-| gpt-6-sol | 0.02 | 0.10 | 0.02 |
-| gpt-5-6-luna | 0.02 | 0.08 | 0.002 |
+## Pricing (2026-10-13, owner decision — A6-anchored)
+
+Rule: **sell = 2× the A6 marketplace merchant listing** (cheap-tier
+anchor), minimum margin 2× on cost — 1.5× acceptable as exception,
+higher is fine. Goal: cheap but reliable. Re-anchor when the A6 cheap
+floor moves (the pool churns; ch-331 already left) — a periodic feed
+check is the guard (see cctest monitor).
+
+Current live sheet (input/output/cache-read $/MTok; cache write in
+parentheses where it differs):
+
+| Model | Input $/MTok | Output $/MTok | Cache read | Billing |
+|---|---|---|---|---|
+| claude-fable-5 / 5-1 | 0.25 | 1.50 | 0.05 (write 0.30) | ratio 0.125, completion 6, cache 0.2, create 1.2 |
+| claude-opus-5 | 0.12 | 0.50 | 0.01 (write 0.10) | tiered_expr `tier("base", p * 0.12 + c * 0.5 + cr * 0.01 + cc * 0.1)` |
+| claude-opus-5-5 | 0.52 | 2.60 | 0.026 | ratio 0.26 (2026-10-02 legacy price, above rule) |
+| claude-sonnet-5 / 5-5 | 0.26 | 1.30 | 0.026 | ratio 0.13 (legacy price, above rule) |
+| gpt-6-astra | 0.20 | 0.70 | 0.10 | ratio 0.10, completion 3.5, cache 0.5 |
+| gpt-6-sol | 0.05 | 0.15 | 0.05 | ratio 0.025, completion 3, cache 1 (2026-10-13 raise, on-rule) |
+| gpt-6-1-sol | 0.06 | 0.20 | 0.06 | ratio 0.03, completion 10/3, cache 1 (NEW 2026-10-13, A6-only) |
+| gpt-5-6-luna | 0.02 | 0.08 | 0.002 | ratio 0.01, completion 4, cache 0.1 |
+
+History: fable-5/5-1 cut 10× to $0.25/$1.50 on 2026-10-08 (admin UI,
+~2× cheap-tier floor $0.12/$0.60); opus-5 repriced via the new
+tiered_expr billing editor (~2× $0.06/$0.25 floor); gpt-6-astra raised
+$0.08/$0.16 → $0.20/$0.70 on 2026-10-13 (was below A6 floor $0.09/$0.47
+— sold at a loss; 2× floor = 2.2×/1.5× at floor/median). astra change
+applied via options-table SQL (ModelRatio 0.04→0.10, CompletionRatio
+2→3.5 — astra is NOT completion-locked: the gpt-5 prefix lock doesn't
+match `gpt-6-*`, generic unlocked branch, config wins), 60s sync,
+verified live on /api/pricing ($0.20/$0.70/$0.10). Docs table synced in
+all 12 languages + deployed (astra row, opus-5 row $0.65/$3.25 →
+$0.12/$0.50/$0.01, as-of 2026-10-13, rev 2026-10-13a). Model Overview
+and Discord #pricing auto-sync from live config. Request-level
+usage-log reconciliation of the astra row is owed on the next funded
+smoke test (API readback + exact-match JSON edit discipline applied;
+no funded key at hand). opus-5-5/sonnet-5-5 remain above the 2× anchor
+(owner: deliberate margin tier — the sheet's blended margin stays >2×).
+
+2026-10-13 (second batch): gpt-6-sol raised $0.02/$0.10 → $0.05/$0.15
+(ratio 0.025, completion 3; was below the 2× rule at ~1×/0.9× — now
+2.5×/1.4× vs floor $0.02/$0.11). NEW MODEL gpt-6-1-sol $0.06/$0.20
+(cache $0.06) — **A6-only** by owner decision: ch2 (a6-default-primary)
+models + `gpt-6-1-sol → gpt-6.1-sol` model_mapping (A6 key
+permission-tested first: 200 + real completion), ability row inserted
+via SQL (ON CONFLICT DO NOTHING), ratio 0.03 / completion 10/3 /
+cache 1, OfficialPricing 2/10/0.1 (models.dev via A6 feed), ~3.2×/2.1×
+vs the 196-listing floor $0.019/$0.096. E2E proof: /api/pricing shows
+both models; real relay request through ch2 mapped to gpt-6.1-sol
+upstream and billed 132 quota vs 132.29 computed (4393 in / 5 out) —
+exact reconciliation. Docs table: sol row updated + new 6-1-sol row in
+all 12 languages, rev 2026-10-13b, deployed. Mia PAYG decision: owner
+accepted the bounded short-context loss on Mia failovers (no
+expression floor) — see the 2026-10-12 Mia section for the standing
+math; revisit if failover volume grows.
 
 Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
 quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
@@ -2007,51 +2054,172 @@ cuts the good sonnet path on the same channel; split a6 channels
 per model-set if that starts to bite. Fable-5/5-1 stays off the
 cheap tier regardless (standing ladder decision).
 
-**Channel assignment map (2026-10-13, proposed — cctest deferred;
-owner: model scanning goes live at a later stage):**
+**Channel assignment map (2026-10-13, OWNER DECISION — supersedes
+the proposed ladders below; cctest scanning deferred to a later
+stage):**
 
-Seller restrictions honored: Selora — ONE `sk-gw-` key, ~30 req/min
-aggregate, 402 payment throttle on bursts, catalog lacks
-sonnet-5-5 (key rotation staged to split default/unlimited onto two
-keys, doubling capacity). A6 — merchant lottery (quality risk;
-fable-5-1 swap observed, sonnet-5-5 verified) but cache-token
-reporting and all-models catalog. Mia — 100 RPM per key, flat
-per-request wallet ($72→$5,500, terms confirmation pending),
-catalog fable-5/5-1, opus-5/5-5, sonnet-5 (+astra), all three wire
-formats.
+Per-model ladders (apply to both groups):
 
-Default (PAYG) group, per model — tier 1 → tier 2:
+| Model | 1st | 2nd | 3rd |
+|---|---|---|---|
+| claude-fable-5 / 5-1 | Selora | Mia | A6 |
+| claude-opus-5 / 5-5 | Selora | Mia | A6 |
+| claude-sonnet-5-5 | A6 only | — | — |
+| claude-sonnet-5 | A6 | Mia | Selora |
+| gpt-6-astra / sol / luna | A6 | Selora | — |
 
-| Model | Tier 1 | Tier 2 |
-|---|---|---|
-| claude-fable-5 / 5-1 | selora-default-primary | mia |
-| claude-opus-5 / 5-5 | selora-default-primary | a6-default-primary |
-| claude-sonnet-5 | selora-default-primary | a6-default-primary |
-| claude-sonnet-5-5 | a6-default-primary | mia |
-| gpt-6-astra / sol / luna | selora-default-primary | a6-default-primary |
+Group flavor (owner's words): PAYG = "A6 as standard, Mia second,
+Selora third" (that is sonnet-5's ladder verbatim — PAYG volume
+concentrates on the A6-first rows); unlimited = "Selora and Mia
+standard, switch to Mia on rpm/balance exhaustion, then over to
+A6" (that is the fable/opus ladder). Reading recorded: the table
+is authoritative per-model; the group lines describe where each
+group's volume concentrates. Open confirmation: if "A6 standard"
+was meant to override the table for PAYG fable/opus too, say so —
+abilities are per (group, model, channel), so a per-group
+divergence is implementable; the swap evidence argues for keeping
+the table's order.
 
-Rationale: fable's tier-2 is Mia (not A6) because the swap was
-observed on A6's cheap tier and Mia is the only un-flagged
-alternative with the SKU; sonnet-5-5's tier-1 is A6 because Selora
-lacks the SKU and A6 verified it (attr_match) at the cheapest
-per-token price, Mia tier-2 on price ($0.25 flat); everything else
-keeps Selora primary (fastest, TLS-keyed) with A6 second.
-Implementation with the existing 6 channels + 1 new `mia`
-channel — default-group priorities: selora-default-primary P10
-(w3) / a6-default-primary P5 (w1) / selora-default-fallback P0 /
-mia-failover P-10, then per-model pruning of each channel's model
-list (fable-5/5-1 removed from a6-*; sonnet-5-5 removed from
-selora-*; sonnet-5 removed from mia since A6 is tier-2 there —
-Mia's list: fable-5, fable-5-1, opus-5, opus-5-5, sonnet-5-5).
-Mechanics relied on (verified in pinned source): abilities are per
-(group, model, channel); attempt N = Nth distinct priority tier;
-weights share within a tier; a model absent from a channel's list
-can never receive it. Unlimited group unchanged: selora-unlimited
-P10 → a6-unlimited P0, Mia excluded (flat-rate cost risk).
-Implementation = admin-UI edits only; no code, no deploy, no
-options. RetryTimes=2 when Mia's channel goes live (2 tiers per
-model in the default group → attempt 3 exhausts tiers, clamps to
-lowest).
+IMPLEMENTATION (admin-UI only, no code): New API priority is
+per-CHANNEL, not per-model — the two opposite orders (Selora-first
+for fable/opus, A6-first for sonnet/gpt6) REQUIRE role-split
+channels. Seven channels (Selora's two keys after the staged
+rotation double its roles):
+
+| Channel (role) | Group | Priority | Models |
+|---|---|---|---|
+| selora-premium (sk-gw- key) | default | 30 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| selora-standard (sk-gw- key) | default | 10 | sonnet-5, gpt-6-astra, sol, luna |
+| selora-unlimited-premium (unlimited-account key) | unlimited | 30 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| selora-unlimited-standard (unlimited-account key) | unlimited | 10 | sonnet-5, gpt-6-astra, sol, luna |
+| a6-standard | default, unlimited | 30 | sonnet-5, sonnet-5-5, gpt-6-astra, sol, luna |
+| a6-premium | default, unlimited | 10 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| mia | default, unlimited | 20 | fable-5, fable-5-1, opus-5, opus-5-5, sonnet-5 |
+
+Resulting ladders per model: fable/opus 30 Selora → 20 Mia → 10
+A6; sonnet-5 30 A6 → 20 Mia → 10 Selora; gpt-6 family 30 A6 → 10
+Selora; sonnet-5-5 30 A6 only. Weights become irrelevant (one
+channel per model per tier — no load-share by design).
+**RetryTimes=2 required** (worst case 3 distinct tiers → 3
+attempts walk the whole ladder; at the current RetryTimes=1 the
+3rd tier is never reached). The 6 existing channels get re-purged
+into these roles via model-list + priority + group edits; the
+cctest monitor needs no change (prefix expansion handles any
+channel count/names). Two caveats: (1) GPT6 row assumes A6 serves
+sol/luna — the current A6 token's model permissions BLOCK the
+.luna/.sol SKUs (owner can widen on A6's side + add channel
+model_mapping dot↔dash, e.g. gpt-5-6-luna → gpt-5.6-luna); until
+then sol/luna effectively ride Selora only. (2) The Mia
+authenticity gate (one cctest attribution check per flagship model
+before pointing real traffic) is still recommended at cutover even
+with scanning deferred — the swap was found by exactly that check.
+
+**DEPLOYED 2026-10-13 (roles applied to production):** the map
+above is live. SQL transaction over the 6 existing channels (id
+roles per the table; ch3 keeps the `gpt-6-sol` mapping, ch5/ch6
+keep fable dot-mappings for A6), new ch7 `mia-failover` (type 60,
+P20, groups default,unlimited, fable×2+opus×2+sonnet-5, developer
+param_override, DISABLED status 2 with placeholder key
+`PENDING-OWNER-KEY-MIAROUTER` — zero routing until the owner pastes
+the real key at go-live, then `POST /api/channel/7/status`
+{"status":1}), `RetryTimes` 1→2 (options table, 60s sync
+confirmed in logs). Abilities rebuilt via `POST /api/channel/fix`
+(sidecar PAT, 7/7 success). Backup before the transaction:
+`/opt/vantyr/backups/channels-abilities-pre-miaroles-20261013.sql`.
+**Test battery (real relay requests, cctest-sidecar token, all
+via 127.0.0.1:3000):** fable-5-1→ch1 Selora (16 quota), opus-5-5→
+ch1 Selora (29), sonnet-5→ch2 A6 (7), sonnet-5-5→ch2 A6 (2),
+gpt-6-astra→ch2 A6 (86, 4125 prompt tokens — the reasoning
+prefix; astra builds a large system prompt per request). Every
+request hit its designed tier-1 channel; usage logs reconcile;
+gateway healthy, zero errors. NOTE: fable/opus small-prompt
+requests show empty `content` with reasoning_content — the 16
+max_tokens budget is consumed by visible reasoning first (normal
+for thinking models; raise max_tokens in real use). Rollback:
+restore the backup SQL + `RetryTimes` back to 1. Standing owner
+actions: paste real Mia key (admin UI → channel 7 edit, or SQL
+key column — never chat), flip status 1, re-run this battery per
+model + one Codex CLI turn through Mia, then the one-shot cctest
+attribution check per flagship model.
+
+**Mia test-key battery (2026-10-13, owner-supplied test key, direct
+against miarouter.online — key NOT wired into any channel, testing
+only):** auth OK; `/v1/models` shows the key is
+**model-restricted to exactly claude-fable-5/5-1 + opus-5/5-5** —
+claude-sonnet-5 returns 403 "no access" (so ch7's model list
+should drop sonnet-5 before go-live, or a failed sonnet-5 failover
+pays one wasted hop — 403 is in the auto-retry band, it
+self-heals to the next tier). chat/completions works on all four
+SKUs with real replies + reasoning_content; SSE streaming works
+(`: PING` keepalive + chunks); `/v1/messages` (Anthropic) works
+natively. **`/v1/responses` is NOT implemented for Claude models
+(500 `convert_request_failed`, all input shapes — matches their
+model metadata `supported_endpoint_types: openai/anthropic`, no
+responses type despite the platform-docs claim).** Routing impact:
+Codex CLI `/v1/responses` traffic cannot be served by Mia — it
+would fail with 500, which sits in our 500–503 auto-retry band →
+transparent failover to the next tier (A6), one wasted hop. Our
+gateway does not convert responses→chat for type-60 channels
+(ConvertOpenAIResponsesRequest passes through); the native escape
+hatch is a type-58 Advanced Custom channel with the
+`/v1/responses → /v1/chat/completions` route +
+`openai_responses_to_openai_chat_completions` converter — evaluate
+at go-live if Codex-on-Mia matters (until then fable/opus Codex
+traffic prefers Selora first, Mia hop only wastes when Selora is
+already down). Billing endpoints: account quota presents as
+effectively unlimited (soft/hard $100M), `total_usage` 4246.6
+(cents → ~$42.47 prior account usage — this key's account has
+history; confirm the $72→$5,500 deal applies to it at purchase).
+Key hygiene: this key transited chat — treat as a test credential;
+enter the production key via admin UI only and retire the test key
+after go-live.
+
+**Widened-key re-probe (2026-10-13, owner enabled GPT 6/6.1 +
+sonnet-5):** `/v1/models` now returns 6 — the four Claude SKUs,
+claude-sonnet-5, gpt-6-astra, and **gpt-6.1-sol (DOT naming — maps
+to our gpt-6-sol; no luna in Mia's catalog)**. The earlier "drop
+sonnet-5 from ch7" note is OBSOLETE — ch7's deployed model list
+(fable×2 + opus×2 + sonnet-5) is now fully covered by the key.
+`/v1/responses` is per-model AND per-input-shape: **Claude models →
+500 convert_request_failed for all shapes** (auto-retry band →
+transparent failover to A6, no customer error; only a wasted hop
+when Selora is down). **gpt-6-astra → WORKS with string input**
+(real Responses-format reply, usage, charge $0.001275) but **400
+`bad_request` with array-with-roles input — which is what Codex CLI
+sends**; 400 is OUTSIDE every auto-retry range → customer-visible
+hard failure. DANGER RULE: never add GPT models to a Mia type-60
+channel while array-input 400s — Codex traffic would fail outright
+(irrelevant today: ch7 carries no GPT models, so astra/sol/luna
+never route to Mia; astra Codex rides A6 P30 → Selora P10).
+**gpt-6.1-sol → 401: Mia's own upstream key for sol is currently
+invalid** (their passthrough leaked `sk-proj-…KucA` masked — sol
+is broken on their side; also proves raw upstream errors pass
+through their gateway). astra chat/completions works (real GPT
+reasoning). VERDICT: Mia IS usable now for exactly what we route
+to it — Claude chat/completions + /v1/messages + sonnet-5 —
+Codex-Claude traffic self-heals to A6; the type-58
+responses→chat-converter channel remains the option if
+Codex-on-Mia is ever wanted without the wasted hop.
+
+**Automatic switching — mechanics (verified in pinned source):**
+there is NO proactive seller-RPM or balance detection in New API.
+Switching is REACTIVE and automatic: the seller returns 429 (rate)
+or 402 (balance/payment) → DecideRelayRetry auto-retries (402 sits
+in the 401–407 auto-retry band, 429 in 409–499, 5xx 500–503 too)
+→ the retry attempt serves from the NEXT distinct priority tier.
+The customer never sees the seller error; this delivers the
+owner's "switches automatically to Mia, then over to A6" exactly —
+but the trigger is the seller's error, not a predictive probe.
+Auto-disable (auto_ban) fires only on 401 — a drained Mia wallet
+(402) does NOT disable the channel, so each request pays one
+failed hop before failing over (bounded waste, self-heals on
+top-up; channel stays in rotation). Seller caps still bind
+(Selora ~30 req/min per key, 60 after upgrade; Mia 100 RPM per
+key) — sustained demand beyond a cap continuously overflows to
+the next tier, which also drains the Mia wallet faster under
+sustained Selora saturation: watch the wallet while unlimited
+traffic rides Mia (the deal-rate math: heavy 10k-req/month
+subscriber ≈ $79 wallet draw at list prices vs $180 revenue).
 
 **Correctness-ranked ladder (2026-10-12):** a
 (refund + trust incident), so correctness ranks channels and price
