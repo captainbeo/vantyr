@@ -2366,3 +2366,35 @@ are additive.
   hero, RTL Arabic TOC stays left with Arabic labels, zh-CN localized
   (本页导航/从这里开始). No console errors, no failed requests.
 
+
+## Group isolation (2026-10-13, owner decision — PAYG vs unlimited)
+
+Customers no longer see the internal group split. Base
+`UserUsableGroups` = `{"default": "Default"}` (PAYG + anonymous see one
+group only); `group_ratio_setting.group_special_usable_group` =
+`{"unlimited": {"+:unlimited": "Unlimited plan"}}` re-adds unlimited for
+users whose account group is `unlimited` (set by the $180 plan's
+upgrade_group inside the purchase transaction). Applied via options SQL
+(the special-group row is INSERT — it had never existed; the config
+system persists it under the dotted key `group_ratio_setting.…`, loaded
+by the 60s sync through handleConfigUpdate → UpdateConfigFromMap).
+
+Enforcement is at relay time (middleware/auth.go token-group check: a
+token whose group is not in the user's usable groups 403s with 无权访
+问 <group> 分组) — proven live: a default-group user with an
+unlimited-group token gets 403; token 15 (root "Model testing") was
+switched from group=unlimited to inherit (empty) so root tooling keeps
+working through the default group. Body `group` fields are honored only
+on /pg/chat/completions (playground, validated) — /v1/chat/completions
+ignores them, so no API-side bypass exists beyond token creation, and
+token creation's lack of group validation is neutralized by the relay
+gate. Side effects verified: anonymous /api/pricing shows
+usable_group {default} and 9 models (all models serve the default
+group); the key-creation dropdown and pricing page now show one group
+for PAYG. Model Overview details' "Groups: default, unlimited" pills
+come from channel data (enable_groups), NOT the usable-group setting —
+hiding that line would need a small fork frontend change (declined for
+now, owner can request). The cctest monitor probes via a default-group
+token (covers all default-group channels incl. a6-unlimited's
+default-group side); its channel-quarantine actions are admin API,
+unaffected.
