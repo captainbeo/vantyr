@@ -2547,3 +2547,37 @@ through the single button, any of its 7 networks) with credit +
 usage-log reconcile. BEpusdt first boot credentials unchanged
 (root-only file). Old per-chain probe orders in top_ups (usdc.base
 etc.) simply expire.
+
+## 2026-10-13 — Pay-method rename + subtitle line (pinned-next29)
+
+Owner request: both crypto buttons should read "USDT / USDC" with the
+network list in a smaller font underneath:
+
+- "USDT / USDC" / Network: Aptos, BSC, Ethereum, Plasma, Polygon,
+  Solana, TRON (GM Pay, type alipay)
+- "USDT / USDC" / Network: Arbitrum, Base, TON/GRAM, X-Layer
+  (BEpusdt, type bepusdt)
+
+**Fork change (commit 3e970b614, image pinned-next29 58810a75192b):**
+PayMethods gained an optional `subtitle` key. It passes through the
+Go side untouched (`[]map[string]string` + raw-JSON admin editor), so
+this is frontend-only code: `PaymentMethod.subtitle` type,
+recharge-form button renders the subtitle as a smaller muted line
+under the name (same style slot as the min-topup hint), payment
+confirm dialog shows it beside the name so the two "USDT / USDC"
+rails stay distinguishable at confirmation. Regression tests
+(pay-method-subtitle.test.tsx): subtitle renders under the name inside
+the button, omitted when unset, passed through on method selection.
+Typecheck clean, wallet tests 7/7, touched files lint-clean.
+
+**Config (options table):** PayMethods updated with both names +
+subtitles per the owner's exact wording. Verified live via
+topup/info: both buttons carry name "USDT / USDC" + their subtitle.
+Live wallet chunk 63196.0abffbe767.js byte-identical to the local
+build with the subtitle code (md5 match).
+
+Deploy: tree sync + on-server image build + gateway swap (compose
+image line sed'd to pinned-next29 before up). Gateway healthy 200.
+Test users (vantyr_uicheck id 34, vantyr_paytest id 31) disabled
+status=2 after the scripted topup/info check; Turnstile + email
+verification disabled only for the test window and restored.
