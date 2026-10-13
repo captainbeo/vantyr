@@ -369,6 +369,11 @@ export function RechargeFormCard({
                             <span className='max-w-full truncate'>
                               {method.name}
                             </span>
+                            {method.subtitle && (
+                              <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal'>
+                                {method.subtitle}
+                              </span>
+                            )}
                             {disabledLabel && (
                               <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal'>
                                 {disabledLabel}
