@@ -2095,6 +2095,38 @@ key column — never chat), flip status 1, re-run this battery per
 model + one Codex CLI turn through Mia, then the one-shot cctest
 attribution check per flagship model.
 
+**Mia test-key battery (2026-10-13, owner-supplied test key, direct
+against miarouter.online — key NOT wired into any channel, testing
+only):** auth OK; `/v1/models` shows the key is
+**model-restricted to exactly claude-fable-5/5-1 + opus-5/5-5** —
+claude-sonnet-5 returns 403 "no access" (so ch7's model list
+should drop sonnet-5 before go-live, or a failed sonnet-5 failover
+pays one wasted hop — 403 is in the auto-retry band, it
+self-heals to the next tier). chat/completions works on all four
+SKUs with real replies + reasoning_content; SSE streaming works
+(`: PING` keepalive + chunks); `/v1/messages` (Anthropic) works
+natively. **`/v1/responses` is NOT implemented for Claude models
+(500 `convert_request_failed`, all input shapes — matches their
+model metadata `supported_endpoint_types: openai/anthropic`, no
+responses type despite the platform-docs claim).** Routing impact:
+Codex CLI `/v1/responses` traffic cannot be served by Mia — it
+would fail with 500, which sits in our 500–503 auto-retry band →
+transparent failover to the next tier (A6), one wasted hop. Our
+gateway does not convert responses→chat for type-60 channels
+(ConvertOpenAIResponsesRequest passes through); the native escape
+hatch is a type-58 Advanced Custom channel with the
+`/v1/responses → /v1/chat/completions` route +
+`openai_responses_to_openai_chat_completions` converter — evaluate
+at go-live if Codex-on-Mia matters (until then fable/opus Codex
+traffic prefers Selora first, Mia hop only wastes when Selora is
+already down). Billing endpoints: account quota presents as
+effectively unlimited (soft/hard $100M), `total_usage` 4246.6
+(cents → ~$42.47 prior account usage — this key's account has
+history; confirm the $72→$5,500 deal applies to it at purchase).
+Key hygiene: this key transited chat — treat as a test credential;
+enter the production key via admin UI only and retire the test key
+after go-live.
+
 **Automatic switching — mechanics (verified in pinned source):**
 there is NO proactive seller-RPM or balance detection in New API.
 Switching is REACTIVE and automatic: the seller returns 429 (rate)
