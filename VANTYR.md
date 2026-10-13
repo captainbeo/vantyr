@@ -2170,3 +2170,41 @@ are additive.
   hero, RTL Arabic TOC stays left with Arabic labels, zh-CN localized
   (本页导航/从这里开始). No console errors, no failed requests.
 
+
+## 2026-10-13 — Payment rails deployed (pinned-next27) + BEpusdt service staged
+
+`feat/payment-rails` merged into `vantyr/main` (fast-forward, 7c3376e40):
+Stripe EUR/USD dual-currency (fails closed until live keys), €/$ wallet
+toggle, i18n keys (now correctly inside the `translation` namespace —
+earlier commits had written them to the JSON root where they never
+loaded), dual-gateway Epay routing (EpaySecondary* options; BEpusdt
+secondary with fiat=USD; fail-closed), and the go-epay Verify map-
+mutation fix (dual-verify copies params per attempt).
+
+- Deploy: tree synced via git archive (md5 626db86b… verified), image
+  `pinned-next27` (195af2378097) built on-server, compose repointed
+  (backup compose.yaml.bak-next27). Gateway healthy; relay fails
+  closed with bad key; home/docs/pay 200; new bundle
+  index.8fb03a8596.js + wallet chunk 63196.405b14563d.js carry
+  stripeCurrency/stripe_usd_enabled (grep-verified); /docs serves
+  11 networks + GRAM in all 12 languages.
+- On-server focused payment tests: dual-gateway routing, secondary
+  form, dual-verify (incl. mutation regression), fail-closed — all
+  PASS (golang:1.26.1-alpine, vantyr-gomod/gobuild volumes).
+- BEpusdt: compose service `bepusdt` (digest-pinned
+  v03413/bepusdt@sha256:609c795d…14e0, v1.24.2-4d88040) running;
+  first-run init credentials saved server-side only
+  (/opt/vantyr/deploy/vantyr/.bepusdt-init-credentials.txt, root 600).
+  Caddy pay2.vantyr.xyz block added (ACME retries on NXDOMAIN until
+  the DNS A record exists — owner action, Namecheap).
+- Caddy recreate note: the Caddyfile single-file bind mount broke
+  (tar extraction replaced the inode), so `docker compose up -d
+  --force-recreate caddy` re-resolved the mount; container is now
+  `vantyr-caddy-1` and the tilkie_default network was re-attached
+  (docker network connect) per the standing note.
+- Not activated (fail-closed by design): Stripe options and
+  EpaySecondary* remain unset in the options table — nothing customer-
+  visible changed on the money paths until live keys + BEpusdt setup
+  + pay2 DNS exist. Wallet keeps showing the GM Pay crypto button.
+- Rollback: repoint compose.yaml to pinned-next26 + `docker compose
+  up -d --no-build gateway` (next26 image retained).
