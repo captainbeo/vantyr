@@ -18,9 +18,18 @@ disabled (fail-safe — nothing is re-enabled without state).
 Observe-only until ENFORCE=true: verdicts are logged and would-be
 actions are announced, but nothing is written to the gateway.
 
+Failover (ENFORCE=true): on a confirmed bad verdict for model X on
+seller S, the monitor removes X from S's channels (models field edit;
+the PUT preserves the channel key because absent fields are not
+zeroed). New API's priority routing then shifts X's traffic to the
+remaining providers in the same group (e.g. Selora -> Mia/A6). A
+coverage gate blocks removal when no other enabled channel in the
+group would still serve X. Channel-status quarantine (disable) remains
+the action only for a seller-wide failure (all eligible models bad).
+
 Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
   GATEWAY_URL            e.g. http://vantyr-gateway:3000
-  GATEWAY_TOKEN          PAT with channel operate + log read scopes
+  GATEWAY_TOKEN          PAT with channel operate + write + log read scopes
   CCTEST_BASE            default https://cctest.ai
   CCTEST_KEY             cct-... API key
   SELLER_CHANNELS        entries "name|base_url|seller_key" separated by ","
@@ -68,8 +77,8 @@ STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 # Live observation 2026-10-12: A6 attribution check on claude-fable-5-1
 # returned verdictKey attr_swapped, attribution.prediction claude-opus-4-6.
 PASS_VERDICTS = {"official", "attr_match"}
-SOFT_VERDICTS = {"official_flawed"}
-BAD_VERDICTS = {"unofficial", "reversed", "not_claude", "attr_swapped"}
+SOFT_VERDICTS = {"official_flawed", "reversed"}
+BAD_VERDICTS = {"unofficial", "not_claude", "attr_swapped"}
 
 CHANNEL_ENABLED = 1
 CHANNEL_MANUALLY_DISABLED = 2
@@ -159,6 +168,20 @@ class Gateway:
         if http_status != 200 or not payload.get("success"):
             raise RuntimeError(f"status flip to {status} failed: {http_status} {payload}")
         return bool(payload.get("data"))
+
+    def update_channel_models(self, channel_id, models):
+        """Edit only the channel's models list via PUT /api/channel/.
+        Safety: the request body contains only id + models. controller/
+        channel.go's update path classifies "models" as non-sensitive and
+        GORM's struct Updates() skips zero-valued fields, so the channel
+        key, base_url, and every other field are preserved untouched."""
+        payload, http_status = self._request(
+            "PUT", "/api/channel/",
+            {"id": channel_id, "models": ",".join(models)},
+        )
+        if http_status != 200 or not payload.get("success"):
+            raise RuntimeError(f"channel models update failed: {http_status} {payload}")
+        return True
 
     def model_used_recently(self, channel_id, model, window_hours):
         since = int(time.time()) - window_hours * 3600
@@ -393,14 +416,14 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             process_channel(
                 gateway, cctest, channel, base_url, seller_key, model_prefixes,
                 usage_window_hours, threshold_for, permanent_fails, enforce,
-                discord, state,
+                discord, state, channels,
             )
             save_state(state)
 
 
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
                     usage_window_hours, threshold_for, permanent_fails, enforce,
-                    discord, state):
+                    discord, state, channels_snapshot):
     name = channel["name"]
     channel_id = int(channel["id"])
     ch_state = state.setdefault(
@@ -458,6 +481,21 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         LOG.info("[%s] status=%s (not enabled, not our quarantine); skipping", name, status)
         return
 
+    # Recovery loop: re-check models we removed earlier. A pass means the
+    # seller fixed the substitution — re-add the model so traffic can
+    # return. Rotate one removed model per cycle.
+    removed = ch_state.get("removed_models") or {}
+    if removed:
+        removed_candidate = sorted(removed.keys())[0]
+        verdict = do_check(cctest, base_url, seller_key, removed_candidate)
+        LOG.info("[%s] removed-model re-test %s -> %s", name, removed_candidate, verdict)
+        if verdict in PASS_VERDICTS:
+            restore_model(gateway, channel, ch_state, name, removed_candidate, enforce, discord)
+        elif verdict in BAD_VERDICTS:
+            removed[removed_candidate]["last_bad"] = datetime.now(timezone.utc).isoformat()
+        save_state(state)
+        return
+
     # Refresh the rotation to track model-list changes.
     if eligible != ch_state.get("rotation"):
         ch_state["rotation"] = eligible
@@ -485,20 +523,17 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
 
     if verdict in BAD_VERDICTS:
         ch_state["fails"] += 1
+        model_fails = ch_state.setdefault("model_fails", {})
+        model_fails[candidate] = model_fails.get(candidate, 0) + 1
         threshold = threshold_for(name)
-        if ch_state["fails"] >= threshold:
-            if enforce:
-                start_quarantine(gateway, ch_state, channel_id, name, candidate, verdict, discord)
-            else:
-                # Observe-only: announce every would-fire (counter keeps
-                # accumulating so the observe week shows the full tally;
-                # a pass resets it, same as enforcement).
-                LOG.warning(
-                    "[%s] OBSERVE-ONLY: would quarantine (%s -> %s, fails=%d)",
-                    name, candidate, verdict, ch_state["fails"],
-                )
+        if model_fails[candidate] >= threshold:
+            failover_model(
+                gateway, channel, ch_state, name, candidate, verdict,
+                enforce, discord, channels_snapshot,
+            )
     elif verdict in PASS_VERDICTS:
         ch_state["fails"] = 0
+        ch_state.setdefault("model_fails", {}).pop(candidate, None)
     elif verdict in SOFT_VERDICTS:
         now = time.time()
         soft = [t for t in ch_state.get("soft", []) if now - t < 24 * 3600]
@@ -507,13 +542,84 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         if len(soft) >= 3 and not ch_state.get("soft_alerted"):
             discord_alert(
                 discord,
-                f"cctest: {name} served 3+ official_flawed verdicts in 24h — quality degraded?",
+                f"cctest: {name} served 3+ soft verdicts (flawed/reversed) in 24h — quality degraded?",
             )
             ch_state["soft_alerted"] = True
         elif len(soft) < 3:
             ch_state["soft_alerted"] = False
     # Inconclusive (None): no state change — fail open.
     save_state(state)
+
+
+def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord, channels_snapshot):
+    """Confirmed bad verdict for `model` on this channel: remove the model
+    from the channel's list so New API re-routes it to another provider.
+    Coverage gate: if no other enabled channel in the same group still
+    serves the model, do NOT remove it (a wrong model is still better
+    than no model) — alert instead."""
+    remaining = [m for m in (ch.get("models") or "").split(",") if m.strip() and m.strip() != model]
+    if not remaining:
+        LOG.info("[%s] model %s is the only entry; escalating to channel quarantine instead", name, model)
+        if enforce:
+            start_quarantine(gateway, ch_state, int(ch["id"]), name, model, verdict, discord)
+        else:
+            LOG.warning("[%s] OBSERVE-ONLY: would quarantine channel (%s -> %s)", name, model, verdict)
+        return
+    groups = [g.strip() for g in (ch.get("group") or "").split(",") if g.strip()]
+    covered = any(
+        other.get("id") != ch.get("id")
+        and int(other.get("status") or 0) == CHANNEL_ENABLED
+        and any(g in [og.strip() for og in (other.get("group") or "").split(",")] for g in groups)
+        and model in [m.strip() for m in (other.get("models") or "").split(",")]
+        for other in channels_snapshot
+    )
+    if not covered:
+        LOG.warning(
+            "[%s] FAILOVER BLOCKED for %s: no other enabled channel in %s serves it — keeping the (bad) provider",
+            name, model, groups,
+        )
+        discord_alert(
+            discord,
+            f"cctest: {name} bad verdict on {model} ({verdict}) but no failover target in {groups} — manual review needed",
+        )
+        return
+    if not enforce:
+        LOG.warning("[%s] OBSERVE-ONLY: would remove %s (bad verdict %s) and fail over to another provider", name, model, verdict)
+        return
+    try:
+        gateway.update_channel_models(int(ch["id"]), remaining)
+    except Exception as e:
+        LOG.error("[%s] model removal FAILED (%s stays listed): %s", name, model, e)
+        return
+    ch["models"] = ",".join(remaining)
+    ch_state.setdefault("removed_models", {})[model] = {
+        "verdict": verdict, "removed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    ch_state.setdefault("model_fails", {}).pop(model, None)
+    LOG.warning("[%s] REMOVED %s (verdict %s) — traffic fails over to another provider", name, model, verdict)
+    discord_alert(discord, f"cctest: {name} removed model {model} (verdict {verdict}) — traffic now served by another provider")
+
+
+def restore_model(gateway, ch, ch_state, name, model, enforce, discord):
+    """A removed model passes again: re-add it to the channel's list."""
+    current = [m.strip() for m in (ch.get("models") or "").split(",") if m.strip()]
+    if model in current:
+        ch_state.get("removed_models", {}).pop(model, None)
+        return
+    if not enforce:
+        LOG.info("[%s] OBSERVE-ONLY: would re-add %s (passing again)", name, model)
+        return
+    restored = current + [model]
+    try:
+        gateway.update_channel_models(int(ch["id"]), restored)
+    except Exception as e:
+        LOG.error("[%s] model restore FAILED: %s", name, e)
+        return
+    ch["models"] = ",".join(restored)
+    ch_state.get("removed_models", {}).pop(model, None)
+    ch_state.get("model_fails", {}).pop(model, None)
+    LOG.info("[%s] RESTORED %s (verdict official)", name, model)
+    discord_alert(discord, f"cctest: {name} re-added model {model} (verdict official)")
 
 
 def do_check(cctest, base_url, seller_key, model):
