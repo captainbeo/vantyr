@@ -11,19 +11,19 @@ spec.loader.exec_module(m)
 m.STATE_PATH = os.path.join(os.environ.get("TEMP", "."), "state_test.json")
 
 CHANNELS = [
-    {"id": 1, "name": "selora-default-primary", "status": 1,
+    {"id": 1, "name": "selora-default-primary", "status": 1, "group": "default",
      "models": "claude-fable-5-1,gpt-6-astra,glm-5.3"},
-    {"id": 2, "name": "a6-default-primary", "status": 1,
+    {"id": 2, "name": "a6-default-primary", "status": 1, "group": "default",
      "models": "claude-fable-5-1,gpt-6-astra"},
-    {"id": 3, "name": "selora-default-fallback", "status": 1,
+    {"id": 3, "name": "selora-default-fallback", "status": 1, "group": "default",
      "models": "claude-fable-5-1"},
-    {"id": 4, "name": "selora-unlimited", "status": 1,
+    {"id": 4, "name": "selora-unlimited", "status": 1, "group": "unlimited",
      "models": "claude-fable-5-1,claude-sonnet-5-5"},
-    {"id": 5, "name": "a6-default-fallback", "status": 1,
+    {"id": 5, "name": "a6-default-fallback", "status": 1, "group": "default",
      "models": "gpt-6-astra"},
-    {"id": 6, "name": "a6-unlimited", "status": 1,
+    {"id": 6, "name": "a6-unlimited", "status": 1, "group": "unlimited",
      "models": "claude-fable-5-1"},
-    {"id": 7, "name": "mia-failover", "status": 1,
+    {"id": 7, "name": "mia-failover", "status": 1, "group": "default,unlimited",
      "models": "claude-fable-5-1,claude-opus-5-5,claude-sonnet-5"},
 ]
 
@@ -32,6 +32,7 @@ class FakeGW:
     def __init__(self, channels):
         self.channels = channels
         self.writes = []
+        self.model_edits = []
 
     def list_channels(self):
         return self.channels
@@ -44,6 +45,14 @@ class FakeGW:
             if ch["id"] == cid:
                 ch["status"] = status
         self.writes.append((cid, status))
+        return True
+
+    def update_channel_models(self, cid, models):
+        # Track that the PUT body carries ONLY id + models (key safety).
+        self.model_edits.append((cid, models))
+        for ch in self.channels:
+            if ch["id"] == cid:
+                ch["models"] = models
         return True
 
 
@@ -109,13 +118,20 @@ def test_expand_six_channels():
 
 
 def test_enforce_quarantine():
+    # Quarantine is now escalation-only: triggered when the bad model is
+    # the channel's only entry (no model to remove → failover impossible).
+    chs = [dict(c) for c in CHANNELS]
+    chs[2]["models"] = "claude-fable-5-1"  # fallback has ONLY the bad model
     state = {}
-    gw = run([("selora", "https://x", "sk")], True, state)
-    assert (1, 2) in gw.writes, gw.writes  # primary quarantined (threshold 1)
-    assert state["selora-default-primary"]["quarantined"] is True
-    # All three selora-* channels hit threshold 1 in the same cycle, so
-    # every one of them is quarantined.
-    assert all(state[n]["quarantined"] for n in state if n.startswith("selora"))
+    gw = FakeGW(chs)
+    m.run_cycle(gw, VerdictCC(), [("selora", "https://x", "sk")], ("claude", "gpt"), 168,
+                threshold_for, 3, True, None, state)
+    # selora-default-fallback (ch3) has only the bad model → quarantined.
+    assert (3, 2) in gw.writes, gw.writes
+    assert state["selora-default-fallback"]["quarantined"] is True
+    # primary + unlimited had other models → model REMOVED instead.
+    assert any(cid == 1 and "claude-fable-5-1" not in models for cid, models in gw.model_edits), gw.model_edits
+    assert state["selora-default-primary"]["removed_models"]["claude-fable-5-1"]["verdict"] == "unofficial"
 
 
 def test_a6_threshold():
@@ -193,6 +209,73 @@ class NoneCC(NoneCheck):
 
 class FailCC(VerdictCC):
     verdict = "not_claude"
+
+
+def test_model_removal_key_safety():
+    # The update_channel_models request must carry ONLY id + models —
+    # never a key (which would overwrite or blank the channel key).
+    class SpyGW(FakeGW):
+        def __init__(self, channels):
+            super().__init__(channels)
+            self.put_bodies = []
+
+        def update_channel_models(self, cid, models):
+            self.put_bodies.append({"id": cid, "models": ",".join(models)})
+            return True
+
+    # run a real failover through the code path
+    chs = [dict(c) for c in CHANNELS]
+    gw = SpyGW(chs)
+    state = {}
+    m.run_cycle(gw, VerdictCC(), [("selora", "https://x", "sk")], ("claude", "gpt"), 168,
+                threshold_for, 3, True, None, state)
+    assert all(set(b.keys()) == {"id", "models"} for b in gw.put_bodies), gw.put_bodies
+    assert all("key" not in b and "base_url" not in b for b in gw.put_bodies)
+
+
+def test_coverage_gate_blocks_last_provider():
+    # If removing the model would leave NO enabled channel serving it in
+    # the group, removal is blocked and an alert is sent instead.
+    class OnlyGptBad:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "not_claude" if mo == "gpt-6-astra" else "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    chs = [dict(c) for c in CHANNELS]
+    # ch1 (selora-default-primary, group default) is the ONLY default-group
+    # channel serving gpt-6-astra once ch2/ch3/ch5 drop it.
+    chs[0]["models"] = "gpt-6-astra,claude-sonnet-5-5"
+    chs[1]["models"] = "claude-fable-5-1"   # a6-default-primary drops gpt-6-astra
+    chs[2]["models"] = "claude-fable-5-1,claude-sonnet-5-5"  # fallback drops it
+    chs[4]["models"] = "claude-fable-5-1"   # a6-default-fallback drops it
+    state = {}
+    gw = FakeGW(chs)
+    m.run_cycle(gw, OnlyGptBad(), [("selora", "https://x", "sk")], ("claude", "gpt"), 168,
+                threshold_for, 3, True, None, state)
+    ch1 = gw.channels[0]
+    assert "gpt-6-astra" in ch1["models"], ch1["models"]
+    assert gw.writes == [], gw.writes  # no status flip, no model edit
+    assert not gw.model_edits, gw.model_edits
+
+
+def test_removed_model_recovers():
+    # After a model is removed, a passing re-test re-adds it.
+    chs = [dict(c) for c in CHANNELS]
+    chs[0]["models"] = "gpt-6-astra,glm-5.3"  # fable-5-1 was removed earlier
+    state = {"selora-default-primary": {
+        "rotation": ["gpt-6-astra", "glm-5.3"], "idx": 0,
+        "fails": 0, "removed_models": {
+            "claude-fable-5-1": {"verdict": "unofficial", "removed_at": "2026-10-13T00:00:00"}}}}
+    gw = FakeGW(chs)
+    m.run_cycle(gw, PassCC(), [("selora", "https://x", "sk")], ("claude", "gpt"), 168,
+                threshold_for, 3, True, None, state)
+    st = state["selora-default-primary"]
+    assert "claude-fable-5-1" not in st["removed_models"], st
+    assert any("claude-fable-5-1" in models for _, models in gw.model_edits), gw.model_edits
 
 
 if __name__ == "__main__":

@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"bytes"
+	"context"
+	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,6 +235,225 @@ func buildSecondaryEpaySubmitForm(
 	return uri, epay.GenerateParams(requestParams, operation_setting.EpaySecondaryKey), nil
 }
 
+// bepusdtSign 复现 BEpusdt 的 EpusdtSign 签名算法（原生 API/回调共用）：
+// 排除 signature 键、跳过空值，按 key 排序拼 k=v&k=v（值按 %v 格式化，
+// float 1.0 输出 "1"），拼接商户令牌后取 MD5。见 BEpusdt app/utils。
+func bepusdtSign(data map[string]any, token string) string {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		if k == "signature" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var sign strings.Builder
+	for _, k := range keys {
+		v := data[k]
+		if v == nil || v == "" {
+			continue
+		}
+		sign.WriteString(k)
+		sign.WriteString("=")
+		sign.WriteString(fmt.Sprintf("%v", v))
+		sign.WriteString("&")
+	}
+	raw := strings.TrimRight(sign.String(), "&") + token
+	return fmt.Sprintf("%x", md5.Sum([]byte(raw)))
+}
+
+// bepusdtNativeCurrencies 是原生 create-order 请求的币种白名单：
+// 收银台只展示这些币种对应的网络供客户选择（一按钮多链）。
+var bepusdtNativeCurrencies = "USDT,USDC,GRAM"
+
+// bepusdtCreateOrderReq / bepusdtCreateOrderResp 是原生创建订单
+// 接口（POST /api/v1/order/create-order）的请求与响应结构。
+type bepusdtCreateOrderReq struct {
+	OrderID     string  `json:"order_id"`
+	NotifyURL   string  `json:"notify_url"`
+	RedirectURL string  `json:"redirect_url"`
+	Amount      float64 `json:"amount"`
+	Name        string  `json:"name"`
+	Fiat        string  `json:"fiat"`
+	Currencies  string  `json:"currencies"`
+	Timeout     int64   `json:"timeout"`
+	Signature   string  `json:"signature"`
+}
+
+type bepusdtCreateOrderResp struct {
+	StatusCode int    `json:"status_code"`
+	Message    string `json:"message"`
+	Data       struct {
+		TradeID     string `json:"trade_id"`
+		PaymentURL  string `json:"payment_url"`
+		OrderID     string `json:"order_id"`
+		Amount      string `json:"amount"`
+		Fiat        string `json:"fiat"`
+		ExpirationTime int64 `json:"expiration_time"`
+		Reselect    bool   `json:"reselect"`
+	} `json:"data"`
+}
+
+// createSecondaryNativeOrder 通过 BEpusdt 原生 API 创建订单（区别于易支付
+// submit.php 表单）：不指定 trade_type、限定 currencies → 收银台自带
+// 网络选择器（reselect=true），一个入口覆盖副网关全部链。浏览器直接
+// GET payment_url，无需表单 POST（也消除“不安全提交”浏览器警告）。
+// 金额按 USD 报价（fiat=USD），BEpusdt 按各币种汇率折算。
+func createSecondaryNativeOrder(
+	tradeNo string,
+	name string,
+	amount float64,
+	notifyUrl string,
+	returnUrl string,
+) (string, error) {
+	base, err := url.Parse(strings.TrimRight(operation_setting.EpaySecondaryAddress, "/"))
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{
+		"order_id":     tradeNo,
+		"notify_url":   notifyUrl,
+		"redirect_url": returnUrl,
+		"amount":       amount,
+		"name":         name,
+		"fiat":         "USD",
+		"currencies":   bepusdtNativeCurrencies,
+		"timeout":      int64(900),
+	}
+	reqBody := bepusdtCreateOrderReq{
+		OrderID:     tradeNo,
+		NotifyURL:   notifyUrl,
+		RedirectURL: returnUrl,
+		Amount:      amount,
+		Name:        name,
+		Fiat:        "USD",
+		Currencies:  bepusdtNativeCurrencies,
+		Timeout:     900,
+	}
+	reqBody.Signature = bepusdtSign(payload, operation_setting.EpaySecondaryKey)
+
+	raw, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+	httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		base.String()+"/api/v1/order/create-order", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := secondaryHTTPClient.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var parsed bepusdtCreateOrderResp
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("BEpusdt 响应解析失败: %w", err)
+	}
+	if parsed.StatusCode != 200 || parsed.Data.PaymentURL == "" {
+		return "", fmt.Errorf("BEpusdt 创建订单失败: %s", parsed.Message)
+	}
+	return parsed.Data.PaymentURL, nil
+}
+
+// secondaryHTTPClient 副网关调用客户端：短超时（支付拉起是同步请求）。
+var secondaryHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
+// bepusdtNotifyPayload 是 BEpusdt 原生回调（POST JSON）结构。
+type bepusdtNotifyPayload struct {
+	TradeID            string  `json:"trade_id"`
+	OrderID            string  `json:"order_id"`
+	Amount             float64 `json:"amount"`
+	ActualAmount       string  `json:"actual_amount"`
+	Token              string  `json:"token"`
+	BlockTransactionID string  `json:"block_transaction_id"`
+	Signature          string  `json:"signature"`
+	Status             int     `json:"status"`
+}
+
+// BepusdtNotify 处理 BEpusdt 原生 JSON 回调（/api/user/bepusdt/notify）。
+// 验签（EpusdtSign）后：status=2（支付成功）走 RechargeEpay 入账（行锁
+// 幂等，额度取订单行 Amount，不取回调金额）；status=3（超时）把 pending
+// 订单标记 expired；status=1（等待中）仅确认。均须回 success 纯文本。
+func BepusdtNotify(c *gin.Context) {
+	if !isEpayWebhookEnabled() {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+	var payload bepusdtNotifyPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt webhook JSON 解析失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+	// 验签：把已知字段按 BEpusdt 签名规则重算（signature 键排除、空值跳过）
+	signMap := map[string]any{
+		"trade_id":            payload.TradeID,
+		"order_id":            payload.OrderID,
+		"amount":              payload.Amount,
+		"actual_amount":       payload.ActualAmount,
+		"token":               payload.Token,
+		"block_transaction_id": payload.BlockTransactionID,
+		"status":              payload.Status,
+	}
+	if bepusdtSign(signMap, operation_setting.EpaySecondaryKey) != payload.Signature {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt webhook 验签失败 trade_id=%s order_id=%s client_ip=%s", payload.TradeID, payload.OrderID, c.ClientIP()))
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt webhook 验签成功 trade_id=%s order_id=%s status=%d client_ip=%s", payload.TradeID, payload.OrderID, payload.Status, c.ClientIP()))
+
+	switch payload.Status {
+	case 2: // 支付成功
+		LockOrder(payload.OrderID)
+		defer UnlockOrder(payload.OrderID)
+		alreadyDone, err := model.RechargeEpay(payload.OrderID, "bepusdt", c.ClientIP())
+		if err != nil {
+			switch {
+			case errors.Is(err, model.ErrTopUpNotFound):
+				logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt 回调订单不存在 order_id=%s client_ip=%s", payload.OrderID, c.ClientIP()))
+			case errors.Is(err, model.ErrPaymentMethodMismatch):
+				logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt 订单支付网关不匹配 order_id=%s client_ip=%s", payload.OrderID, c.ClientIP()))
+			case errors.Is(err, model.ErrTopUpStatusInvalid):
+				logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt 订单状态非法 order_id=%s client_ip=%s", payload.OrderID, c.ClientIP()))
+			default:
+				logger.LogError(c.Request.Context(), fmt.Sprintf("BEpusdt 充值处理失败 order_id=%s client_ip=%s error=%q", payload.OrderID, c.ClientIP(), err.Error()))
+			}
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		if alreadyDone {
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt 重复回调幂等忽略 order_id=%s client_ip=%s", payload.OrderID, c.ClientIP()))
+		} else {
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt 充值成功 order_id=%s amount=%.2f actual=%s client_ip=%s", payload.OrderID, payload.Amount, payload.ActualAmount, c.ClientIP()))
+		}
+	case 3: // 订单超时 → 标记过期，避免死信堆积
+		LockOrder(payload.OrderID)
+		defer UnlockOrder(payload.OrderID)
+		if err := model.UpdatePendingTopUpStatus(payload.OrderID, model.PaymentProviderEpay, common.TopUpStatusExpired); err != nil && !errors.Is(err, model.ErrTopUpNotFound) {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("BEpusdt 订单过期处理失败 order_id=%s error=%q", payload.OrderID, err.Error()))
+		} else {
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt 订单已过期 order_id=%s", payload.OrderID))
+		}
+	case 1: // 等待支付，仅确认
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt 订单等待支付 order_id=%s", payload.OrderID))
+	default:
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("BEpusdt 未知订单状态 order_id=%s status=%d", payload.OrderID, payload.Status))
+	}
+	_, _ = c.Writer.Write([]byte("success"))
+}
+
 // verifyEpayCallbackSignature 对回调参数依次用主、副网关密钥验签，
 // 返回验签成功的客户端与结果。两个网关使用不同密钥时仅其中一方通过；
 // 主密钥先试（现网全部历史订单均为主网关订单），失败再试副密钥。
@@ -431,20 +656,52 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": resolveErr.Error()})
 		return
 	}
-	var uri string
-	var params map[string]string
+
+	// 副网关（BEpusdt）：走原生 create-order API——收银台自带网络选择器
+	// （一个按钮覆盖全部链），浏览器直接 GET payment_url（无表单 POST，
+	// 无“不安全提交”警告），回调走 /api/user/bepusdt/notify（JSON+签名）。
 	if isSecondary {
-		// 副网关（BEpusdt）：手动构建表单以携带 fiat=USD（go-epay 的
-		// Purchase() 不支持 fiat 参数，而 BEpusdt 默认按 CNY 计价）。
-		uri, params, err = buildSecondaryEpaySubmitForm(
-			req.PaymentMethod,
+		payLink, nativeErr := createSecondaryNativeOrder(
 			tradeNo,
 			fmt.Sprintf("TUC%d", req.Amount),
-			strconv.FormatFloat(payMoney, 'f', 2, 64),
-			notifyUrl,
-			returnUrl,
+			payMoney,
+			callBackAddress+"/api/user/bepusdt/notify",
+			returnUrl.String(),
 		)
-	} else {
+		if nativeErr != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("BEpusdt 创建订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, nativeErr.Error()))
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
+			return
+		}
+		amount := req.Amount
+		if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+			dAmount := decimal.NewFromInt(int64(amount))
+			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+			amount = dAmount.Div(dQuotaPerUnit).IntPart()
+		}
+		topUp := &model.TopUp{
+			UserId:          id,
+			Amount:          amount,
+			Money:           payMoney,
+			TradeNo:         tradeNo,
+			PaymentMethod:   "bepusdt",
+			PaymentProvider: model.PaymentProviderEpay,
+			CreateTime:      time.Now().Unix(),
+			Status:          common.TopUpStatusPending,
+		}
+		if insertErr := topUp.Insert(); insertErr != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("BEpusdt 创建充值订单失败 user_id=%d trade_no=%s error=%q", id, tradeNo, insertErr.Error()))
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
+			return
+		}
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("BEpusdt 充值订单创建成功 user_id=%d trade_no=%s payment_url=%q", id, tradeNo, payLink))
+		c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"pay_link": payLink}})
+		return
+	}
+
+	var uri string
+	var params map[string]string
+	{
 		uri, params, err = client.Purchase(&epay.PurchaseArgs{
 			Type:           req.PaymentMethod,
 			ServiceTradeNo: tradeNo,
@@ -456,7 +713,7 @@ func RequestEpay(c *gin.Context) {
 		})
 	}
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 拉起支付失败 user_id=%d trade_no=%s payment_method=%s amount=%d secondary=%t error=%q", id, tradeNo, req.PaymentMethod, req.Amount, isSecondary, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 拉起支付失败 user_id=%d trade_no=%s payment_method=%s amount=%d error=%q", id, tradeNo, req.PaymentMethod, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}

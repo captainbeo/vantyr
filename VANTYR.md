@@ -231,7 +231,35 @@ parentheses where it differs):
 | gpt-6-astra | 0.20 | 0.70 | 0.10 | ratio 0.10, completion 3.5, cache 0.5 |
 | gpt-6-sol | 0.05 | 0.15 | 0.05 | ratio 0.025, completion 3, cache 1 (2026-10-13 raise, on-rule) |
 | gpt-6-1-sol | 0.06 | 0.20 | 0.06 | ratio 0.03, completion 10/3, cache 1 (NEW 2026-10-13, A6-only) |
-| gpt-5-6-luna | 0.02 | 0.08 | 0.002 | ratio 0.01, completion 4, cache 0.1 |
+
+gpt-5-6-luna REMOVED 2026-10-13 (owner decision, unsupported): stripped
+from ch3/ch4 model lists (exact-value-guarded SQL), both ability rows
+deleted, ModelRatio/CompletionRatio/CacheRatio/OfficialPricing keys
+removed (incl. the stale `gpt-5.6-luna` CacheRatio dot-key), docs row +
+model-pick sentence + "from $0.02" chip (→ $0.05, sol is now cheapest)
+fixed in all 12 languages, rev 2026-10-13c, deployed. Relay now returns
+503 "no available channel" for luna; /api/pricing shows 9 models.
+Dashboard delete was greyed because luna has NO `models`-table metadata
+row — the Models page delete menu only renders for `model.id > 0`
+(metadata-backed models), and the pricing sheet's unset-tab disables
+delete by design; removal was done at the SQL level, replicating
+DeleteModelMetadata's transaction body.
+
+**Caddy /docs localization bug (found + fixed 2026-10-13 during the
+luna removal):** the docs handle was missing `uri strip_prefix /docs`
+— `/docs/zh-CN.html` resolved to
+`/srv/vantyr-static/docs/docs/zh-CN.html` (missing) and the
+`try_files` fallback silently served the ENGLISH index for every
+localized URL since the docs launch (2026-10-06). Earlier "per-language
+verified live" claims in this file were greps that the English fallback
+also satisfied — the fallback contains the same dates/strings; the
+definitive test is `<html lang="…">` differing per URL. Fixed by adding
+the strip to the live Caddyfile (backup
+Caddyfile.bak-docs-prefix-20261013, `caddy validate` + zero-downtime
+reload) and to the repo copy; all 12 languages now serve their own
+files (verified: lang attribute + localized chips per URL). Any future
+"language X verified live" step must check the lang attribute, not
+string presence.
 
 History: fable-5/5-1 cut 10× to $0.25/$1.50 on 2026-10-08 (admin UI,
 ~2× cheap-tier floor $0.12/$0.60); opus-5 repriced via the new

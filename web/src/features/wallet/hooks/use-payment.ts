@@ -151,6 +151,13 @@ export function usePayment() {
           return true
         }
 
+        // Handle BEpusdt native checkout (pay_link, browser GET redirect)
+        if (!isStripe && response.data?.pay_link) {
+          window.open(response.data.pay_link as string, '_blank')
+          toast.success(i18next.t('Redirecting to payment page...'))
+          return true
+        }
+
         // Handle non-Stripe payment
         if (!isStripe && response.data) {
           const url = (response as unknown as { url?: string }).url
