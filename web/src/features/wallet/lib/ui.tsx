@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import i18next from 'i18next'
 import { CreditCard, Landmark } from 'lucide-react'
-import { type ReactNode } from 'react'
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si'
+import type { ReactNode } from 'react'
+import { SiTether, SiWechat, SiStripe } from 'react-icons/si'
 
 import { ReactIconByName } from '@/components/react-icon-by-name'
 
@@ -99,10 +99,13 @@ export function getPaymentIcon(
 
   switch (paymentType) {
     case PAYMENT_TYPES.ALIPAY:
+    case PAYMENT_TYPES.BEPUSDT:
+      // Both crypto rails are USDT/USDC payments — the Tether (USDT) logo
+      // serves both; react-icons ships no USDC mark.
       return (
-        <SiAlipay
+        <SiTether
           className={className}
-          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.ALIPAY] }}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.BEPUSDT] }}
         />
       )
     case PAYMENT_TYPES.WECHAT:
