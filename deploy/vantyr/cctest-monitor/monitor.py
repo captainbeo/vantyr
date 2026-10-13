@@ -471,6 +471,39 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             save_state(state)
 
 
+def is_gateway_routed(base_url):
+    """True when the seller entry points at our own gateway (Selora's
+    fingerprint-gated key requires the Go client, so checks ride the
+    gateway and land on whatever channel the router picks)."""
+    host = urllib.parse.urlparse(base_url).hostname or ""
+    return host in ("vantyr.xyz", "gateway", "localhost", "127.0.0.1") or host.endswith(".vantyr.xyz")
+
+
+def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
+                    verdict, threshold_for, enforce, discord, state, channels_snapshot):
+    """Apply a verdict to (channel, model): per-model fail counting and
+    failover escalation. Shared by the nominal path and the
+    serving-channel attribution path."""
+    name = channel["name"]
+    channel_id = int(channel["id"])
+    ch_state = state.setdefault(
+        name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
+    )
+    if verdict in BAD_VERDICTS:
+        ch_state["fails"] += 1
+        model_fails = ch_state.setdefault("model_fails", {})
+        model_fails[model] = model_fails.get(model, 0) + 1
+        threshold = threshold_for(name)
+        if model_fails[model] >= threshold:
+            failover_model(
+                gateway, channel, ch_state, name, model, verdict,
+                enforce, discord, channels_snapshot,
+            )
+    elif verdict in PASS_VERDICTS:
+        ch_state["fails"] = 0
+        ch_state.setdefault("model_fails", {}).pop(model, None)
+
+
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
                     usage_window_hours, threshold_for, permanent_fails, enforce,
                     discord, state, channels_snapshot, model_allowlist=None):
@@ -591,20 +624,47 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     verdict = do_check(cctest, base_url, seller_key, upstream_candidate)
     LOG.info("[%s] check %s (upstream %s) -> %s", name, candidate, upstream_candidate, verdict)
 
-    if verdict in BAD_VERDICTS:
-        ch_state["fails"] += 1
-        model_fails = ch_state.setdefault("model_fails", {})
-        model_fails[candidate] = model_fails.get(candidate, 0) + 1
-        threshold = threshold_for(name)
-        if model_fails[candidate] >= threshold:
-            failover_model(
-                gateway, channel, ch_state, name, candidate, verdict,
-                enforce, discord, channels_snapshot,
+    # Gateway-routed attribution: a check labeled for this channel may
+    # have been served by a DIFFERENT channel (the gateway routes by its
+    # own priorities). Look up which channel actually served the model in
+    # the last few minutes and attribute the verdict there. Without this,
+    # failover actions would be taken against channels that never served
+    # the checked request (audit 2026-10-13 defect #1).
+    actual_channel = None
+    if is_gateway_routed(base_url):
+        try:
+            actual_channel = gateway.last_channel_for_model(upstream_candidate, window_minutes=15)
+        except Exception as e:
+            LOG.warning("[%s] serving-channel lookup failed (%s); attributing nominally", name, e)
+    if actual_channel is not None and actual_channel != channel_id:
+        actual_ch = next(
+            (c for c in (channels_snapshot or []) if int(c.get("id") or 0) == actual_channel),
+            None,
+        )
+        if actual_ch:
+            LOG.info(
+                "[%s] verdict actually served by %s (ch %d) — attributing there",
+                name, actual_ch.get("name"), actual_channel,
             )
-    elif verdict in PASS_VERDICTS:
-        ch_state["fails"] = 0
-        ch_state.setdefault("model_fails", {}).pop(candidate, None)
-    elif verdict in SOFT_VERDICTS:
+            process_verdict(
+                gateway, cctest, actual_ch, base_url, seller_key, candidate,
+                verdict, threshold_for, enforce, discord, state, channels_snapshot,
+            )
+            # Nominal channel's counters stay untouched (no attribution).
+            save_state(state)
+            return
+        # Serving channel not in the seller set (e.g. a6 while we check
+        # selora): still log the cross-attribution for observability.
+        LOG.warning(
+            "[%s] check routed to non-seller channel %d — verdict not attributed",
+            name, actual_channel,
+        )
+
+    process_verdict(
+        gateway, cctest, channel, base_url, seller_key, candidate,
+        verdict, threshold_for, enforce, discord, state, channels_snapshot,
+    )
+    if verdict in SOFT_VERDICTS:
         now = time.time()
         soft = [t for t in ch_state.get("soft", []) if now - t < 24 * 3600]
         soft.append(now)
