@@ -229,7 +229,8 @@ parentheses where it differs):
 | claude-opus-5-5 | 0.52 | 2.60 | 0.026 | ratio 0.26 (2026-10-02 legacy price, above rule) |
 | claude-sonnet-5 / 5-5 | 0.26 | 1.30 | 0.026 | ratio 0.13 (legacy price, above rule) |
 | gpt-6-astra | 0.20 | 0.70 | 0.10 | ratio 0.10, completion 3.5, cache 0.5 |
-| gpt-6-sol | 0.02 | 0.10 | 0.02 | ratio 0.01, completion 5, cache 1 (at rule floor) |
+| gpt-6-sol | 0.05 | 0.15 | 0.05 | ratio 0.025, completion 3, cache 1 (2026-10-13 raise, on-rule) |
+| gpt-6-1-sol | 0.06 | 0.20 | 0.06 | ratio 0.03, completion 10/3, cache 1 (NEW 2026-10-13, A6-only) |
 | gpt-5-6-luna | 0.02 | 0.08 | 0.002 | ratio 0.01, completion 4, cache 0.1 |
 
 History: fable-5/5-1 cut 10× to $0.25/$1.50 on 2026-10-08 (admin UI,
@@ -248,6 +249,23 @@ usage-log reconciliation of the astra row is owed on the next funded
 smoke test (API readback + exact-match JSON edit discipline applied;
 no funded key at hand). opus-5-5/sonnet-5-5 remain above the 2× anchor
 (owner: deliberate margin tier — the sheet's blended margin stays >2×).
+
+2026-10-13 (second batch): gpt-6-sol raised $0.02/$0.10 → $0.05/$0.15
+(ratio 0.025, completion 3; was below the 2× rule at ~1×/0.9× — now
+2.5×/1.4× vs floor $0.02/$0.11). NEW MODEL gpt-6-1-sol $0.06/$0.20
+(cache $0.06) — **A6-only** by owner decision: ch2 (a6-default-primary)
+models + `gpt-6-1-sol → gpt-6.1-sol` model_mapping (A6 key
+permission-tested first: 200 + real completion), ability row inserted
+via SQL (ON CONFLICT DO NOTHING), ratio 0.03 / completion 10/3 /
+cache 1, OfficialPricing 2/10/0.1 (models.dev via A6 feed), ~3.2×/2.1×
+vs the 196-listing floor $0.019/$0.096. E2E proof: /api/pricing shows
+both models; real relay request through ch2 mapped to gpt-6.1-sol
+upstream and billed 132 quota vs 132.29 computed (4393 in / 5 out) —
+exact reconciliation. Docs table: sol row updated + new 6-1-sol row in
+all 12 languages, rev 2026-10-13b, deployed. Mia PAYG decision: owner
+accepted the bounded short-context loss on Mia failovers (no
+expression floor) — see the 2026-10-12 Mia section for the standing
+math; revisit if failover volume grows.
 
 Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
 quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
