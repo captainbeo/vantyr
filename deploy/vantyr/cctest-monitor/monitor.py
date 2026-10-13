@@ -312,6 +312,18 @@ def provider_for(model):
     return "codex" if model.lower().startswith("gpt-") else "claude"
 
 
+def parse_model_mapping(raw):
+    """Channel model_mapping comes as a JSON object string (or empty).
+    Returns a dict customer-name -> upstream-name."""
+    if not raw or not isinstance(raw, str):
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+
 def discord_alert(webhook, text):
     if not webhook:
         return
@@ -507,11 +519,16 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
 
     # Recovery loop: re-check models we removed earlier. A pass means the
     # seller fixed the substitution — re-add the model so traffic can
-    # return. Rotate one removed model per cycle.
+    # return. Rotate one removed model per cycle. Uses the mapped
+    # (upstream) name like the main check.
     removed = ch_state.get("removed_models") or {}
     if removed:
         removed_candidate = sorted(removed.keys())[0]
-        verdict = do_check(cctest, base_url, seller_key, removed_candidate)
+        mapping = parse_model_mapping(channel.get("model_mapping"))
+        verdict = do_check(
+            cctest, base_url, seller_key,
+            mapping.get(removed_candidate, removed_candidate),
+        )
         LOG.info("[%s] removed-model re-test %s -> %s", name, removed_candidate, verdict)
         if verdict in PASS_VERDICTS:
             restore_model(gateway, channel, ch_state, name, removed_candidate, enforce, discord)
@@ -547,8 +564,14 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         save_state(state)
         return
 
-    verdict = do_check(cctest, base_url, seller_key, candidate)
-    LOG.info("[%s] check %s -> %s", name, candidate, verdict)
+    # Check the model under its UPSTREAM name: the channel may rename
+    # SKUs via model_mapping (e.g. gpt-6-1-sol -> gpt-6.1-sol on A6;
+    # gpt-6-sol -> gpt-5-6-sol on Selora). Sending the customer-facing
+    # name to the seller directly gets model_not_allowed errors.
+    mapping = parse_model_mapping(channel.get("model_mapping"))
+    upstream_candidate = mapping.get(candidate, candidate)
+    verdict = do_check(cctest, base_url, seller_key, upstream_candidate)
+    LOG.info("[%s] check %s (upstream %s) -> %s", name, candidate, upstream_candidate, verdict)
 
     if verdict in BAD_VERDICTS:
         ch_state["fails"] += 1
