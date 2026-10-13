@@ -72,6 +72,10 @@ LOG = logging.getLogger("cctest-monitor")
 
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 
+# Name of the sidecar user's relay token in usage logs — used to exclude
+# the monitor's own gateway-routed traffic from the usage gate.
+MONITOR_TOKEN_NAME = os.environ.get("MONITOR_TOKEN_NAME", "cctest-monitor")
+
 # Verdict categories from cctest.ai/docs (full mode) plus the live-observed
 # attribution-mode values (attr_match / attr_swapped, verdictKey field).
 # Live observation 2026-10-12: A6 attribution check on claude-fable-5-1
@@ -188,16 +192,31 @@ class Gateway:
             raise RuntimeError(f"channel models update failed: {http_status} {payload}")
         return True
 
-    def model_used_recently(self, channel_id, model, window_hours):
+    def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
+        """Traffic gate: did anyone other than the monitor's own token use
+        this model on this channel recently? Without the exclusion the
+        monitor's own gateway-routed checks satisfy the gate and keep dead
+        SKUs in the rotation forever (self-sustaining credit burn)."""
         since = int(time.time()) - window_hours * 3600
-        query = urllib.parse.urlencode({
+        base = {
             "p": 1, "page_size": 1, "channel": channel_id,
             "model_name": model, "start_timestamp": since,
-        })
-        payload, status = self._request("GET", f"/api/log/?{query}")
+        }
+        payload, status = self._request("GET", f"/api/log/?{urllib.parse.urlencode(base)}")
         if status != 200 or not payload.get("success"):
             raise RuntimeError(f"log query failed: {status} {payload}")
-        return ((payload.get("data") or {}).get("total") or 0) > 0
+        total = (payload.get("data") or {}).get("total") or 0
+        if total == 0 or not exclude_token:
+            return total > 0
+        own = dict(base)
+        own["token_name"] = exclude_token
+        payload, status = self._request("GET", f"/api/log/?{urllib.parse.urlencode(own)}")
+        if status != 200 or not payload.get("success"):
+            # Can't subtract our own usage: assume used (fail toward
+            # checking, not toward silently dropping coverage).
+            return True
+        own_count = (payload.get("data") or {}).get("total") or 0
+        return total > own_count
 
     def last_channel_for_model(self, model, window_minutes=10):
         """For gateway-routed checks: find which channel recently served
@@ -512,9 +531,14 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     candidate = rotation[ch_state["idx"] % len(rotation)]
     ch_state["idx"] = (ch_state["idx"] + 1) % len(rotation)
 
-    # Traffic gate: verifying a model nobody calls burns credits.
+    # Traffic gate: verifying a model nobody calls burns credits. Our own
+    # gateway-routed checks create usage entries — exclude them, else the
+    # gate self-sustains dead SKUs in the rotation forever.
     try:
-        used = gateway.model_used_recently(channel_id, candidate, usage_window_hours)
+        used = gateway.model_used_recently(
+            channel_id, candidate, usage_window_hours,
+            exclude_token=MONITOR_TOKEN_NAME,
+        )
     except Exception as e:
         LOG.warning("[%s] usage gate failed for %s (%s); testing anyway", name, candidate, e)
         used = True
@@ -561,7 +585,16 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
     from the channel's list so New API re-routes it to another provider.
     Coverage gate: if no other enabled channel in the same group still
     serves the model, do NOT remove it (a wrong model is still better
-    than no model) — alert instead."""
+    than no model) — alert instead.
+
+    Race safety: the coverage check re-fetches the LIVE channel list at
+    removal time. A cycle-start snapshot can be stale — if two channels
+    cross their fail threshold for the same model in one cycle, both
+    removals would pass a snapshot-based gate (each still "sees" the
+    other serving it) and the model would end up with zero providers.
+    The live re-fetch closes that window: the second removal sees the
+    first one's effect and is blocked. Enforce mode only (observe mode
+    never mutates, so the race cannot occur)."""
     remaining = [m for m in (ch.get("models") or "").split(",") if m.strip() and m.strip() != model]
     if not remaining:
         LOG.info("[%s] model %s is the only entry; escalating to channel quarantine instead", name, model)
@@ -571,12 +604,21 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
             LOG.warning("[%s] OBSERVE-ONLY: would quarantine channel (%s -> %s)", name, model, verdict)
         return
     groups = [g.strip() for g in (ch.get("group") or "").split(",") if g.strip()]
+    if enforce:
+        # Live list: mutations (ours or the owner's) are visible immediately.
+        try:
+            live_channels = gateway.list_channels()
+        except Exception as e:
+            LOG.error("[%s] coverage re-check failed (%s); aborting removal to be safe", name, e)
+            return
+    else:
+        live_channels = channels_snapshot
     covered = any(
         other.get("id") != ch.get("id")
         and int(other.get("status") or 0) == CHANNEL_ENABLED
         and any(g in [og.strip() for og in (other.get("group") or "").split(",")] for g in groups)
         and model in [m.strip() for m in (other.get("models") or "").split(",")]
-        for other in channels_snapshot
+        for other in live_channels
     )
     if not covered:
         LOG.warning(
