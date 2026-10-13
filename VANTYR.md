@@ -2067,6 +2067,34 @@ authenticity gate (one cctest attribution check per flagship model
 before pointing real traffic) is still recommended at cutover even
 with scanning deferred — the swap was found by exactly that check.
 
+**DEPLOYED 2026-10-13 (roles applied to production):** the map
+above is live. SQL transaction over the 6 existing channels (id
+roles per the table; ch3 keeps the `gpt-6-sol` mapping, ch5/ch6
+keep fable dot-mappings for A6), new ch7 `mia-failover` (type 60,
+P20, groups default,unlimited, fable×2+opus×2+sonnet-5, developer
+param_override, DISABLED status 2 with placeholder key
+`PENDING-OWNER-KEY-MIAROUTER` — zero routing until the owner pastes
+the real key at go-live, then `POST /api/channel/7/status`
+{"status":1}), `RetryTimes` 1→2 (options table, 60s sync
+confirmed in logs). Abilities rebuilt via `POST /api/channel/fix`
+(sidecar PAT, 7/7 success). Backup before the transaction:
+`/opt/vantyr/backups/channels-abilities-pre-miaroles-20261013.sql`.
+**Test battery (real relay requests, cctest-sidecar token, all
+via 127.0.0.1:3000):** fable-5-1→ch1 Selora (16 quota), opus-5-5→
+ch1 Selora (29), sonnet-5→ch2 A6 (7), sonnet-5-5→ch2 A6 (2),
+gpt-6-astra→ch2 A6 (86, 4125 prompt tokens — the reasoning
+prefix; astra builds a large system prompt per request). Every
+request hit its designed tier-1 channel; usage logs reconcile;
+gateway healthy, zero errors. NOTE: fable/opus small-prompt
+requests show empty `content` with reasoning_content — the 16
+max_tokens budget is consumed by visible reasoning first (normal
+for thinking models; raise max_tokens in real use). Rollback:
+restore the backup SQL + `RetryTimes` back to 1. Standing owner
+actions: paste real Mia key (admin UI → channel 7 edit, or SQL
+key column — never chat), flip status 1, re-run this battery per
+model + one Codex CLI turn through Mia, then the one-shot cctest
+attribution check per flagship model.
+
 **Automatic switching — mechanics (verified in pinned source):**
 there is NO proactive seller-RPM or balance detection in New API.
 Switching is REACTIVE and automatic: the seller returns 429 (rate)
