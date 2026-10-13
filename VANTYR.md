@@ -2127,6 +2127,33 @@ Key hygiene: this key transited chat — treat as a test credential;
 enter the production key via admin UI only and retire the test key
 after go-live.
 
+**Widened-key re-probe (2026-10-13, owner enabled GPT 6/6.1 +
+sonnet-5):** `/v1/models` now returns 6 — the four Claude SKUs,
+claude-sonnet-5, gpt-6-astra, and **gpt-6.1-sol (DOT naming — maps
+to our gpt-6-sol; no luna in Mia's catalog)**. The earlier "drop
+sonnet-5 from ch7" note is OBSOLETE — ch7's deployed model list
+(fable×2 + opus×2 + sonnet-5) is now fully covered by the key.
+`/v1/responses` is per-model AND per-input-shape: **Claude models →
+500 convert_request_failed for all shapes** (auto-retry band →
+transparent failover to A6, no customer error; only a wasted hop
+when Selora is down). **gpt-6-astra → WORKS with string input**
+(real Responses-format reply, usage, charge $0.001275) but **400
+`bad_request` with array-with-roles input — which is what Codex CLI
+sends**; 400 is OUTSIDE every auto-retry range → customer-visible
+hard failure. DANGER RULE: never add GPT models to a Mia type-60
+channel while array-input 400s — Codex traffic would fail outright
+(irrelevant today: ch7 carries no GPT models, so astra/sol/luna
+never route to Mia; astra Codex rides A6 P30 → Selora P10).
+**gpt-6.1-sol → 401: Mia's own upstream key for sol is currently
+invalid** (their passthrough leaked `sk-proj-…KucA` masked — sol
+is broken on their side; also proves raw upstream errors pass
+through their gateway). astra chat/completions works (real GPT
+reasoning). VERDICT: Mia IS usable now for exactly what we route
+to it — Claude chat/completions + /v1/messages + sonnet-5 —
+Codex-Claude traffic self-heals to A6; the type-58
+responses→chat-converter channel remains the option if
+Codex-on-Mia is ever wanted without the wasted hop.
+
 **Automatic switching — mechanics (verified in pinned source):**
 there is NO proactive seller-RPM or balance detection in New API.
 Switching is REACTIVE and automatic: the seller returns 429 (rate)
