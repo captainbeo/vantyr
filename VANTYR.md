@@ -2208,3 +2208,47 @@ mutation fix (dual-verify copies params per attempt).
   + pay2 DNS exist. Wallet keeps showing the GM Pay crypto button.
 - Rollback: repoint compose.yaml to pinned-next26 + `docker compose
   up -d --no-build gateway` (next26 image retained).
+
+## 2026-10-13 — BEpusdt activated + GM Pay TON disabled
+
+**BEpusdt fully configured (via internal admin API over the Docker
+network — no DNS needed for order submission):**
+
+- 7 wallets registered: EVM 0x1dd5…ed54 for usdt/usdc.arbitrum,
+  usdt/usdc.xlayer, usdc.base; TON UQBzGz…6aea for usdt.ton, ton.gram
+  (addresses pulled from GM Pay's live config).
+- `api_app_uri=https://pay2.vantyr.xyz` (cashier URLs), payment_timeout
+  900s (15-min parity), payment_min_amount 1 (USD floor).
+- Rates: `rate_float_USDT_USD=1`, `rate_float_USDC_USD=1` (fixed 1:1,
+  GM Pay parity; verified in bep_rate after forced sync). GRAM stays
+  CoinGecko-auto (~1.37 USD — native TON pricing, no manual drift).
+- New API options live: `EpaySecondaryAddress=http://bepusdt:8080`
+  (internal — the gateway talks to BEpusdt inside the network; only the
+  customer's cashier redirect needs pay2 DNS), `EpaySecondaryId=1000`,
+  `EpaySecondaryKey=<api_auth_token>`, `EpaySecondaryTypes=` all 7
+  trade types. `PayMethods` extended with 7 per-chain buttons
+  (LuCoins icons; BEpusdt cashier cannot reselect method on epay
+  orders, so one button per chain is required).
+- Verified live: signed submit form (fiat=USD) accepted → order created
+  (rate 1:1, address correct, notify_url accepted) → 302 cashier; a
+  secondary-key-signed callback to EpayNotify passes dual-verify in
+  production (验签成功 in gateway log — the dual-gateway notify path is
+  LIVE). Probe orders cancelled and cleaned.
+- Remaining for customer access: **DNS A record `pay2.vantyr.xyz` →
+  85.190.118.190** (owner, Namecheap; Caddy then auto-issues TLS).
+  Until then the wallet buttons exist but checkout redirects fail to
+  resolve. First $1 real order per rail still owed (money-path gate).
+- BEpusdt admin: random username/password/secure-path printed at first
+  boot, stored root-only at
+  /opt/vantyr/deploy/vantyr/.bepusdt-init-credentials.txt; admin API
+  needs BOTH the secure-path session cookie AND the login token.
+
+**GM Pay TON disabled (owner decision, BEpusdt owns TON now):**
+chain_tokens ton|TON + ton|USDT → enabled=0; ton wallet row →
+status=2 (disabled; NOT deleted — history preserved). GM Pay
+restarted to reload; cashier 200; remaining 7 chains (tron, ethereum,
+solana, binance, polygon, plasma, aptos × USDT/USDC) verified intact.
+
+Ops note: BEpusdt's rate rows bake the float syntax at creation; the
+hourly sync writes new rows — after setting rate_float force a sync
+(admin api /api/rate/sync) or wait up to an hour for the pinned rate.
