@@ -152,6 +152,11 @@ export function PaymentConfirmDialog({
                   paymentMethod?.name
                 )}
                 <span className='font-medium'>{paymentMethod?.name}</span>
+                {paymentMethod?.subtitle && (
+                  <span className='text-muted-foreground text-xs font-normal'>
+                    {paymentMethod.subtitle}
+                  </span>
+                )}
               </div>
             </div>
           </div>
