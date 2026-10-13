@@ -204,21 +204,50 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   (`POST /api/user/login`) rather than debugging 401s from option
   updates.
 
-## Pricing (2026-10-02, owner decision)
+## Pricing (2026-10-02, owner decision — superseded 2026-10-13, see next section)
 
-PAYG per-token prices, set via the four ratio maps
-(`ModelRatio`/`CompletionRatio`/`CacheRatio`; New API bills input at
-$2×ratio/MTok, output at input×completion, cache read at input×cache):
+Original 2026-10-02 sheet (input/output/cache-read $/MTok): fable-5/5-1
+2.50/12.50/0.25, opus-5 0.65/3.25/0.065, opus-5-5 0.52/2.60/0.026,
+sonnet-5 0.26/1.30/0.026, gpt-6-astra 0.08/0.16/0.04, gpt-6-sol
+0.02/0.10/0.02, gpt-5-6-luna 0.02/0.08/0.002.
 
-| Model | Input $/MTok | Output $/MTok | Cache read |
-|---|---|---|---|
-| claude-fable-5 / 5-1 | 2.50 | 12.50 | 0.25 / 0.0625 |
-| claude-opus-5 | 0.65 | 3.25 | 0.065 |
-| claude-opus-5-5 | 0.52 | 2.60 | 0.026 |
-| claude-sonnet-5 | 0.26 | 1.30 | 0.026 |
-| gpt-6-astra | 0.08 | 0.16 | 0.04 |
-| gpt-6-sol | 0.02 | 0.10 | 0.02 |
-| gpt-5-6-luna | 0.02 | 0.08 | 0.002 |
+## Pricing (2026-10-13, owner decision — A6-anchored)
+
+Rule: **sell = 2× the A6 marketplace merchant listing** (cheap-tier
+anchor), minimum margin 2× on cost — 1.5× acceptable as exception,
+higher is fine. Goal: cheap but reliable. Re-anchor when the A6 cheap
+floor moves (the pool churns; ch-331 already left) — a periodic feed
+check is the guard (see cctest monitor).
+
+Current live sheet (input/output/cache-read $/MTok; cache write in
+parentheses where it differs):
+
+| Model | Input $/MTok | Output $/MTok | Cache read | Billing |
+|---|---|---|---|---|
+| claude-fable-5 / 5-1 | 0.25 | 1.50 | 0.05 (write 0.30) | ratio 0.125, completion 6, cache 0.2, create 1.2 |
+| claude-opus-5 | 0.12 | 0.50 | 0.01 (write 0.10) | tiered_expr `tier("base", p * 0.12 + c * 0.5 + cr * 0.01 + cc * 0.1)` |
+| claude-opus-5-5 | 0.52 | 2.60 | 0.026 | ratio 0.26 (2026-10-02 legacy price, above rule) |
+| claude-sonnet-5 / 5-5 | 0.26 | 1.30 | 0.026 | ratio 0.13 (legacy price, above rule) |
+| gpt-6-astra | 0.20 | 0.70 | 0.10 | ratio 0.10, completion 3.5, cache 0.5 |
+| gpt-6-sol | 0.02 | 0.10 | 0.02 | ratio 0.01, completion 5, cache 1 (at rule floor) |
+| gpt-5-6-luna | 0.02 | 0.08 | 0.002 | ratio 0.01, completion 4, cache 0.1 |
+
+History: fable-5/5-1 cut 10× to $0.25/$1.50 on 2026-10-08 (admin UI,
+~2× cheap-tier floor $0.12/$0.60); opus-5 repriced via the new
+tiered_expr billing editor (~2× $0.06/$0.25 floor); gpt-6-astra raised
+$0.08/$0.16 → $0.20/$0.70 on 2026-10-13 (was below A6 floor $0.09/$0.47
+— sold at a loss; 2× floor = 2.2×/1.5× at floor/median). astra change
+applied via options-table SQL (ModelRatio 0.04→0.10, CompletionRatio
+2→3.5 — astra is NOT completion-locked: the gpt-5 prefix lock doesn't
+match `gpt-6-*`, generic unlocked branch, config wins), 60s sync,
+verified live on /api/pricing ($0.20/$0.70/$0.10). Docs table synced in
+all 12 languages + deployed (astra row, opus-5 row $0.65/$3.25 →
+$0.12/$0.50/$0.01, as-of 2026-10-13, rev 2026-10-13a). Model Overview
+and Discord #pricing auto-sync from live config. Request-level
+usage-log reconciliation of the astra row is owed on the next funded
+smoke test (API readback + exact-match JSON edit discipline applied;
+no funded key at hand). opus-5-5/sonnet-5-5 remain above the 2× anchor
+(owner: deliberate margin tier — the sheet's blended margin stays >2×).
 
 Subscription: "Unlimited Monthly" — $180 one-time, 30 days, unlimited
 quota (`total_amount=0`), upgrades user to group `unlimited` (group ratio
