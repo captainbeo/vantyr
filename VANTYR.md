@@ -2581,3 +2581,37 @@ image line sed'd to pinned-next29 before up). Gateway healthy 200.
 Test users (vantyr_uicheck id 34, vantyr_paytest id 31) disabled
 status=2 after the scripted topup/info check; Turnstile + email
 verification disabled only for the test window and restored.
+
+## 2026-10-13 — Subtitle render fix + Tether icons (pinned-next30)
+
+Owner report after next29: the network lists still didn't show under
+USDT / USDC, and both buttons should carry the USDT (Tether) logo
+(USDC logo unavailable → USDT only).
+
+**Root cause (next29 gap):** the wallet hook's parsePaymentMethods
+whitelists fields when mapping the raw API JSON to the typed
+PaymentMethod — the new `subtitle` key was dropped there, so the
+component support never received data. (Deployed next29 verified the
+API + config carried subtitle; the parse layer was the missing link.)
+
+**Fix (commit f162e4b8e, image pinned-next30 ae32e2ca5ab5):**
+
+- parsePaymentMethods now maps `subtitle` (hook-level tests cover
+  pass-through + absence).
+- Icons: react-icons has no USDC mark in any pack (verified across
+  families) → both crypto rails render the Tether logo. alipay and
+  bepusdt types share one SiTether case in getPaymentIcon, Tether
+  green #26A17B; PayMethods config icons set to SiTether for both
+  buttons (config icon resolves via ReactIconByName; the type-based
+  case covers any icon-less fallback). constants gained
+  PAYMENT_TYPES.BEPUSDT + its color entry.
+- Also fixed the pre-existing no-import-type-side-effects lint error
+  in ui.tsx (touched file rule).
+
+**Verified in a real browser (local preview → production API):**
+logged in through the UI (Turnstile briefly disabled server-side,
+restored after; test user vantyr_uicheck2 id 35 disabled), wallet
+page shows both buttons: "USDT / USDC" with the network list as an
+11px muted line under the 14px name, and identical Tether SVG paths
+on both buttons. Wallet tests 13/13 (2 new hook tests), typecheck +
+lint clean on touched files.
