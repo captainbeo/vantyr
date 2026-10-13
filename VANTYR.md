@@ -2252,3 +2252,16 @@ solana, binance, polygon, plasma, aptos × USDT/USDC) verified intact.
 Ops note: BEpusdt's rate rows bake the float syntax at creation; the
 hourly sync writes new rows — after setting rate_float force a sync
 (admin api /api/rate/sync) or wait up to an hour for the pinned rate.
+
+**pay2 DNS live 2026-10-13 (owner added the A record):** Caddy needed a
+full restart to clear the ACME backoff (reload alone doesn't reset it)
+— pay2.vantyr.xyz now serves TLS (200). Live end-to-end order checks on
+three rails (Arbitrum USDT, TON GRAM, Base USDC): signed submit → order
+created with correct address + rate ($1 = 1 USDT/USDC pinned; GRAM
+0.73 @ CoinGecko 1.37) → public cashier page renders. Orders cancelled
+after verification. GM Pay (7 chains) and all other endpoints healthy.
+
+Remaining money-path gate: ONE real $1 customer order per rail
+(all 7 BEpusdt types) with credit + usage-log reconciliation, then
+GM Pay TON row can be fully removed if desired. Wallet now offers all
+8 crypto buttons to customers.
