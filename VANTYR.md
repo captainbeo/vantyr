@@ -2007,51 +2007,85 @@ cuts the good sonnet path on the same channel; split a6 channels
 per model-set if that starts to bite. Fable-5/5-1 stays off the
 cheap tier regardless (standing ladder decision).
 
-**Channel assignment map (2026-10-13, proposed — cctest deferred;
-owner: model scanning goes live at a later stage):**
+**Channel assignment map (2026-10-13, OWNER DECISION — supersedes
+the proposed ladders below; cctest scanning deferred to a later
+stage):**
 
-Seller restrictions honored: Selora — ONE `sk-gw-` key, ~30 req/min
-aggregate, 402 payment throttle on bursts, catalog lacks
-sonnet-5-5 (key rotation staged to split default/unlimited onto two
-keys, doubling capacity). A6 — merchant lottery (quality risk;
-fable-5-1 swap observed, sonnet-5-5 verified) but cache-token
-reporting and all-models catalog. Mia — 100 RPM per key, flat
-per-request wallet ($72→$5,500, terms confirmation pending),
-catalog fable-5/5-1, opus-5/5-5, sonnet-5 (+astra), all three wire
-formats.
+Per-model ladders (apply to both groups):
 
-Default (PAYG) group, per model — tier 1 → tier 2:
+| Model | 1st | 2nd | 3rd |
+|---|---|---|---|
+| claude-fable-5 / 5-1 | Selora | Mia | A6 |
+| claude-opus-5 / 5-5 | Selora | Mia | A6 |
+| claude-sonnet-5-5 | A6 only | — | — |
+| claude-sonnet-5 | A6 | Mia | Selora |
+| gpt-6-astra / sol / luna | A6 | Selora | — |
 
-| Model | Tier 1 | Tier 2 |
-|---|---|---|
-| claude-fable-5 / 5-1 | selora-default-primary | mia |
-| claude-opus-5 / 5-5 | selora-default-primary | a6-default-primary |
-| claude-sonnet-5 | selora-default-primary | a6-default-primary |
-| claude-sonnet-5-5 | a6-default-primary | mia |
-| gpt-6-astra / sol / luna | selora-default-primary | a6-default-primary |
+Group flavor (owner's words): PAYG = "A6 as standard, Mia second,
+Selora third" (that is sonnet-5's ladder verbatim — PAYG volume
+concentrates on the A6-first rows); unlimited = "Selora and Mia
+standard, switch to Mia on rpm/balance exhaustion, then over to
+A6" (that is the fable/opus ladder). Reading recorded: the table
+is authoritative per-model; the group lines describe where each
+group's volume concentrates. Open confirmation: if "A6 standard"
+was meant to override the table for PAYG fable/opus too, say so —
+abilities are per (group, model, channel), so a per-group
+divergence is implementable; the swap evidence argues for keeping
+the table's order.
 
-Rationale: fable's tier-2 is Mia (not A6) because the swap was
-observed on A6's cheap tier and Mia is the only un-flagged
-alternative with the SKU; sonnet-5-5's tier-1 is A6 because Selora
-lacks the SKU and A6 verified it (attr_match) at the cheapest
-per-token price, Mia tier-2 on price ($0.25 flat); everything else
-keeps Selora primary (fastest, TLS-keyed) with A6 second.
-Implementation with the existing 6 channels + 1 new `mia`
-channel — default-group priorities: selora-default-primary P10
-(w3) / a6-default-primary P5 (w1) / selora-default-fallback P0 /
-mia-failover P-10, then per-model pruning of each channel's model
-list (fable-5/5-1 removed from a6-*; sonnet-5-5 removed from
-selora-*; sonnet-5 removed from mia since A6 is tier-2 there —
-Mia's list: fable-5, fable-5-1, opus-5, opus-5-5, sonnet-5-5).
-Mechanics relied on (verified in pinned source): abilities are per
-(group, model, channel); attempt N = Nth distinct priority tier;
-weights share within a tier; a model absent from a channel's list
-can never receive it. Unlimited group unchanged: selora-unlimited
-P10 → a6-unlimited P0, Mia excluded (flat-rate cost risk).
-Implementation = admin-UI edits only; no code, no deploy, no
-options. RetryTimes=2 when Mia's channel goes live (2 tiers per
-model in the default group → attempt 3 exhausts tiers, clamps to
-lowest).
+IMPLEMENTATION (admin-UI only, no code): New API priority is
+per-CHANNEL, not per-model — the two opposite orders (Selora-first
+for fable/opus, A6-first for sonnet/gpt6) REQUIRE role-split
+channels. Seven channels (Selora's two keys after the staged
+rotation double its roles):
+
+| Channel (role) | Group | Priority | Models |
+|---|---|---|---|
+| selora-premium (sk-gw- key) | default | 30 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| selora-standard (sk-gw- key) | default | 10 | sonnet-5, gpt-6-astra, sol, luna |
+| selora-unlimited-premium (unlimited-account key) | unlimited | 30 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| selora-unlimited-standard (unlimited-account key) | unlimited | 10 | sonnet-5, gpt-6-astra, sol, luna |
+| a6-standard | default, unlimited | 30 | sonnet-5, sonnet-5-5, gpt-6-astra, sol, luna |
+| a6-premium | default, unlimited | 10 | fable-5, fable-5-1, opus-5, opus-5-5 |
+| mia | default, unlimited | 20 | fable-5, fable-5-1, opus-5, opus-5-5, sonnet-5 |
+
+Resulting ladders per model: fable/opus 30 Selora → 20 Mia → 10
+A6; sonnet-5 30 A6 → 20 Mia → 10 Selora; gpt-6 family 30 A6 → 10
+Selora; sonnet-5-5 30 A6 only. Weights become irrelevant (one
+channel per model per tier — no load-share by design).
+**RetryTimes=2 required** (worst case 3 distinct tiers → 3
+attempts walk the whole ladder; at the current RetryTimes=1 the
+3rd tier is never reached). The 6 existing channels get re-purged
+into these roles via model-list + priority + group edits; the
+cctest monitor needs no change (prefix expansion handles any
+channel count/names). Two caveats: (1) GPT6 row assumes A6 serves
+sol/luna — the current A6 token's model permissions BLOCK the
+.luna/.sol SKUs (owner can widen on A6's side + add channel
+model_mapping dot↔dash, e.g. gpt-5-6-luna → gpt-5.6-luna); until
+then sol/luna effectively ride Selora only. (2) The Mia
+authenticity gate (one cctest attribution check per flagship model
+before pointing real traffic) is still recommended at cutover even
+with scanning deferred — the swap was found by exactly that check.
+
+**Automatic switching — mechanics (verified in pinned source):**
+there is NO proactive seller-RPM or balance detection in New API.
+Switching is REACTIVE and automatic: the seller returns 429 (rate)
+or 402 (balance/payment) → DecideRelayRetry auto-retries (402 sits
+in the 401–407 auto-retry band, 429 in 409–499, 5xx 500–503 too)
+→ the retry attempt serves from the NEXT distinct priority tier.
+The customer never sees the seller error; this delivers the
+owner's "switches automatically to Mia, then over to A6" exactly —
+but the trigger is the seller's error, not a predictive probe.
+Auto-disable (auto_ban) fires only on 401 — a drained Mia wallet
+(402) does NOT disable the channel, so each request pays one
+failed hop before failing over (bounded waste, self-heals on
+top-up; channel stays in rotation). Seller caps still bind
+(Selora ~30 req/min per key, 60 after upgrade; Mia 100 RPM per
+key) — sustained demand beyond a cap continuously overflows to
+the next tier, which also drains the Mia wallet faster under
+sustained Selora saturation: watch the wallet while unlimited
+traffic rides Mia (the deal-rate math: heavy 10k-req/month
+subscriber ≈ $79 wallet draw at list prices vs $180 revenue).
 
 **Correctness-ranked ladder (2026-10-12):** a
 (refund + trust incident), so correctness ranks channels and price
