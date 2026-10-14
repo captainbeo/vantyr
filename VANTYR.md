@@ -2697,3 +2697,39 @@ report: the running next31 binary already had the label — browser
 cache of the old JS chunk; hard refresh needed. Test updated, green
 on server. pay2 Caddy block re-verified intact after sync
 (backup Caddyfile.bak-pre-next32).
+
+## 2026-10-14 — Stripe wording v3 + full-width row + first live payment (pinned-next33)
+
+**First REAL Stripe payment (LIVE mode):** owner paid €1 via iDEAL
+(order ref_b62582fa…). Webhook delivered + verified (checkout.session.
+completed, payment_status paid, currency EUR, livemode true), order
+row flipped to success, credit reconciled exactly: +500,000 quota =
+$1.00. Wallet is USD-denominated — the € payment credits dollars,
+not euros (credit always derives from the order-row amount, never
+webhook money). Live iDEAL is on → the scheme's company registration
+number display rule now applies (owner action outstanding). Note: the
+session's payment_method_types reveal the account's full lineup
+(card, bancontact, eps, ideal, klarna, link, paypal, amazon_pay,
+satispay) — the owner enabled more than the button lists.
+
+**Button v3 wording (commits 169bb6d8e + bba7f7403, image
+pinned-next33 43b3337ceb63):** name "Card / iDEAL | WERO / Apple +
+Google Pay / PayPal and more", subtitle "powered by Stripe" (11px
+muted italic). Root cause of the "still says Stripe" reports: a
+manual stripe entry (name "Stripe", icon SiStripe) had been added to
+the PayMethods option via the admin editor — GetTopUpInfo skips its
+built-in entry when the config already has one, so config wins over
+the Go label. The config entry now carries the v3 wording; the Go
+fallback + test match it. Full-width: the Stripe method renders as a
+col-span row below the crypto grid (grid loop skips it) so the long
+name + subtitle never truncate — browser-verified at 1400px, no
+truncation; italic subtitle confirmed via computed style. Test added
+(col-span + full name + subtitle containment). pay2 Caddy block
+verified intact after both syncs (backups .bak-pre-next33/.b33b).
+
+**EUR/USD pricing decision (owner: use live rates, not €1=$1):**
+recommended path = single USD price in StripePriceId + Stripe
+adaptive pricing (already enabled by default — seen in the live
+webhook payload) presents local currency to each customer at live
+rates while settling in USD; StripePriceIdUsd stays empty so the €/$
+toggle hides; zero code. Pending owner go-ahead to flip the config.
