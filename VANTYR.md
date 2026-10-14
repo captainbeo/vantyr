@@ -2615,3 +2615,73 @@ page shows both buttons: "USDT / USDC" with the network list as an
 11px muted line under the 14px name, and identical Tether SVG paths
 on both buttons. Wallet tests 13/13 (2 new hook tests), typecheck +
 lint clean on touched files.
+## Group isolation (2026-10-13, owner decision — PAYG vs unlimited)
+
+Customers no longer see the internal group split. Base
+`UserUsableGroups` = `{"default": "Default"}` (PAYG + anonymous see one
+group only); `group_ratio_setting.group_special_usable_group` =
+`{"unlimited": {"+:unlimited": "Unlimited plan"}}` re-adds unlimited for
+users whose account group is `unlimited` (set by the $180 plan's
+upgrade_group inside the purchase transaction). Applied via options SQL
+(the special-group row is INSERT — it had never existed; the config
+system persists it under the dotted key `group_ratio_setting.…`, loaded
+by the 60s sync through handleConfigUpdate → UpdateConfigFromMap).
+
+Enforcement is at relay time (middleware/auth.go token-group check: a
+token whose group is not in the user's usable groups 403s with 无权访
+问 <group> 分组) — proven live: a default-group user with an
+unlimited-group token gets 403; token 15 (root "Model testing") was
+switched from group=unlimited to inherit (empty) so root tooling keeps
+working through the default group. Body `group` fields are honored only
+on /pg/chat/completions (playground, validated) — /v1/chat/completions
+ignores them, so no API-side bypass exists beyond token creation, and
+token creation's lack of group validation is neutralized by the relay
+gate. Side effects verified: anonymous /api/pricing shows
+usable_group {default} and 9 models (all models serve the default
+group); the key-creation dropdown and pricing page now show one group
+for PAYG. Model Overview details' "Groups: default, unlimited" pills
+come from channel data (enable_groups), NOT the usable-group setting —
+hiding that line would need a small fork frontend change (declined for
+now, owner can request). The cctest monitor probes via a default-group
+token (covers all default-group channels incl. a6-unlimited's
+default-group side); its channel-quarantine actions are admin API,
+unaffected.
+
+## 2026-10-14 — Stripe activation + pay2 Caddy restore + button rename (pinned-next31)
+
+**Stripe live-configured (owner, via admin UI — secrets never in
+chat/files):** StripeApiSecret/WebhookSecret/StripePriceId (EUR) +
+StripePriceIdUsd (USD) set, test mode. First checkout attempts failed
+with "No valid payment method types" — account had no methods
+activated; owner enabled Cards, Link, Apple Pay, Google Pay, iDEAL|
+Wero, Klarna in the dashboard (no code needed: checkout sessions
+never restrict payment_method_types — the iDEAL|Wero design).
+Checkout session creation then succeeded (order ref_ed3d8df…, 20,
+pending) and the hosted payment page shows the methods. Wallets
+render device-dependent (Apple Pay in Safari, Google Pay in Chrome),
+iDEAL EUR-only on the € toggle; sessions created before a method
+toggle keep the old lineup (create a fresh top-up after dashboard
+changes). Payment-methods battery: one completed checkout per rail
+(cards, iDEAL, wallet) still owed before live keys.
+
+**pay2.vantyr.xyz TLS outage (found during Stripe battery):** the
+pay2 Caddy site block was accidentally dropped during the tilkie.xyz
+Caddyfile edit earlier that day — every TLS handshake to pay2 failed
+(internal error), so BEpusdt create-order calls died. The repo does
+NOT track a root Caddyfile (verified: git log --all -- Caddyfile is
+empty), so tree syncs never touch it — the loss was the manual edit
+alone. Restored from the Oct 13 backup (cert was still in Caddy
+storage — instant), caddy reload, verified 200 from host + external +
+gateway container. Lesson recorded in the Caddyfile itself: keep ALL
+site blocks when editing that server-owned file.
+
+**Button rename (owner request, commit d86e7352a, image
+pinned-next31 efcf349e2db3):** "Stripe" button renamed to "Card /
+iDEAL | WERO / Wallets" with subtitle "Stripe: Cards, iDEAL | Wero,
+Apple Pay, Google Pay, Klarna" — the name is Go-side
+(controller/topup.go, GetTopUpInfo appends the stripe entry), the
+subtitle rides the next29 pay_methods subtitle mechanism, so the
+wallet renders it with no frontend change. Test
+TestGetTopUpInfoStripeButtonLabel pins name+subtitle+type; Stripe
+test suite green on server. pay2 block verified intact after the
+next31 tree sync (backup Caddyfile.bak-pre-next31 taken).

@@ -72,6 +72,10 @@ LOG = logging.getLogger("cctest-monitor")
 
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 
+# Name of the sidecar user's relay token in usage logs — used to exclude
+# the monitor's own gateway-routed traffic from the usage gate.
+MONITOR_TOKEN_NAME = os.environ.get("MONITOR_TOKEN_NAME", "cctest-monitor")
+
 # Verdict categories from cctest.ai/docs (full mode) plus the live-observed
 # attribution-mode values (attr_match / attr_swapped, verdictKey field).
 # Live observation 2026-10-12: A6 attribution check on claude-fable-5-1
@@ -188,16 +192,31 @@ class Gateway:
             raise RuntimeError(f"channel models update failed: {http_status} {payload}")
         return True
 
-    def model_used_recently(self, channel_id, model, window_hours):
+    def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
+        """Traffic gate: did anyone other than the monitor's own token use
+        this model on this channel recently? Without the exclusion the
+        monitor's own gateway-routed checks satisfy the gate and keep dead
+        SKUs in the rotation forever (self-sustaining credit burn)."""
         since = int(time.time()) - window_hours * 3600
-        query = urllib.parse.urlencode({
+        base = {
             "p": 1, "page_size": 1, "channel": channel_id,
             "model_name": model, "start_timestamp": since,
-        })
-        payload, status = self._request("GET", f"/api/log/?{query}")
+        }
+        payload, status = self._request("GET", f"/api/log/?{urllib.parse.urlencode(base)}")
         if status != 200 or not payload.get("success"):
             raise RuntimeError(f"log query failed: {status} {payload}")
-        return ((payload.get("data") or {}).get("total") or 0) > 0
+        total = (payload.get("data") or {}).get("total") or 0
+        if total == 0 or not exclude_token:
+            return total > 0
+        own = dict(base)
+        own["token_name"] = exclude_token
+        payload, status = self._request("GET", f"/api/log/?{urllib.parse.urlencode(own)}")
+        if status != 200 or not payload.get("success"):
+            # Can't subtract our own usage: assume used (fail toward
+            # checking, not toward silently dropping coverage).
+            return True
+        own_count = (payload.get("data") or {}).get("total") or 0
+        return total > own_count
 
     def last_channel_for_model(self, model, window_minutes=10):
         """For gateway-routed checks: find which channel recently served
@@ -293,6 +312,18 @@ def provider_for(model):
     return "codex" if model.lower().startswith("gpt-") else "claude"
 
 
+def parse_model_mapping(raw):
+    """Channel model_mapping comes as a JSON object string (or empty).
+    Returns a dict customer-name -> upstream-name."""
+    if not raw or not isinstance(raw, str):
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+
 def discord_alert(webhook, text):
     if not webhook:
         return
@@ -355,6 +386,16 @@ def main():
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")
         return 1
+    # Optional per-seller model restriction, "prefix|models" entries:
+    # a6|gpt-6-astra,gpt-6-sol — lets a dedicated monitoring key with
+    # limited model permissions check only what it can call.
+    seller_model_filter = {}
+    for entry in os.environ.get("SELLER_MODEL_FILTERS", "").split(","):
+        parts = [p.strip() for p in entry.split("|") if p.strip()]
+        if len(parts) == 2:
+            seller_model_filter[parts[0]] = [
+                m.strip() for m in parts[1].split(";") if m.strip()
+            ]
 
     enforce = os.environ.get("ENFORCE", "false").lower() in ("1", "true", "yes")
     cycle_minutes = max(1, int(os.environ.get("CYCLE_MINUTES", "10")))
@@ -401,6 +442,7 @@ def main():
             run_cycle(
                 gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 threshold_for, permanent_fails, enforce, discord, state,
+                seller_model_filter,
             )
         except Exception:
             LOG.exception("cycle failed")
@@ -408,7 +450,9 @@ def main():
 
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
-              threshold_for, permanent_fails, enforce, discord, state):
+              threshold_for, permanent_fails, enforce, discord, state,
+              seller_model_filter=None):
+    seller_model_filter = seller_model_filter or {}
     channels = None
     for name, base_url, seller_key in sellers:
         if channels is None:
@@ -417,24 +461,62 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             except Exception as e:
                 LOG.warning("channel list failed (%s); skipping this cycle", e)
                 return
+        allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
             process_channel(
                 gateway, cctest, channel, base_url, seller_key, model_prefixes,
                 usage_window_hours, threshold_for, permanent_fails, enforce,
-                discord, state, channels,
+                discord, state, channels, allowed,
             )
             save_state(state)
 
 
+def is_gateway_routed(base_url):
+    """True when the seller entry points at our own gateway (Selora's
+    fingerprint-gated key requires the Go client, so checks ride the
+    gateway and land on whatever channel the router picks)."""
+    host = urllib.parse.urlparse(base_url).hostname or ""
+    return host in ("vantyr.xyz", "gateway", "localhost", "127.0.0.1") or host.endswith(".vantyr.xyz")
+
+
+def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
+                    verdict, threshold_for, enforce, discord, state, channels_snapshot):
+    """Apply a verdict to (channel, model): per-model fail counting and
+    failover escalation. Shared by the nominal path and the
+    serving-channel attribution path."""
+    name = channel["name"]
+    channel_id = int(channel["id"])
+    ch_state = state.setdefault(
+        name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
+    )
+    if verdict in BAD_VERDICTS:
+        ch_state["fails"] += 1
+        model_fails = ch_state.setdefault("model_fails", {})
+        model_fails[model] = model_fails.get(model, 0) + 1
+        threshold = threshold_for(name)
+        if model_fails[model] >= threshold:
+            failover_model(
+                gateway, channel, ch_state, name, model, verdict,
+                enforce, discord, channels_snapshot,
+            )
+    elif verdict in PASS_VERDICTS:
+        ch_state["fails"] = 0
+        ch_state.setdefault("model_fails", {}).pop(model, None)
+
+
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
                     usage_window_hours, threshold_for, permanent_fails, enforce,
-                    discord, state, channels_snapshot):
+                    discord, state, channels_snapshot, model_allowlist=None):
     name = channel["name"]
     channel_id = int(channel["id"])
     ch_state = state.setdefault(
     name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
     )
     models = [m.strip() for m in (channel.get("models") or "").split(",") if m.strip()]
+    if model_allowlist is not None:
+        # Restrict to the models this seller entry's key may call (a
+        # dedicated monitoring key with limited model permissions).
+        models = [m for m in models if m in model_allowlist]
     status = int(channel.get("status") or 0)
 
     if ch_state.get("quarantined") and status != CHANNEL_MANUALLY_DISABLED:
@@ -488,11 +570,16 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
 
     # Recovery loop: re-check models we removed earlier. A pass means the
     # seller fixed the substitution — re-add the model so traffic can
-    # return. Rotate one removed model per cycle.
+    # return. Rotate one removed model per cycle. Uses the mapped
+    # (upstream) name like the main check.
     removed = ch_state.get("removed_models") or {}
     if removed:
         removed_candidate = sorted(removed.keys())[0]
-        verdict = do_check(cctest, base_url, seller_key, removed_candidate)
+        mapping = parse_model_mapping(channel.get("model_mapping"))
+        verdict = do_check(
+            cctest, base_url, seller_key,
+            mapping.get(removed_candidate, removed_candidate),
+        )
         LOG.info("[%s] removed-model re-test %s -> %s", name, removed_candidate, verdict)
         if verdict in PASS_VERDICTS:
             restore_model(gateway, channel, ch_state, name, removed_candidate, enforce, discord)
@@ -512,9 +599,14 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     candidate = rotation[ch_state["idx"] % len(rotation)]
     ch_state["idx"] = (ch_state["idx"] + 1) % len(rotation)
 
-    # Traffic gate: verifying a model nobody calls burns credits.
+    # Traffic gate: verifying a model nobody calls burns credits. Our own
+    # gateway-routed checks create usage entries — exclude them, else the
+    # gate self-sustains dead SKUs in the rotation forever.
     try:
-        used = gateway.model_used_recently(channel_id, candidate, usage_window_hours)
+        used = gateway.model_used_recently(
+            channel_id, candidate, usage_window_hours,
+            exclude_token=MONITOR_TOKEN_NAME,
+        )
     except Exception as e:
         LOG.warning("[%s] usage gate failed for %s (%s); testing anyway", name, candidate, e)
         used = True
@@ -523,23 +615,56 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         save_state(state)
         return
 
-    verdict = do_check(cctest, base_url, seller_key, candidate)
-    LOG.info("[%s] check %s -> %s", name, candidate, verdict)
+    # Check the model under its UPSTREAM name: the channel may rename
+    # SKUs via model_mapping (e.g. gpt-6-1-sol -> gpt-6.1-sol on A6;
+    # gpt-6-sol -> gpt-5-6-sol on Selora). Sending the customer-facing
+    # name to the seller directly gets model_not_allowed errors.
+    mapping = parse_model_mapping(channel.get("model_mapping"))
+    upstream_candidate = mapping.get(candidate, candidate)
+    verdict = do_check(cctest, base_url, seller_key, upstream_candidate)
+    LOG.info("[%s] check %s (upstream %s) -> %s", name, candidate, upstream_candidate, verdict)
 
-    if verdict in BAD_VERDICTS:
-        ch_state["fails"] += 1
-        model_fails = ch_state.setdefault("model_fails", {})
-        model_fails[candidate] = model_fails.get(candidate, 0) + 1
-        threshold = threshold_for(name)
-        if model_fails[candidate] >= threshold:
-            failover_model(
-                gateway, channel, ch_state, name, candidate, verdict,
-                enforce, discord, channels_snapshot,
+    # Gateway-routed attribution: a check labeled for this channel may
+    # have been served by a DIFFERENT channel (the gateway routes by its
+    # own priorities). Look up which channel actually served the model in
+    # the last few minutes and attribute the verdict there. Without this,
+    # failover actions would be taken against channels that never served
+    # the checked request (audit 2026-10-13 defect #1).
+    actual_channel = None
+    if is_gateway_routed(base_url):
+        try:
+            actual_channel = gateway.last_channel_for_model(upstream_candidate, window_minutes=15)
+        except Exception as e:
+            LOG.warning("[%s] serving-channel lookup failed (%s); attributing nominally", name, e)
+    if actual_channel is not None and actual_channel != channel_id:
+        actual_ch = next(
+            (c for c in (channels_snapshot or []) if int(c.get("id") or 0) == actual_channel),
+            None,
+        )
+        if actual_ch:
+            LOG.info(
+                "[%s] verdict actually served by %s (ch %d) — attributing there",
+                name, actual_ch.get("name"), actual_channel,
             )
-    elif verdict in PASS_VERDICTS:
-        ch_state["fails"] = 0
-        ch_state.setdefault("model_fails", {}).pop(candidate, None)
-    elif verdict in SOFT_VERDICTS:
+            process_verdict(
+                gateway, cctest, actual_ch, base_url, seller_key, candidate,
+                verdict, threshold_for, enforce, discord, state, channels_snapshot,
+            )
+            # Nominal channel's counters stay untouched (no attribution).
+            save_state(state)
+            return
+        # Serving channel not in the seller set (e.g. a6 while we check
+        # selora): still log the cross-attribution for observability.
+        LOG.warning(
+            "[%s] check routed to non-seller channel %d — verdict not attributed",
+            name, actual_channel,
+        )
+
+    process_verdict(
+        gateway, cctest, channel, base_url, seller_key, candidate,
+        verdict, threshold_for, enforce, discord, state, channels_snapshot,
+    )
+    if verdict in SOFT_VERDICTS:
         now = time.time()
         soft = [t for t in ch_state.get("soft", []) if now - t < 24 * 3600]
         soft.append(now)
@@ -561,7 +686,16 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
     from the channel's list so New API re-routes it to another provider.
     Coverage gate: if no other enabled channel in the same group still
     serves the model, do NOT remove it (a wrong model is still better
-    than no model) — alert instead."""
+    than no model) — alert instead.
+
+    Race safety: the coverage check re-fetches the LIVE channel list at
+    removal time. A cycle-start snapshot can be stale — if two channels
+    cross their fail threshold for the same model in one cycle, both
+    removals would pass a snapshot-based gate (each still "sees" the
+    other serving it) and the model would end up with zero providers.
+    The live re-fetch closes that window: the second removal sees the
+    first one's effect and is blocked. Enforce mode only (observe mode
+    never mutates, so the race cannot occur)."""
     remaining = [m for m in (ch.get("models") or "").split(",") if m.strip() and m.strip() != model]
     if not remaining:
         LOG.info("[%s] model %s is the only entry; escalating to channel quarantine instead", name, model)
@@ -571,12 +705,21 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
             LOG.warning("[%s] OBSERVE-ONLY: would quarantine channel (%s -> %s)", name, model, verdict)
         return
     groups = [g.strip() for g in (ch.get("group") or "").split(",") if g.strip()]
+    if enforce:
+        # Live list: mutations (ours or the owner's) are visible immediately.
+        try:
+            live_channels = gateway.list_channels()
+        except Exception as e:
+            LOG.error("[%s] coverage re-check failed (%s); aborting removal to be safe", name, e)
+            return
+    else:
+        live_channels = channels_snapshot
     covered = any(
         other.get("id") != ch.get("id")
         and int(other.get("status") or 0) == CHANNEL_ENABLED
         and any(g in [og.strip() for og in (other.get("group") or "").split(",")] for g in groups)
         and model in [m.strip() for m in (other.get("models") or "").split(",")]
-        for other in channels_snapshot
+        for other in live_channels
     )
     if not covered:
         LOG.warning(

@@ -51,7 +51,8 @@ func GetTopUpInfo(c *gin.Context) {
 
 		if !hasStripe {
 			stripeMethod := map[string]string{
-				"name":      "Stripe",
+				"name":      "Card / iDEAL | WERO / Wallets",
+				"subtitle":  "Stripe: Cards, iDEAL | Wero, Apple Pay, Google Pay, Klarna",
 				"type":      "stripe",
 				"color":     "#635BFF",
 				"min_topup": strconv.Itoa(setting.StripeMinTopUp),
