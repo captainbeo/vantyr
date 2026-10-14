@@ -43,7 +43,9 @@ import {
   getPaymentIcon,
   getMinTopupAmount,
   calculatePresetPricing,
+  isStripePayment,
 } from '../lib'
+import { PAYMENT_TYPES } from '../constants'
 import type {
   PaymentMethod,
   PresetAmount,
@@ -327,6 +329,11 @@ export function RechargeFormCard({
                 {hasStandardPaymentMethods ? (
                   <div className='grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-3'>
                     {topupInfo?.pay_methods?.map((method) => {
+                      // The Stripe method renders as its own full-width row
+                      // below the grid (long name + subtitle) — skip it here.
+                      if (isStripePayment(method.type)) {
+                        return null
+                      }
                       const minTopup = Math.max(
                         method.min_topup || 0,
                         getMinTopupAmount(topupInfo)
@@ -370,7 +377,7 @@ export function RechargeFormCard({
                               {method.name}
                             </span>
                             {method.subtitle && (
-                              <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal'>
+                              <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal italic'>
                                 {method.subtitle}
                               </span>
                             )}
@@ -394,6 +401,44 @@ export function RechargeFormCard({
                         button
                       )
                     })}
+
+                    {(() => {
+                      // The Stripe button carries a long name + subtitle; give
+                      // it a full-width row so the text is readable as one
+                      // sentence instead of truncating inside a narrow grid
+                      // cell.
+                      const stripeMethod = topupInfo?.pay_methods?.find(
+                        (method) => method.type === PAYMENT_TYPES.STRIPE
+                      )
+                      if (!stripeMethod || !isStripePayment(stripeMethod.type)) {
+                        return null
+                      }
+                      return (
+                        <Button
+                          variant='outline'
+                          onClick={() => onPaymentMethodSelect(stripeMethod)}
+                          disabled={paymentLoading === stripeMethod.type}
+                          className='col-span-2 min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left lg:col-span-3'
+                        >
+                          {getPaymentIcon(
+                            stripeMethod.type,
+                            'h-4 w-4',
+                            stripeMethod.icon,
+                            stripeMethod.name
+                          )}
+                          <span className='flex min-w-0 flex-col items-start gap-0.5'>
+                            <span className='max-w-full truncate'>
+                              {stripeMethod.name}
+                            </span>
+                            {stripeMethod.subtitle && (
+                              <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal italic'>
+                                {stripeMethod.subtitle}
+                              </span>
+                            )}
+                          </span>
+                        </Button>
+                      )
+                    })()}
                   </div>
                 ) : null}
                 {stripeUsdEnabled &&

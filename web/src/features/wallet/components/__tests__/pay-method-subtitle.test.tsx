@@ -113,6 +113,35 @@ describe('Pay method subtitle', () => {
     ).not.toBeInTheDocument()
   })
 
+  test('renders the Stripe method full-width instead of in a narrow grid cell', () => {
+    render(
+      <PayMethodSubtitleHarness
+        topupInfo={buildTopupInfo({
+          pay_methods: [
+            {
+              name: 'Card / iDEAL | WERO / Apple + Google Pay / PayPal and more',
+              subtitle: 'powered by Stripe',
+              type: 'stripe',
+              min_topup: 1,
+            },
+          ],
+        })}
+      />
+    )
+
+    // The full-width stripe button must render its full name + italic subtitle
+    // in one row-spanning element, not truncated inside a grid cell.
+    const nameElement = screen.getByText(
+      'Card / iDEAL | WERO / Apple + Google Pay / PayPal and more'
+    )
+    const button = nameElement.closest('button')
+    expect(button).not.toBeNull()
+    expect(button?.className).toContain('col-span-2')
+    expect(button).toContainElement(
+      screen.getByText('powered by Stripe')
+    )
+  })
+
   test('selecting a method passes the subtitle through to the handler', async () => {
     const user = userEvent.setup()
     const onPaymentMethodSelect = vi.fn()
