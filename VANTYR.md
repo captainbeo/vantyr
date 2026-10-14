@@ -2685,3 +2685,15 @@ wallet renders it with no frontend change. Test
 TestGetTopUpInfoStripeButtonLabel pins name+subtitle+type; Stripe
 test suite green on server. pay2 block verified intact after the
 next31 tree sync (backup Caddyfile.bak-pre-next31 taken).
+
+## 2026-10-14 — Stripe button wording v2 (pinned-next32)
+
+Owner feedback: "Wallets" in "Card / iDEAL | WERO / Wallets" reads as
+a crypto wallet next to the crypto rails. Renamed (commit a4c111916,
+image pinned-next32 d580edfa9a8c): name "Card / iDEAL | WERO /
+Apple Pay / Google Pay", subtitle unchanged ("Stripe: Cards, iDEAL |
+Wero, Apple Pay, Google Pay, Klarna"). Also diagnosed "not visible"
+report: the running next31 binary already had the label — browser
+cache of the old JS chunk; hard refresh needed. Test updated, green
+on server. pay2 Caddy block re-verified intact after sync
+(backup Caddyfile.bak-pre-next32).
