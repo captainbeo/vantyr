@@ -2733,3 +2733,35 @@ adaptive pricing (already enabled by default — seen in the live
 webhook payload) presents local currency to each customer at live
 rates while settling in USD; StripePriceIdUsd stays empty so the €/$
 toggle hides; zero code. Pending owner go-ahead to flip the config.
+
+## 2026-10-14 — EUR live-rate pricing + Stripe button normal size (pinned-next34)
+
+**Owner decision: Option A — real conversion rates without Stripe
+conversion fees.** The wallet credits USD units; the EUR Stripe price
+now equals ceil(ECB EUR→USD × 100) cents, so a EUR payment buys
+exactly $1 of credit at the real rate (EUR in / EUR out — no Stripe
+currency conversion, no adaptive-pricing customer fee; avoids adding
+USD settlement to the NL account).
+
+- Live rate at setup: EUR/USD 1.1188 (ECB 2026-10-13) → EUR price
+  **112 cents**. Applied: new live price price_1UQR3a…, StripePriceId
+  option repointed, product default switched, old price_1UQGiw…
+  archived. (Stripe prices are immutable — unit_amount cannot be
+  updated; the update path is create-new + repoint + archive.)
+- **deploy/vantyr/scripts/stripe-eur-rate-sync.sh** (also installed at
+  /opt/vantyr/scripts/, root cron 15 3 * * *, log
+  /var/log/stripe-eur-rate-sync.log): fetches ECB rate (frankfurter,
+  open.er-api fallback), skips when rounded cents unchanged, else
+  creates the new price, UPDATEs the StripePriceId option (60s sync,
+  no restart), flips product default, archives the old. Test-run
+  verified idempotent (no-op at current rate).
+- USD price unchanged: $1 = 1 unit directly.
+
+**Stripe button back to normal size (owner: full-width row "doesn't
+look nice" — same size as USDT buttons, one grid cell):** commit
+03894fff8, image pinned-next34 38d452f233ba. Name "Card / iDEAL /
+Klarna / PayPal and more" (39 chars — crypto-button ballpark) +
+italic "powered by Stripe" subtitle; renders in the same grid with
+identical 405×56px cells (browser-verified; screenshot archived).
+Config PayMethods entry carries the name; Go fallback + tests match.
+pay2 Caddy block verified intact after sync (backup .bak-pre-next34).
