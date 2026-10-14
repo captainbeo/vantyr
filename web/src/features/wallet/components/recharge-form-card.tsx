@@ -403,28 +403,51 @@ export function RechargeFormCard({
                     })}
 
                     {(() => {
-                      // The Stripe button carries a long name + subtitle; give
-                      // it a full-width row so the text is readable as one
-                      // sentence instead of truncating inside a narrow grid
-                      // cell.
+                      // The Stripe method renders as a normal grid cell like
+                      // the crypto buttons (name + subtitle); the skip above
+                      // keeps it out of the generic map.
                       const stripeMethod = topupInfo?.pay_methods?.find(
                         (method) => method.type === PAYMENT_TYPES.STRIPE
                       )
                       if (!stripeMethod || !isStripePayment(stripeMethod.type)) {
                         return null
                       }
-                      return (
+                      const minTopup = Math.max(
+                        stripeMethod.min_topup || 0,
+                        getMinTopupAmount(topupInfo)
+                      )
+                      const disabled = minTopup > topupAmount
+                      const disabledReason = disabled
+                        ? t('Minimum topup amount: {{amount}}', {
+                            amount: minTopup,
+                          })
+                        : undefined
+                      const disabledLabel = disabled
+                        ? `${t('Minimum:')} ${minTopup}`
+                        : undefined
+                      const button = (
                         <Button
+                          key={stripeMethod.type}
                           variant='outline'
                           onClick={() => onPaymentMethodSelect(stripeMethod)}
-                          disabled={paymentLoading === stripeMethod.type}
-                          className='col-span-2 min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left lg:col-span-3'
+                          disabled={disabled || !!paymentLoading}
+                          title={disabledReason}
+                          aria-label={
+                            disabledReason
+                              ? `${stripeMethod.name}. ${disabledReason}`
+                              : stripeMethod.name
+                          }
+                          className='min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left'
                         >
-                          {getPaymentIcon(
-                            stripeMethod.type,
-                            'h-4 w-4',
-                            stripeMethod.icon,
-                            stripeMethod.name
+                          {paymentLoading === stripeMethod.type ? (
+                            <Loader2 className='h-4 w-4 animate-spin' />
+                          ) : (
+                            getPaymentIcon(
+                              stripeMethod.type,
+                              'h-4 w-4',
+                              stripeMethod.icon,
+                              stripeMethod.name
+                            )
                           )}
                           <span className='flex min-w-0 flex-col items-start gap-0.5'>
                             <span className='max-w-full truncate'>
@@ -435,8 +458,23 @@ export function RechargeFormCard({
                                 {stripeMethod.subtitle}
                               </span>
                             )}
+                            {disabledLabel && (
+                              <span className='text-muted-foreground max-w-full truncate text-[11px] leading-4 font-normal'>
+                                {disabledLabel}
+                              </span>
+                            )}
                           </span>
                         </Button>
+                      )
+                      return disabled ? (
+                        <TooltipProvider key={stripeMethod.type}>
+                          <Tooltip>
+                            <TooltipTrigger render={button} />
+                            <TooltipContent>{disabledReason}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        button
                       )
                     })()}
                   </div>
