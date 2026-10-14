@@ -63,10 +63,10 @@ func TestGetTopUpInfoStripeButtonLabel(t *testing.T) {
 
 	method := payload.Data.PayMethods[0]
 	assert.Equal(t, "stripe", method["type"])
-	assert.Equal(t, "Card / iDEAL | WERO / Apple Pay / Google Pay", method["name"])
+	assert.Equal(t, "Card / iDEAL | WERO / Apple + Google Pay / Paypal and more", method["name"])
 	assert.Equal(t,
-		"Stripe: Cards, iDEAL | Wero, Apple Pay, Google Pay, Klarna",
+		"powered by Stripe",
 		method["subtitle"],
-		"the subtitle must enumerate the checkout's payment methods so customers know wallets and iDEAL are available",
+		"the subtitle is the smaller italic attribution line under the name",
 	)
 }
