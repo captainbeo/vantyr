@@ -2,8 +2,11 @@
 # Daily EUR price sync for Vantyr Stripe checkout (Option A live rates).
 #
 # The wallet credits USD-denominated units ($1 = 500,000 quota). The EUR
-# Stripe price must therefore be ceil(ECB EUR->USD rate * 100) cents so a
-# EUR payment buys exactly $1 of credit at the real exchange rate.
+# Stripe price is the euro-equivalent of ONE dollar unit:
+#   cents = ceil(100 / ECB EUR->USD rate)
+# e.g. rate 1.1188 -> 100/1.1188 = 89.38 -> 90 cents, so a customer pays
+# €0.90 for exactly $1.00 of credit; per euro spent ≈ rate dollars of
+# credit (€1.00 -> ~$1.11). Ceil errs ≤1 cent in the owner's favor.
 # Stripe prices are immutable — the script creates a NEW price each day the
 # rounded cents value changes, points the New API option at it, archives the
 # previous one, and switches the product's default price (required before
@@ -35,7 +38,7 @@ if [ -z "$RATE" ]; then
     exit 0
 fi
 
-TARGET_CENTS=$(python3 -c "import math; print(math.ceil(float('$RATE') * 100))")
+TARGET_CENTS=$(python3 -c "import math; print(math.ceil(100 / float('$RATE')))")
 
 CURRENT_CENTS=$(curl -sf --max-time 20 "https://api.stripe.com/v1/prices/$CURRENT_PRICE" \
     -u "$KEY:" | python3 -c 'import json,sys; print(json.load(sys.stdin)["unit_amount"])')
