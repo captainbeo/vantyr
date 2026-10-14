@@ -2765,3 +2765,14 @@ italic "powered by Stripe" subtitle; renders in the same grid with
 identical 405×56px cells (browser-verified; screenshot archived).
 Config PayMethods entry carries the name; Go fallback + tests match.
 pay2 Caddy block verified intact after sync (backup .bak-pre-next34).
+
+**EUR formula CORRECTION (2026-10-14, same day):** the Option A formula
+was inverted in the first cut — ceil(rate×100) charged €1.12 for a $1.00
+unit (~25% premium over market). Correct formula: the EUR price is the
+euro-equivalent of ONE dollar unit → **cents = ceil(100 / ECB rate)**
+(1.1188 → 90 cents; €1.00 spent ≈ $1.12 of credit — the owner's intended
+"1 euro deposits ~1.12 dollars"). Fixed in script + applied live
+(price_1UQZd8… 90 cents, StripePriceId repointed, €1.12 price
+price_1UQR3a… archived); rerun verified idempotent. No image rebuild
+needed (config + script only; running image unchanged). The record
+above is kept as-is for history; this paragraph is authoritative.
