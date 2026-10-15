@@ -17,6 +17,11 @@ var Footer = ""
 var Logo = ""
 var TopUpLink = ""
 
+// UnlimitedSlotsCapacity is the admin-configured total capacity of the
+// admin-granted unlimited plan (shown on the "Apply for Unlimited Usage"
+// page so customers see remaining availability). Default 4.
+var UnlimitedSlotsCapacity = 4
+
 // var ChatLink = ""
 // var ChatLink2 = ""
 var QuotaPerUnit = 500 * 1000.0 // $0.002 / 1K tokens
