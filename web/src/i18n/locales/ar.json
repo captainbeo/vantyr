@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "طرق الدفع للبوابة الثانوية",
     "Site root of the secondary gateway": "الجذر الرئيسي لموقع البوابة الثانوية",
     "Comma-separated payment method types routed to the secondary gateway": "أنواع طرق الدفع المفصولة بفواصل والموجهة إلى البوابة الثانوية",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "التقديم للاستخدام غير المحدود",
+    "Unlimited active": "غير المحدود نشط",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "حسابك لديه بالفعل اشتراك غير محدود نشط. لا حاجة لأي إجراء — استمتع بالاستخدام بسعر ثابت لكل نموذج.",
+    "Available slots": "المقاعد المتاحة",
+    "slots currently available": "مقاعد متاحة حاليًا",
+    "all slots are taken — join the waiting list": "جميع المقاعد مشغولة — انضم إلى قائمة الانتظار",
+    "What unlimited usage includes": "ماذا يتضمن الاستخدام غير المحدود",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "كل نموذج على المنصة — Claude وGPT والمزيد — بسعر شهري ثابت واحد، دون فوترة لكل رمز.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "حدود معدل أعلى من حسابات الدفع حسب الاستخدام، مضبوطة لأحمال العمل الوكيلة المستمرة.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "نفس النماذج الأصلية الحقيقية كما في الدفع حسب الاستخدام: لا توجد نسخ مستبدلة أو مخفضة أبدًا.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "عدد ثابت من المقاعد. السعة محدودة حتى يحافظ كل عضو غير محدود على السرعة الكاملة.",
+    "How to apply": "كيفية التقديم",
+    "Join our Discord server and open a ticket in the support channel.": "انضم إلى خادم Discord الخاص بنا وافتح تذكرة في قناة الدعم.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "أخبرنا قليلًا عن استخدامك المتوقع (النماذج، الطلبات يوميًا، استخدام الوكيل أو التفاعلي).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "نراجع الطلبات عند توفر المقاعد ونرد في التذكرة مع رابط الدفع.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "بعد اكتمال الدفع، تتم ترقية حسابك تلقائيًا — عادة خلال دقائق.",
+    "Open a ticket on Discord": "افتح تذكرة على Discord",
+    "Unlimited Usage": "استخدام غير محدود"
   }
 }

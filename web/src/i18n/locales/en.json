@@ -7020,6 +7020,7 @@
     "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Tell us a little about your expected usage (models, requests per day, agent or interactive use).",
     "We review applications as slots free up and reply in the ticket with the payment link.": "We review applications as slots free up and reply in the ticket with the payment link.",
     "Once payment completes, your account is upgraded automatically — usually within minutes.": "Once payment completes, your account is upgraded automatically — usually within minutes.",
-    "Open a ticket on Discord": "Open a ticket on Discord"
+    "Open a ticket on Discord": "Open a ticket on Discord",
+    "Unlimited Usage": "Unlimited Usage"
   }
 }

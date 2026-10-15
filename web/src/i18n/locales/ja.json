@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "セカンダリゲートウェイの支払い方法",
     "Site root of the secondary gateway": "セカンダリゲートウェイのサイトルート",
     "Comma-separated payment method types routed to the secondary gateway": "セカンダリゲートウェイにルーティングする支払い方法タイプ（カンマ区切り）",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "無制限利用を申請",
+    "Unlimited active": "無制限が有効",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "お客様のアカウントには既に有効な無制限サブスクリプションがあります。対応は不要です — すべてのモデルを定額でご利用ください。",
+    "Available slots": "空き枠",
+    "slots currently available": "枠が現在空いています",
+    "all slots are taken — join the waiting list": "すべての枠が埋まっています — ウェイトリストにご参加ください",
+    "What unlimited usage includes": "無制限利用に含まれるもの",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "プラットフォーム上のすべてのモデル — Claude、GPTなど — を月額定額で利用でき、トークンごとの課金はありません。",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "従量課金アカウントより高いレート制限、持続的なエージェントワークロードに合わせて調整。",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "従量課金と同じ本物の上流モデル。差し替えやダウングレード版は一切ありません。",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "枠は固定数です。容量を制限することで、すべての無制限メンバーがフルスピードを維持できます。",
+    "How to apply": "申請方法",
+    "Join our Discord server and open a ticket in the support channel.": "Discordサーバーに参加し、サポートチャンネルでチケットを開いてください。",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "想定されるご利用について簡単にお知らせください（モデル、1日のリクエスト数、エージェント利用か対話利用か）。",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "枠が空き次第、申請を審査し、チケットで支払いリンクとともにご返信します。",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "お支払い完了後、アカウントは自動的にアップグレードされます — 通常は数分以内です。",
+    "Open a ticket on Discord": "Discordでチケットを開く",
+    "Unlimited Usage": "無制限利用"
   }
 }

@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "Zahlungsmethoden des sekundären Gateways",
     "Site root of the secondary gateway": "Stammadresse des sekundären Gateways",
     "Comma-separated payment method types routed to the secondary gateway": "Kommagetrennte Zahlungsmethoden-Typen, die an das sekundäre Gateway geleitet werden",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Unbegrenzte Nutzung beantragen",
+    "Unlimited active": "Unbegrenzt aktiv",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "Ihr Konto verfügt bereits über ein aktives Unlimited-Abonnement. Keine Aktion nötig — genießen Sie Flatrate-Nutzung für jedes Modell.",
+    "Available slots": "Verfügbare Plätze",
+    "slots currently available": "Plätze derzeit verfügbar",
+    "all slots are taken — join the waiting list": "alle Plätze sind belegt — treten Sie der Warteliste bei",
+    "What unlimited usage includes": "Was unbegrenzte Nutzung beinhaltet",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Jedes Modell auf der Plattform — Claude, GPT und mehr — zu einem monatlichen Festpreis, ohne Abrechnung pro Token.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Höhere Ratenlimits als bei Pay-as-you-go-Konten, abgestimmt auf dauerhafte Agent-Workloads.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "Dieselben echten Upstream-Modelle wie bei Pay-as-you-go: niemals ausgetauschte oder herabgestufte Varianten.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "Eine feste Anzahl von Plätzen. Die Kapazität ist begrenzt, damit jedes Unlimited-Mitglied volle Geschwindigkeit behält.",
+    "How to apply": "So beantragen Sie",
+    "Join our Discord server and open a ticket in the support channel.": "Treten Sie unserem Discord-Server bei und öffnen Sie ein Ticket im Support-Kanal.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Erzählen Sie uns kurz von Ihrer erwarteten Nutzung (Modelle, Anfragen pro Tag, Agent- oder interaktive Nutzung).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "Wir prüfen Anträge, sobald Plätze frei werden, und antworten im Ticket mit dem Zahlungslink.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "Sobald die Zahlung abgeschlossen ist, wird Ihr Konto automatisch aktualisiert — in der Regel innerhalb von Minuten.",
+    "Open a ticket on Discord": "Ticket auf Discord öffnen",
+    "Unlimited Usage": "Unbegrenzte Nutzung"
   }
 }
