@@ -7003,6 +7003,23 @@
     "Secondary gateway payment methods": "Secondary gateway payment methods",
     "Site root of the secondary gateway": "Site root of the secondary gateway",
     "Comma-separated payment method types routed to the secondary gateway": "Comma-separated payment method types routed to the secondary gateway",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Apply for Unlimited Usage",
+    "Unlimited active": "Unlimited active",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.",
+    "Available slots": "Available slots",
+    "slots currently available": "slots currently available",
+    "all slots are taken — join the waiting list": "all slots are taken — join the waiting list",
+    "What unlimited usage includes": "What unlimited usage includes",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.",
+    "How to apply": "How to apply",
+    "Join our Discord server and open a ticket in the support channel.": "Join our Discord server and open a ticket in the support channel.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Tell us a little about your expected usage (models, requests per day, agent or interactive use).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "We review applications as slots free up and reply in the ticket with the payment link.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "Once payment completes, your account is upgraded automatically — usually within minutes.",
+    "Open a ticket on Discord": "Open a ticket on Discord"
   }
 }
