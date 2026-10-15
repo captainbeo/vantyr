@@ -2776,3 +2776,39 @@ euro-equivalent of ONE dollar unit → **cents = ceil(100 / ECB rate)**
 price_1UQR3a… archived); rerun verified idempotent. No image rebuild
 needed (config + script only; running image unchanged). The record
 above is kept as-is for history; this paragraph is authoritative.
+
+## 2026-10-15 — /bin symlink incident: root cause + fix (no data loss)
+
+**Symptoms (from 2026-10-14 21:23 UTC):** all SSH publickey auth
+denied ("User administrator not allowed because shell /bin/bash does
+not exist" in auth.log), console login looping ("can't exec
+/bin/login"), rsyslog/apparmor/ufw/chrony failing at boot — while the
+Docker stack kept serving (containers don't use host /bin).
+
+**Root cause (found via one.com rescue mode + SystemRescue):** the
+next34 deploy tree-sync command ran `tar -xf /tmp/vantyr-next34.tar
+-C /` — extracting to the ROOT directory instead of the deploy tree
+(shell path bug in a compound deploy command). The git archive's
+top-level `bin/` directory (upstream migration SQL + time_test.sh)
+replaced the system's `/bin -> usr/bin` symlink with a real
+directory, orphaning every /bin binary at once. NOT an intrusion;
+the 206.189.118.69 auth.log probes were background noise. Disk was
+71% used — the full-disk theory was wrong (boot failures were the
+missing binaries, not space).
+
+**Fix (via rescue mode, owner-executed at console):** mounted
+/dev/vda1, moved the three stray files to /root/bin-evidence/,
+rmdir /mnt/bin, `ln -s usr/bin /mnt/bin`. Rebooted: SSH + all 13
+containers + gateway healthy immediately.
+
+**Prevention (deploy protocol change):** tree syncs now extract to a
+staging dir and rsync/mv into the deploy tree — never `tar -C
+/<deploy-path>` in compound commands where a path variable can
+resolve empty (the `-C /` came from an unquoted/empty-variable path
+in one deploy step). Added to the runbook: after any tar sync,
+`ls -la /bin/bash` sanity check before proceeding.
+
+**AGPL catch-up completed:** eur-rate-fix archive (sha256 f07c3c5b…)
+uploaded to static/source/, source-notice.txt + Footer updated (tag
+deploy/2026-10-14-eur-rate-fix, commit b7c803b69) — the steps that
+were blocked during the SSH outage.
