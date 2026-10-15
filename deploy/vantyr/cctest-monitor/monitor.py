@@ -37,10 +37,9 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          per seller key: all gateway channels using that
                          same seller key share the entry (channel lookup
                          expands to every channel whose name starts with
-                         the entry name). Production runs three sellers:
-                         selora-*/a6-* (6 channels over 2 seller keys)
-                         and mia-* (Mia Router failover channels,
-                         https://miarouter.online).
+                         the entry name). Production runs four sellers:
+                         selora-*/a6-*/yingz-* plus mia-* (Mia Router
+                         failover channels, https://miarouter.online).
                          Selora's sk-gw- key only authenticates from our
                          gateway's Go client (TLS-fingerprint-gated) — for
                          selora, point the URL at the gateway itself
@@ -381,7 +380,7 @@ def main():
         return 1
     sellers = parse_seller_channels(
         os.environ.get("SELLER_CHANNELS", ""),
-        known_prefixes=("selora", "a6", "mia"),
+        known_prefixes=("selora", "a6", "mia", "yingz"),
     )
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")
@@ -409,11 +408,13 @@ def main():
     # Threshold by channel-name prefix: selora-* = dedicated upstream (a
     # single bad verdict is unambiguous), a6-* = merchant lottery (noise
     # tolerant), mia-* = flat-priced seller, unknown routing depth —
-    # same noise tolerance as a6 until live verdicts say otherwise.
+    # yingz-* = cheap prepaid seller, unverified — same noise tolerance
+    # as a6/mia until live verdicts say otherwise.
     fail_threshold_prefixes = (
         ("selora", max(1, int(os.environ.get("FAIL_THRESHOLD_SELORA", "1")))),
         ("a6", max(1, int(os.environ.get("FAIL_THRESHOLD_A6", "2")))),
         ("mia", max(1, int(os.environ.get("FAIL_THRESHOLD_MIA", "2")))),
+        ("yingz", max(1, int(os.environ.get("FAIL_THRESHOLD_YINGZ", "2")))),
     )
 
     def threshold_for(channel_name):

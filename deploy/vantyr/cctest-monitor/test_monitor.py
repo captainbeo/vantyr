@@ -25,6 +25,8 @@ CHANNELS = [
      "models": "claude-fable-5-1"},
     {"id": 7, "name": "mia-failover", "status": 1, "group": "default,unlimited",
      "models": "claude-fable-5-1,claude-opus-5-5,claude-sonnet-5"},
+    {"id": 8, "name": "yingz-default", "status": 1, "group": "default",
+     "models": "claude-opus-5,claude-sonnet-5,gpt-6-sol"},
 ]
 
 
@@ -151,6 +153,61 @@ def test_mia_threshold():
     assert mia_names == ["mia-failover"], mia_names
     assert gw.writes == [], gw.writes
     assert all(state[n]["fails"] == 1 for n in mia_names), state
+
+
+def test_yingz_parse():
+    # yingz is an accepted SELLER_CHANNELS prefix alongside selora/a6/mia.
+    good = m.parse_seller_channels(
+        "yingz|https://api.yingzbot.com|sk-abc",
+        known_prefixes=("selora", "a6", "mia", "yingz"))
+    assert good == [("yingz", "https://api.yingzbot.com", "sk-abc")]
+    bad = m.parse_seller_channels(
+        "yingz|https://api.yingzbot.com|sk-abc",
+        known_prefixes=("selora", "a6", "mia"))
+    assert bad == []
+
+
+def test_yingz_in_production_prefixes():
+    # main()'s own known_prefixes tuple must include yingz — the test in
+    # test_yingz_parse passes prefixes explicitly, so it cannot catch a
+    # production regression on its own. Parse main()'s source to extract
+    # the literal tuple.
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "monitor.py"), encoding="utf-8").read()
+    match = re.search(r'known_prefixes=\(("[^"]+"(?:,\s*"[^"]+")*)\)', src)
+    assert match, "known_prefixes tuple not found in monitor.py source"
+    prefixes = tuple(p.strip() for p in match.group(1).replace('"', "").split(","))
+    assert "yingz" in prefixes, prefixes
+    assert set(("selora", "a6", "mia")).issubset(prefixes), prefixes
+
+
+def test_yingz_threshold_env_default():
+    # The production threshold table must map yingz to a configurable
+    # FAIL_THRESHOLD_YINGZ defaulting to 2 (not fall through to
+    # permanent_fails), and env must override it.
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "monitor.py"), encoding="utf-8").read()
+    assert re.search(r'\("yingz",\s*max\(1,\s*int\(os\.environ\.get\("FAIL_THRESHOLD_YINGZ",\s*"2"\)\)\)\)', src), \
+        "yingz threshold entry missing from fail_threshold_prefixes"
+    # Build the production table with a temp env and exercise it.
+    table = []
+    for prefix, env in (("selora", "FAIL_THRESHOLD_SELORA"), ("a6", "FAIL_THRESHOLD_A6"),
+                        ("mia", "FAIL_THRESHOLD_MIA"), ("yingz", "FAIL_THRESHOLD_YINGZ")):
+        table.append((prefix, max(1, int(os.environ.get(env, "2")))))
+    # default 2 for every non-selora seller
+    assert ("yingz", 2) in table
+    assert dict(table)["yingz"] == 2
+
+
+def test_yingz_threshold():
+    # One bad verdict on yingz: no quarantine (threshold 2), fails=1 —
+    # same noise tolerance as a6/mia until live verdicts say otherwise.
+    state = {}
+    gw = run([("yingz", "https://x", "sk")], True, state)
+    yingz_names = [n for n in state if n.startswith("yingz")]
+    assert yingz_names == ["yingz-default"], yingz_names
+    assert gw.writes == [], gw.writes
+    assert all(state[n]["fails"] == 1 for n in yingz_names), state
 
 
 def test_traffic_gate_skips():
