@@ -2812,3 +2812,40 @@ in one deploy step). Added to the runbook: after any tar sync,
 uploaded to static/source/, source-notice.txt + Footer updated (tag
 deploy/2026-10-14-eur-rate-fix, commit b7c803b69) — the steps that
 were blocked during the SSH outage.
+
+## 2026-10-15 — Unlimited Usage page (pinned-next35 + next36)
+
+**Owner request:** surface the admin-granted unlimited plan (4 slots
+total) in the dashboard. Sidebar Personal group gains "Unlimited Usage"
+(owner rename from "Apply for Unlimited Usage"), linking to /unlimited:
+what unlimited includes (all models, flat monthly price, higher rate
+limits, genuine upstream models, fixed seat count), how to apply
+(Discord ticket flow), and a live slot-availability text box in the
+dashboard design (display font 30px, "4 / 4 slots currently available"
+at launch). Page fully translated in all 12 locales (18 strings each;
+sync-i18n clean, 0 missing).
+
+**Implementation (commits 41cec7cf5 + a336548aa, images
+pinned-next35 21f92401d855 + pinned-next36 d6e39cd540c7):**
+
+- Backend: GET /api/user/unlimited/info (self route, wallet:read
+  scope) returns capacity/active/remaining (+ the requesting user's
+  own active flag → page switches to an "Unlimited active" card).
+  remaining = capacity - active user_subscriptions, floored at 0.
+  Active count is ALL active subs (the plan is admin-granted;
+  currently 0). Tests: endpoint math + floor-at-zero.
+- New admin option UnlimitedSlotsCapacity (default 4; options table,
+  parses as non-negative int). Adjust capacity in System Settings →
+  the page follows on next load.
+- Frontend: features/unlimited (SectionPageLayout + TitledCard,
+  Infinity icon), route /_authenticated/unlimited, sidebar entry
+  under Personal; localized query + skeleton loading.
+- Tree sync used the NEW SAFE protocol for the first time: staging
+  extract + rsync with exclusions (data/static/Caddyfile/compose/
+  .env) — no tar -C into live paths, /bin/bash verified after sync.
+
+**Live verification:** endpoint returns 4/4/0 on prod; browser check
+(Dutch locale) shows sidebar "Onbeperkt gebruik" + translated page
+with "Beschikbare plekken 4/4 — plekken momenteel beschikbaar";
+screenshot archived. Wallet tests 14/14; typecheck + lint clean;
+router/model/controller suites green on server.
