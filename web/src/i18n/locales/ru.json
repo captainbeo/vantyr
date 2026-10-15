@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "Способы оплаты вторичного шлюза",
     "Site root of the secondary gateway": "Корневой адрес вторичного шлюза",
     "Comma-separated payment method types routed to the secondary gateway": "Типы способов оплаты через запятую, направляемые на вторичный шлюз",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Подать заявку на безлимит",
+    "Unlimited active": "Безлимит активен",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "У вашей учётной записи уже есть активная безлимитная подписка. Ничего делать не нужно — пользуйтесь всеми моделями по фиксированному тарифу.",
+    "Available slots": "Доступные места",
+    "slots currently available": "мест сейчас доступно",
+    "all slots are taken — join the waiting list": "все места заняты — присоединяйтесь к списку ожидания",
+    "What unlimited usage includes": "Что входит в безлимит",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Все модели платформы — Claude, GPT и другие — по единой фиксированной месячной цене, без оплаты за токены.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Более высокие лимиты запросов, чем у аккаунтов с оплатой по факту, настроены для длительных агентских нагрузок.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "Те же настоящие исходные модели, что и при оплате по факту: никаких подменённых или ухудшенных вариантов.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "Фиксированное число мест. Ёмкость ограничена, чтобы каждый безлимитный участник сохранял полную скорость.",
+    "How to apply": "Как подать заявку",
+    "Join our Discord server and open a ticket in the support channel.": "Присоединяйтесь к нашему серверу Discord и создайте обращение в канале поддержки.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Расскажите немного о планируемом использовании (модели, запросы в день, агентное или интерактивное использование).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "Мы рассматриваем заявки по мере освобождения мест и отвечаем в обращении со ссылкой на оплату.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "После завершения оплаты ваша учётная запись обновляется автоматически — обычно в течение нескольких минут.",
+    "Open a ticket on Discord": "Создать обращение в Discord",
+    "Unlimited Usage": "Безлимитное использование"
   }
 }

@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "Phương thức thanh toán của cổng phụ",
     "Site root of the secondary gateway": "Gốc trang của cổng phụ",
     "Comma-separated payment method types routed to the secondary gateway": "Các loại phương thức thanh toán phân tách bằng dấu phẩy được định tuyến tới cổng phụ",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Đăng ký sử dụng không giới hạn",
+    "Unlimited active": "Không giới hạn đang hoạt động",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "Tài khoản của bạn đã có gói không giới hạn đang hoạt động. Không cần làm gì — hãy tận hưởng mức phí cố định cho mọi mô hình.",
+    "Available slots": "Số chỗ còn trống",
+    "slots currently available": "chỗ hiện đang trống",
+    "all slots are taken — join the waiting list": "tất cả chỗ đã kín — hãy tham gia danh sách chờ",
+    "What unlimited usage includes": "Sử dụng không giới hạn bao gồm những gì",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Mọi mô hình trên nền tảng — Claude, GPT và nhiều hơn — với một mức phí tháng cố định, không tính phí theo token.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Giới hạn tốc độ cao hơn tài khoản trả theo mức dùng, được tinh chỉnh cho khối lượng công việc agent liên tục.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "Cùng những mô hình gốc thật giống như trả theo mức dùng: không bao giờ có phiên bản thay thế hoặc hạ cấp.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "Số chỗ cố định. Dung lượng bị giới hạn để mọi thành viên không giới hạn giữ nguyên tốc độ tối đa.",
+    "How to apply": "Cách đăng ký",
+    "Join our Discord server and open a ticket in the support channel.": "Tham gia máy chủ Discord của chúng tôi và mở một ticket trong kênh hỗ trợ.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Hãy cho chúng tôi biết đôi chút về mức sử dụng dự kiến (mô hình, số yêu cầu mỗi ngày, dùng agent hay tương tác).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "Chúng tôi xem xét đơn khi có chỗ trống và trả lời trong ticket kèm liên kết thanh toán.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "Sau khi thanh toán hoàn tất, tài khoản của bạn được nâng cấp tự động — thường trong vài phút.",
+    "Open a ticket on Discord": "Mở ticket trên Discord",
+    "Unlimited Usage": "Sử dụng không giới hạn"
   }
 }

@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "Betaalmethoden secundaire gateway",
     "Site root of the secondary gateway": "Hoofdadres van de secundaire gateway",
     "Comma-separated payment method types routed to the secondary gateway": "Komma-gescheiden betaalmethodetypes die naar de secundaire gateway gaan",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Onbeperkt gebruik aanvragen",
+    "Unlimited active": "Onbeperkt actief",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "Uw account heeft al een actief onbeperkt abonnement. U hoeft niets te doen — geniet van gebruik tegen een vast tarief voor elk model.",
+    "Available slots": "Beschikbare plekken",
+    "slots currently available": "plekken momenteel beschikbaar",
+    "all slots are taken — join the waiting list": "alle plekken zijn bezet — plaats u op de wachtlijst",
+    "What unlimited usage includes": "Wat onbeperkt gebruik inhoudt",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Elk model op het platform — Claude, GPT en meer — voor één vast maandelijks bedrag, zonder betaling per token.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Hogere snelheidslimieten dan pay-as-you-go-accounts, afgestemd op aanhoudende agent-workloads.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "Dezelfde echte upstream-modellen als bij pay-as-you-go: nooit vervangen of gedowngradeerde varianten.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "Een vast aantal plekken. De capaciteit is beperkt zodat elk onbeperkt lid volledige snelheid behoudt.",
+    "How to apply": "Hoe u aanvraagt",
+    "Join our Discord server and open a ticket in the support channel.": "Word lid van onze Discord-server en open een ticket in het supportkanaal.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Vertel ons kort over uw verwachte gebruik (modellen, aanvragen per dag, agent- of interactief gebruik).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "Wij beoordelen aanvragen zodra plekken vrijkomen en antwoorden in het ticket met de betaallink.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "Zodra de betaling is voltooid, wordt uw account automatisch geüpgradeerd — meestal binnen enkele minuten.",
+    "Open a ticket on Discord": "Open een ticket op Discord",
+    "Unlimited Usage": "Onbeperkt gebruik"
   }
 }

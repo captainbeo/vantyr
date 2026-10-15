@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "副閘道支付方式",
     "Site root of the secondary gateway": "副閘道站點根地址",
     "Comma-separated payment method types routed to the secondary gateway": "以逗號分隔、路由到副閘道的支付方式類型",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "申請無限使用",
+    "Unlimited active": "無限已生效",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "您的帳戶已有生效中的無限訂閱，無需任何操作——盡情以固定費率使用所有模型。",
+    "Available slots": "可用名額",
+    "slots currently available": "個名額目前可用",
+    "all slots are taken — join the waiting list": "名額已滿——請加入等候清單",
+    "What unlimited usage includes": "無限使用包含什麼",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "平台上的所有模型——Claude、GPT 等——統一月費，無需按 token 計費。",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "比按量付費帳戶更高的速率限制，專為持續性 agent 工作負載調校。",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "與按量付費完全相同的真實上游模型：絕無替換或降級版本。",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "固定數量的名額。容量有限，以確保每位無限使用者都保持全速。",
+    "How to apply": "如何申請",
+    "Join our Discord server and open a ticket in the support channel.": "加入我們的 Discord 伺服器，在支援頻道開啟一個工單。",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "請簡單介紹您的預期用量（模型、每日請求數、agent 使用或互動式使用）。",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "名額空出時我們會審核申請，並在工單中回覆付款連結。",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "付款完成後，您的帳戶會自動升級——通常在幾分鐘內完成。",
+    "Open a ticket on Discord": "在 Discord 開啟工單",
+    "Unlimited Usage": "無限使用"
   }
 }

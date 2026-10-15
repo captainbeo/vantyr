@@ -7003,6 +7003,24 @@
     "Secondary gateway payment methods": "İkincil ağ geçidi ödeme yöntemleri",
     "Site root of the secondary gateway": "İkincil ağ geçidinin site kök adresi",
     "Comma-separated payment method types routed to the secondary gateway": "İkincil ağ geçidine yönlendirilen, virgülle ayrılmış ödeme yöntemi türleri",
-    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram"
+    "usdt.arbitrum,usdc.base,usdt.ton,ton.gram": "usdt.arbitrum,usdc.base,usdt.ton,ton.gram",
+    "Apply for Unlimited Usage": "Sınırsız Kullanım için Başvur",
+    "Unlimited active": "Sınırsız etkin",
+    "Your account already has an active unlimited subscription. No action needed — enjoy flat-rate usage on every model.": "Hesabınızda zaten etkin bir sınırsız abonelik var. Bir şey yapmanıza gerek yok — her modelde sabit tarifeli kullanımın keyfini çıkarın.",
+    "Available slots": "Mevcut kontenjan",
+    "slots currently available": "kontenjan şu anda mevcut",
+    "all slots are taken — join the waiting list": "tüm kontenjanlar dolu — bekleme listesine katılın",
+    "What unlimited usage includes": "Sınırsız kullanım neleri kapsar",
+    "Every model on the platform — Claude, GPT and more — at one flat monthly price, no per-token billing.": "Platformdaki her model — Claude, GPT ve daha fazlası — tek bir aylık sabit ücretle, token başına faturalama yok.",
+    "Higher rate limits than pay-as-you-go accounts, tuned for sustained agent workloads.": "Kullandıkça öde hesaplarından daha yüksek hız limitleri, sürekli ajan iş yüklerine göre ayarlanmış.",
+    "The same genuine upstream models as pay-as-you-go: no swapped or downgraded variants, ever.": "Kullandıkça öde ile aynı gerçek yukarı akış modelleri: asla değiştirilmiş veya düşürülmüş varyantlar yok.",
+    "A fixed number of seats. Capacity is limited so every unlimited member keeps full speed.": "Sabit sayıda yer. Kapasite sınırlıdır, böylece her sınırsız üye tam hızını korur.",
+    "How to apply": "Nasıl başvurulur",
+    "Join our Discord server and open a ticket in the support channel.": "Discord sunucumuza katılın ve destek kanalında bir bilet açın.",
+    "Tell us a little about your expected usage (models, requests per day, agent or interactive use).": "Beklenen kullanımınız hakkında bize kısaca bilgi verin (modeller, günlük istek sayısı, ajan veya etkileşimli kullanım).",
+    "We review applications as slots free up and reply in the ticket with the payment link.": "Kontenjanlar boşaldıkça başvuruları inceliyor ve bilette ödeme bağlantısıyla yanıt veriyoruz.",
+    "Once payment completes, your account is upgraded automatically — usually within minutes.": "Ödeme tamamlandığında hesabınız otomatik olarak yükseltilir — genellikle birkaç dakika içinde.",
+    "Open a ticket on Discord": "Discord'da bilet aç",
+    "Unlimited Usage": "Sınırsız Kullanım"
   }
 }

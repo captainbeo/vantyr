@@ -128,7 +128,7 @@ export function useSidebarData(): SidebarData {
             icon: ShieldCheck,
           },
           {
-            title: t('Apply for Unlimited Usage'),
+            title: t('Unlimited Usage'),
             url: '/unlimited',
             icon: InfinityIcon,
           },
