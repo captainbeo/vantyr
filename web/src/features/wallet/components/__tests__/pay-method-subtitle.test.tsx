@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
@@ -43,26 +44,31 @@ type HarnessProps = {
 }
 
 function PayMethodSubtitleHarness(props: HarnessProps) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
   return (
-    <RechargeFormCard
-      topupInfo={props.topupInfo ?? buildTopupInfo()}
-      presetAmounts={[{ value: 5 } satisfies PresetAmount]}
-      selectedPreset={5}
-      onSelectPreset={() => {}}
-      topupAmount={5}
-      onTopupAmountChange={() => {}}
-      paymentAmount={5}
-      calculating={false}
-      onPaymentMethodSelect={props.onPaymentMethodSelect ?? (() => {})}
-      paymentLoading={null}
-      redemptionCode=''
-      onRedemptionCodeChange={() => {}}
-      onRedeem={() => {}}
-      redeeming={false}
-      stripeUsdEnabled={false}
-      stripeCurrency='eur'
-      onStripeCurrencyChange={() => {}}
-    />
+    <QueryClientProvider client={queryClient}>
+      <RechargeFormCard
+        topupInfo={props.topupInfo ?? buildTopupInfo()}
+        presetAmounts={[{ value: 5 } satisfies PresetAmount]}
+        selectedPreset={5}
+        onSelectPreset={() => {}}
+        topupAmount={5}
+        onTopupAmountChange={() => {}}
+        paymentAmount={5}
+        calculating={false}
+        onPaymentMethodSelect={props.onPaymentMethodSelect ?? (() => {})}
+        paymentLoading={null}
+        redemptionCode=''
+        onRedemptionCodeChange={() => {}}
+        onRedeem={() => {}}
+        redeeming={false}
+        stripeUsdEnabled={false}
+        stripeCurrency='eur'
+        onStripeCurrencyChange={() => {}}
+      />
+    </QueryClientProvider>
   )
 }
 

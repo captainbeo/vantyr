@@ -55,6 +55,7 @@ import type {
   StripeCurrency,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
+import { WalletBaseUrl } from './wallet-base-url'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -211,17 +212,20 @@ export function RechargeFormCard({
       iconTone='success'
       disableHoverEffect
       action={
-        onOpenBilling ? (
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={onOpenBilling}
-            className='w-full gap-2 sm:w-auto'
-          >
-            <Receipt className='h-4 w-4' />
-            {t('Order History')}
-          </Button>
-        ) : null
+        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+          <WalletBaseUrl />
+          {onOpenBilling && (
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={onOpenBilling}
+              className='w-full gap-2 sm:w-auto'
+            >
+              <Receipt className='h-4 w-4' />
+              {t('Order History')}
+            </Button>
+          )}
+        </div>
       }
       contentClassName='space-y-4 sm:space-y-6'
     >
