@@ -579,13 +579,13 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         LOG.warning("[pin] NO STANDBY for %s — model rides general tier", model)
         return
     # Cooldown recovery (owner observation 2026-10-19: merchants that were
-    # caught fake come back clean — 1169/5312 both real again the next
-    # day). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 24):
-    # the merchant becomes eligible again and must re-verify via cctest
-    # before serving. Fresh (never-tried) standbys are preferred over
-    # cooldown-expired ones. Cost bound: at most one re-verification per
-    # bad merchant per cooldown window.
-    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "24"))) * 3600
+    # caught fake come back clean — 1169/5312 both real again within
+    # hours). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 3
+    # per owner rule 2026-10-19): the merchant becomes eligible again and
+    # must re-verify via cctest before serving. Fresh (never-tried)
+    # standbys are preferred over cooldown-expired ones. Cost bound: at
+    # most one re-verification per bad merchant per cooldown window.
+    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))) * 3600
     now = time.time()
     bad_marks = state.setdefault("bad_standbys", {}).setdefault(model, {})
     if isinstance(bad_marks, list):
