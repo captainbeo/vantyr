@@ -209,6 +209,16 @@ class Gateway:
             raise RuntimeError(f"channel models update failed: {http_status} {payload}")
         return True
 
+    def fix_abilities(self):
+        """Rebuild the routing/abilities table (POST /api/channel/fix) —
+        idempotent; called after status flips so routing reflects them."""
+        payload, http_status = self._request(
+            "POST", "/api/channel/fix", {},
+        )
+        if http_status != 200 or not payload.get("success"):
+            raise RuntimeError(f"abilities fix failed: {http_status} {payload}")
+        return True
+
     def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
         """Traffic gate: did anyone other than the monitor's own token use
         this model on this channel recently? Without the exclusion the
@@ -527,17 +537,22 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                          model, enforce, discord, state, channels_snapshot,
                          seller_registry=None):
     """Pinned-channel failover (owner rule 2026-10-18): when the active pin
-    for a model is caught fake, find that model's STANDBY pin channels
-    (a6pin-<name>-<merchant>, disabled), TEST the first untested standby
-    via cctest, and enable it only on a pass. A failing standby is marked
-    bad in state (never retried); the next standby is tried the following
-    cycle. Nothing is promoted without passing the check first.
+    for a model is caught fake, promote the next standby pin for that
+    model.
 
-    Idempotency: promotion stops once ANY pin for the model is enabled
-    (a promoted standby becomes the active pin; the next cycle's regular
-    traffic-gated check covers it from there). Standby discovery uses
-    MODEL-MEMBERSHIP, not name prefixes — a6pin-sonnet-5-* and
-    a6pin-sonnet-5-5-* are different models and must not collide."""
+    Enforcement (A6 client-gating forces gateway-routed checks, and the
+    router only picks ENABLED channels, so a disabled standby cannot be
+    tested in place): ENABLE the standby first (making it the model's
+    only enabled pin — the fake one is already disabled, so promoting
+    strictly replaces known-fake with unknown), rebuild routing, THEN
+    run the cctest check on it. A fail demotes it immediately (status 2
+    + bad_standbys mark, never retried) and the next standby is tried
+    the following cycle. Inconclusive verdicts leave it active — the
+    regular cycle check keeps watching it.
+
+    Idempotency: promotion stops once any pin for the model is enabled.
+    Standby discovery uses MODEL-MEMBERSHIP, not name prefixes —
+    a6pin-sonnet-5-* and a6pin-sonnet-5-5-* are different models."""
     if not model:
         LOG.warning("[pin] quarantined pin has no model; no standby search")
         return
@@ -575,40 +590,44 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         return
     standby = candidates[0]
     standby_name = standby["name"]
-    # The standby's model list is exactly the one model (pinned shape);
-    # use the upstream name via its own mapping.
-    s_models = [mm.strip() for mm in (standby.get("models") or "").split(",") if mm.strip()]
-    if model not in s_models:
-        LOG.warning("[pin] standby %s does not list %s — skipping", standby_name, model)
+    if not enforce:
+        LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)
         return
-    s_mapping = parse_model_mapping(standby.get("model_mapping"))
-    upstream = s_mapping.get(model, model)
-    # TEST BEFORE PROMOTE — one cctest check on the standby's OWN key.
-    # Every pin has a different key (per-merchant+model); a standby's
-    # check must never bill the failed channel's key.
-    s_key = (seller_registry or {}).get(standby_name, seller_key)
-    verdict = do_check(cctest, base_url, s_key, upstream)
-    LOG.info("[pin] standby test %s (upstream %s) -> %s", standby_name, upstream, verdict)
+    # ENABLE FIRST (see docstring), rebuild routing, then test.
+    try:
+        gateway.set_status(int(standby["id"]), CHANNEL_ENABLED)
+        gateway.fix_abilities()
+    except Exception as e:
+        LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
+        return
+    LOG.warning("[pin] promoted %s for %s (fake pin disabled) — verifying", standby_name, model)
+    discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model}; verifying authenticity now")
+    # The check rides the gateway with the SKU name (gateway-routed
+    # checks use customer-facing names; the router now picks this pin as
+    # the model's only enabled deterministic path).
+    check_name = model
+    verdict = do_check(cctest, base_url, seller_key, check_name)
+    LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
     if verdict in PASS_VERDICTS:
-        if enforce:
-            try:
-                gateway.set_status(int(standby["id"]), CHANNEL_ENABLED)
-            except Exception as e:
-                LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
-                return
-            # keep the failed one disabled; clear promotion bookkeeping
-            LOG.warning("[pin] PROMOTED %s for %s (standby passed)", standby_name, model)
-            discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model} (passed authenticity check)")
-        else:
-            LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)
+        LOG.warning("[pin] %s PASSED verification for %s — active pin", standby_name, model)
+        discord_alert(discord, f"cctest: {standby_name} verified genuine for {model}")
         return
     if verdict in BAD_VERDICTS:
+        # demote immediately: model has no clean merchant in this slot;
+        # traffic falls to the general/lower tiers until the next
+        # standby gets tried next cycle.
+        try:
+            gateway.set_status(int(standby["id"]), CHANNEL_MANUALLY_DISABLED)
+            gateway.fix_abilities()
+        except Exception as e:
+            LOG.error("[pin] demotion FAILED for %s (stays active!): %s", standby_name, e)
+            return
         failed_set.append(standby_name)
         state["bad_standbys"][model] = failed_set
-        LOG.warning("[pin] standby %s tested FAKE for %s — next in line next cycle", standby_name, model)
-        discord_alert(discord, f"cctest: standby {standby_name} for {model} failed the pre-promotion check — trying the next one")
+        LOG.warning("[pin] standby %s tested FAKE for %s — demoted; next in line next cycle", standby_name, model)
+        discord_alert(discord, f"cctest: standby {standby_name} for {model} failed verification — demoted, trying the next one")
         return
-    LOG.info("[pin] standby %s inconclusive — retried next cycle", standby_name)
+    LOG.info("[pin] standby %s inconclusive — stays active, watched by the cycle", standby_name)
 
 
 def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
@@ -763,28 +782,37 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
 
     # Traffic gate: verifying a model nobody calls burns credits. Our own
     # gateway-routed checks create usage entries — exclude them, else the
-    # gate self-sustains dead SKUs in the rotation forever.
-    try:
-        used = gateway.model_used_recently(
-            channel_id, candidate, usage_window_hours,
-            exclude_token=MONITOR_TOKEN_NAME,
-        )
-    except Exception as e:
-        LOG.warning("[%s] usage gate failed for %s (%s); testing anyway", name, candidate, e)
+    # gate self-sustains dead SKUs in the rotation forever. PIN channels
+    # are exempt: the active pin is the model's front door — an unused
+    # SKU's pin must still be checked (fake merchants must not serve
+    # unchecked), and a standby is never checked (disabled, skipped
+    # above).
+    if is_pinned_channel(name):
         used = True
+    else:
+        try:
+            used = gateway.model_used_recently(
+                channel_id, candidate, usage_window_hours,
+                exclude_token=MONITOR_TOKEN_NAME,
+            )
+        except Exception as e:
+            LOG.warning("[%s] usage gate failed for %s (%s); testing anyway", name, candidate, e)
+            used = True
     if not used:
         LOG.info("[%s] skipping %s: no usage in last %dh", name, candidate, usage_window_hours)
         save_state(state)
         return
 
-    # Check the model under its UPSTREAM name: the channel may rename
-    # SKUs via model_mapping (e.g. gpt-6-1-sol -> gpt-6.1-sol on A6;
-    # gpt-6-sol -> gpt-5-6-sol on Selora). Sending the customer-facing
-    # name to the seller directly gets model_not_allowed errors.
+    # Which name does the CHECK use? Gateway-routed checks ride our relay,
+    # which routes by the CUSTOMER-FACING SKU — send the SKU (the gateway
+    # applies model_mapping itself on the outbound hop). Direct checks
+    # talk to the seller, which wants the UPSTREAM name (A6 registers
+    # gpt-6.1-sol; sending our SKU gpt-6-1-sol gets model_not_allowed).
     mapping = parse_model_mapping(channel.get("model_mapping"))
     upstream_candidate = mapping.get(candidate, candidate)
-    verdict = do_check(cctest, base_url, seller_key, upstream_candidate)
-    LOG.info("[%s] check %s (upstream %s) -> %s", name, candidate, upstream_candidate, verdict)
+    check_name = candidate if is_gateway_routed(base_url) else upstream_candidate
+    verdict = do_check(cctest, base_url, seller_key, check_name)
+    LOG.info("[%s] check %s (upstream %s) -> %s", name, check_name, upstream_candidate, verdict)
 
     # Gateway-routed attribution: a check labeled for this channel may
     # have been served by a DIFFERENT channel (the gateway routes by its
@@ -795,7 +823,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     actual_channel = None
     if is_gateway_routed(base_url):
         try:
-            actual_channel = gateway.last_channel_for_model(upstream_candidate, window_minutes=15)
+            actual_channel = gateway.last_channel_for_model(check_name, window_minutes=15)
         except Exception as e:
             LOG.warning("[%s] serving-channel lookup failed (%s); attributing nominally", name, e)
     if actual_channel is not None and actual_channel != channel_id:

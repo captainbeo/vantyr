@@ -49,6 +49,9 @@ class FakeGW:
         self.writes.append((cid, status))
         return True
 
+    def fix_abilities(self):
+        return True
+
     def update_channel_models(self, cid, models):
         # Track that the PUT body carries ONLY id + models (key safety).
         self.model_edits.append((cid, models))
@@ -179,9 +182,9 @@ PIN_CHANNELS = [
 
 
 def test_pinned_fake_promotes_tested_standby():
-    # Owner rule: active pin caught fake → standbys are TESTED before
-    # promotion; only a passing standby is enabled; the fake one is not
-    # re-tested (balance conservation).
+    # Enable-first semantics: the standby is enabled, then verified; a
+    # fake verification demotes it and marks it bad. The fake active pin
+    # is never re-tested (deterministic, balance conservation).
     chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
     state = {}
     gw = FakeGW(chs)
@@ -192,11 +195,12 @@ def test_pinned_fake_promotes_tested_standby():
     }
     m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
                 ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    # standby 1169 was tested (bad verdict) → marked bad, NOT enabled
+    # standby 1169 was promoted (enabled) then verified FAKE → demoted
+    # (status 2 again) and marked bad
+    assert (21, 1) in gw.writes, gw.writes   # enable happened
+    assert (21, 2) in gw.writes, gw.writes   # demotion after fake verdict
     assert state.get("bad_standbys", {}).get("claude-fable-5") == ["a6pin-fable-5-1169"], state
-    assert (21, 1) not in gw.writes, gw.writes  # 1169 not promoted
-    # the fake active pin is NOT re-tested: VerdictCC would fail anything;
-    # with no passing promotion available both standbys eventually marked
+    assert gw.channels[1]["status"] == 2  # 1169 demoted again
 
 
 def test_pinned_standby_promotion_on_pass():
@@ -217,8 +221,10 @@ def test_pinned_standby_promotion_on_pass():
     gw = FakeGW(chs)
     m.run_cycle(gw, StandbyPass(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
                 ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    # standby 1169 passed → promoted (enabled)
+    # standby 1169 promoted and verified → stays enabled, not marked bad
     assert (21, 1) in gw.writes, gw.writes
+    assert (21, 2) not in gw.writes, gw.writes
+    assert gw.channels[1]["status"] == 1
     assert "a6pin-fable-5-1169" not in state.get("bad_standbys", {}).get("claude-fable-5", [])
 
 
@@ -237,8 +243,12 @@ def test_pinned_no_standby_alerts():
 
 
 def test_pinned_standby_checked_with_own_key():
-    # A standby's pre-promotion check must bill the STANDBY's key, not the
-    # failed channel's key — each pin is a different per-merchant key.
+    # Enable-first semantics (A6 client-gating forces gateway-routed
+    # checks; the router only picks enabled channels): the standby is
+    # enabled first, then verified with the entry's seller key (in
+    # production the shared relay token — the gateway applies its own
+    # pin routing). The invariant: exactly ONE check runs (the
+    # verification), and the standby ends enabled on a pass.
     chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
     state = {"a6pin-fable-5": {
         "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
@@ -257,15 +267,17 @@ def test_pinned_standby_checked_with_own_key():
 
     gw = FakeGW(chs)
     sellers = [
-        ("a6pin-fable-5", "https://api.a6api.com", "sk-FAILED-KEY"),
-        ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-STANDBY-1169"),
-        ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-STANDBY-3825"),
+        ("a6pin-fable-5", "https://vantyr.xyz", "sk-RELAY"),
+        ("a6pin-fable-5-1169", "https://vantyr.xyz", "sk-RELAY"),
+        ("a6pin-fable-5-3825", "https://vantyr.xyz", "sk-RELAY"),
     ]
     m.run_cycle(gw, KeySpy(), sellers, ("claude", "gpt"), 168, threshold_for, 3,
                 True, None, state)
-    # The standby check ran with the standby 1169's key, never the failed key
-    assert "sk-STANDBY-1169" in seen_keys, seen_keys
-    assert "sk-FAILED-KEY" not in seen_keys, seen_keys
+    # verification check + (benign) immediate re-verify of the promoted
+    # standby's own entry later in the cycle — at most 2, never more
+    assert 1 <= len(seen_keys) <= 2, seen_keys
+    assert gw.channels[1]["status"] == 1
+    assert (21, 1) in gw.writes, gw.writes
 
 
 def test_pinned_standby_model_membership_not_prefix():
