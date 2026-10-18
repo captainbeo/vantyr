@@ -4,6 +4,7 @@ Run: python test_monitor.py
 """
 import importlib.util
 import os
+import time
 
 spec = importlib.util.spec_from_file_location("monitor", os.path.join(os.path.dirname(__file__), "monitor.py"))
 m = importlib.util.module_from_spec(spec)
@@ -196,10 +197,12 @@ def test_pinned_fake_promotes_tested_standby():
     m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
                 ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
     # standby 1169 was promoted (enabled) then verified FAKE → demoted
-    # (status 2 again) and marked bad
+    # (status 2 again) and marked bad WITH a timestamp
     assert (21, 1) in gw.writes, gw.writes   # enable happened
     assert (21, 2) in gw.writes, gw.writes   # demotion after fake verdict
-    assert state.get("bad_standbys", {}).get("claude-fable-5") == ["a6pin-fable-5-1169"], state
+    marks = state.get("bad_standbys", {}).get("claude-fable-5", {})
+    assert set(marks.keys()) == {"a6pin-fable-5-1169"}, marks
+    assert isinstance(marks["a6pin-fable-5-1169"], float)
     assert gw.channels[1]["status"] == 2  # 1169 demoted again
 
 
@@ -225,7 +228,64 @@ def test_pinned_standby_promotion_on_pass():
     assert (21, 1) in gw.writes, gw.writes
     assert (21, 2) not in gw.writes, gw.writes
     assert gw.channels[1]["status"] == 1
-    assert "a6pin-fable-5-1169" not in state.get("bad_standbys", {}).get("claude-fable-5", [])
+    assert "a6pin-fable-5-1169" not in state.get("bad_standbys", {}).get("claude-fable-5", {})
+
+
+def test_pinned_cooldown_recovery():
+    # Owner observation 2026-10-19: bad merchants come back clean. A bad
+    # mark older than the cooldown makes the standby eligible again —
+    # but it must re-verify (enable-first) before serving. Fresh
+    # standbys are preferred over expired ones.
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    # both 1169 and 3825 marked bad long ago (expired); 1169 is first in
+    # channel order so it gets re-tried first
+    state = {
+        "a6pin-fable-5": {
+            "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+            "quarantined": True, "model": "claude-fable-5"},
+        "bad_standbys": {"claude-fable-5": {
+            "a6pin-fable-5-1169": time.time() - 48 * 3600,
+            "a6pin-fable-5-3825": time.time() - 48 * 3600,
+        }},
+    }
+
+    class CleanNow:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    gw = FakeGW(chs)
+    m.run_cycle(gw, CleanNow(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    # 1169 was re-tried after cooldown, passed, stays enabled, mark cleared
+    assert (21, 1) in gw.writes, gw.writes
+    assert gw.channels[1]["status"] == 1
+    marks = state.get("bad_standbys", {}).get("claude-fable-5", {})
+    assert "a6pin-fable-5-1169" not in marks, marks
+
+
+def test_pinned_cooldown_not_expired_keeps_benched():
+    # Bad marks younger than the cooldown keep merchants benched even
+    # when no fresh standbys remain (alert instead).
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {
+        "a6pin-fable-5": {
+            "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+            "quarantined": True, "model": "claude-fable-5"},
+        "bad_standbys": {"claude-fable-5": {
+            "a6pin-fable-5-1169": time.time() - 3600,   # 1h ago — fresh mark
+            "a6pin-fable-5-3825": time.time() - 2 * 3600,
+        }},
+    }
+    gw = FakeGW(chs)
+    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    assert gw.writes == [], gw.writes  # nothing promoted
+    assert gw.channels[1]["status"] == 2  # both stay benched
 
 
 def test_pinned_no_standby_alerts():

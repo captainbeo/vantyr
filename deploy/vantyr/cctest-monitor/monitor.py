@@ -578,15 +578,38 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         )
         LOG.warning("[pin] NO STANDBY for %s — model rides general tier", model)
         return
-    failed_set = state.setdefault("bad_standbys", {}).setdefault(model, [])
-    candidates = [ch for ch in standbys if ch["name"] not in failed_set]
-    if not candidates:
+    # Cooldown recovery (owner observation 2026-10-19: merchants that were
+    # caught fake come back clean — 1169/5312 both real again the next
+    # day). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 24):
+    # the merchant becomes eligible again and must re-verify via cctest
+    # before serving. Fresh (never-tried) standbys are preferred over
+    # cooldown-expired ones. Cost bound: at most one re-verification per
+    # bad merchant per cooldown window.
+    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "24"))) * 3600
+    now = time.time()
+    bad_marks = state.setdefault("bad_standbys", {}).setdefault(model, {})
+    if isinstance(bad_marks, list):
+        # migrate the old list form to {name: marked_at}
+        bad_marks = {n: now for n in bad_marks}
+        state["bad_standbys"][model] = bad_marks
+    fresh = [ch for ch in standbys if ch["name"] not in bad_marks]
+    expired = [
+        ch for ch in standbys
+        if ch["name"] in bad_marks and now - bad_marks[ch["name"]] >= cooldown_seconds
+    ]
+    if fresh:
+        candidates = fresh
+    elif expired:
+        candidates = expired
+        LOG.info("[pin] no fresh standbys for %s — re-trying %d after cooldown",
+                 model, len(expired))
+    else:
         discord_alert(
             discord,
-            f"cctest: all standby pins for {model} tested fake — model has no "
-            f"clean A6 merchant left; traffic rides the general/lower tiers",
+            f"cctest: all standby pins for {model} tested fake (cooldown not "
+            f"expired) — traffic rides the general/lower tiers",
         )
-        LOG.warning("[pin] ALL standbys bad for %s", model)
+        LOG.warning("[pin] ALL standbys bad for %s (in cooldown)", model)
         return
     standby = candidates[0]
     standby_name = standby["name"]
@@ -610,6 +633,8 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
     if verdict in PASS_VERDICTS:
         LOG.warning("[pin] %s PASSED verification for %s — active pin", standby_name, model)
+        bad_marks.pop(standby_name, None)
+        state["bad_standbys"][model] = bad_marks
         discord_alert(discord, f"cctest: {standby_name} verified genuine for {model}")
         return
     if verdict in BAD_VERDICTS:
@@ -622,9 +647,9 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         except Exception as e:
             LOG.error("[pin] demotion FAILED for %s (stays active!): %s", standby_name, e)
             return
-        failed_set.append(standby_name)
-        state["bad_standbys"][model] = failed_set
-        LOG.warning("[pin] standby %s tested FAKE for %s — demoted; next in line next cycle", standby_name, model)
+        bad_marks[standby_name] = time.time()
+        state["bad_standbys"][model] = bad_marks
+        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (24h cooldown); next in line next cycle", standby_name, model)
         discord_alert(discord, f"cctest: standby {standby_name} for {model} failed verification — demoted, trying the next one")
         return
     LOG.info("[pin] standby %s inconclusive — stays active, watched by the cycle", standby_name)
