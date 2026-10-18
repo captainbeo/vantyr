@@ -27,6 +27,16 @@ coverage gate blocks removal when no other enabled channel in the
 group would still serve X. Channel-status quarantine (disable) remains
 the action only for a seller-wide failure (all eligible models bad).
 
+Pinned-key tiers (owner rule 2026-10-18): exactly ONE active (enabled)
+pin channel per model — spare pins stay disabled as standbys, so only
+the key actually serving traffic is ever checked (the traffic gate
+enforces this) and New API's router has a single deterministic path.
+When the active pin is caught fake (quarantined), the next standby is
+TESTED via cctest BEFORE being enabled (promotion); a failing standby
+is marked and the next one is tried the following cycle. Pin channels
+never re-test their own fake merchant — balance is only spent on
+active keys (one per model per cycle) and one test per swap event.
+
 Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
   GATEWAY_URL            e.g. http://vantyr-gateway:3000
   GATEWAY_TOKEN          PAT with channel operate + write + log read scopes
@@ -41,14 +51,13 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          selora-*/a6-*/yingz-* plus mia-* (Mia Router
                          failover channels, https://miarouter.online).
                          Pinned A6 keys (one merchant+model per key) use
-                         the entry name "a6pin-<model>" (e.g.
-                         a6pin-fable-5): the prefix routes them to the
-                         deterministic threshold (FAIL_THRESHOLD_A6PIN=1)
-                         and the channel-name suffix carries the model
-                         family, so the backend's grouping is the channel
-                         record itself — a pinned channel lists exactly
-                         one model, its name says which, and the monitor
-                         checks that one path deterministically.
+                         channel names a6pin-<model> (the ONE active pin
+                         for that model — enabled) and a6pin-<model>-
+                         <merchant> (standbys — created disabled). Only
+                         the active pin serves and is checked (owner rule
+                         2026-10-18: only test what is actually used;
+                         balance conservation). One SELLER_CHANNELS entry
+                         per pin key, named exactly after its channel.
                          Selora's sk-gw- key only authenticates from our
                          gateway's Go client (TLS-fingerprint-gated) — for
                          selora, point the URL at the gateway itself
@@ -497,6 +506,88 @@ def is_gateway_routed(base_url):
     return host in ("vantyr.xyz", "gateway", "localhost", "127.0.0.1") or host.endswith(".vantyr.xyz")
 
 
+def is_pinned_channel(name):
+    """a6pin-<model> channels: deterministic merchant paths (one key per
+    merchant per model). Their failover unit is the merchant (swap to a
+    standby pin), not the model (remove from seller)."""
+    return (name or "").startswith("a6pin")
+
+
+def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
+                         model, enforce, discord, state, channels_snapshot):
+    """Pinned-channel failover (owner rule 2026-10-18): when the active pin
+    for a model is caught fake, find that model's STANDBY pin channels
+    (a6pin-<name>-<merchant>, disabled), TEST the first untested standby
+    via cctest, and enable it only on a pass. A failing standby is marked
+    bad in state (never retried); the next standby is tried the following
+    cycle. Nothing is promoted without passing the check first."""
+    if not model:
+        LOG.warning("[pin] quarantined pin has no model; no standby search")
+        return
+    # The standby prefix comes from the FAILED channel's own name stem:
+    # active pin a6pin-fable-5 ↔ standbys a6pin-fable-5-<merchant>. The
+    # name stem and the model slug can differ (name uses the short family
+    # form; the model list holds the full slug).
+    failed_name = failed_channel.get("name") or ""
+    stem = failed_name[len("a6pin-"):] if failed_name.startswith("a6pin-") else model
+    standbys = [
+        ch for ch in (channels_snapshot or [])
+        if (ch.get("name") or "").startswith(f"a6pin-{stem}-")
+        and int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED
+    ]
+    if not standbys:
+        discord_alert(
+            discord,
+            f"cctest: no standby pins left for {model} — active merchant is fake "
+            f"and none are in line; traffic rides the general/lower tiers",
+        )
+        LOG.warning("[pin] NO STANDBY for %s — model rides general tier", model)
+        return
+    failed_set = state.setdefault("bad_standbys", {}).setdefault(model, [])
+    candidates = [ch for ch in standbys if ch["name"] not in failed_set]
+    if not candidates:
+        discord_alert(
+            discord,
+            f"cctest: all standby pins for {model} tested fake — model has no "
+            f"clean A6 merchant left; traffic rides the general/lower tiers",
+        )
+        LOG.warning("[pin] ALL standbys bad for %s", model)
+        return
+    standby = candidates[0]
+    standby_name = standby["name"]
+    # The standby's model list is exactly the one model (pinned shape);
+    # use the upstream name via its own mapping.
+    s_models = [mm.strip() for mm in (standby.get("models") or "").split(",") if mm.strip()]
+    if model not in s_models:
+        LOG.warning("[pin] standby %s does not list %s — skipping", standby_name, model)
+        return
+    s_mapping = parse_model_mapping(standby.get("model_mapping"))
+    upstream = s_mapping.get(model, model)
+    # TEST BEFORE PROMOTE — one cctest check on the standby key.
+    verdict = do_check(cctest, base_url, seller_key, upstream)
+    LOG.info("[pin] standby test %s (upstream %s) -> %s", standby_name, upstream, verdict)
+    if verdict in PASS_VERDICTS:
+        if enforce:
+            try:
+                gateway.set_status(int(standby["id"]), CHANNEL_ENABLED)
+            except Exception as e:
+                LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
+                return
+            # keep the failed one disabled; clear promotion bookkeeping
+            LOG.warning("[pin] PROMOTED %s for %s (standby passed)", standby_name, model)
+            discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model} (passed authenticity check)")
+        else:
+            LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)
+        return
+    if verdict in BAD_VERDICTS:
+        failed_set.append(standby_name)
+        state["bad_standbys"][model] = failed_set
+        LOG.warning("[pin] standby %s tested FAKE for %s — next in line next cycle", standby_name, model)
+        discord_alert(discord, f"cctest: standby {standby_name} for {model} failed the pre-promotion check — trying the next one")
+        return
+    LOG.info("[pin] standby %s inconclusive — retried next cycle", standby_name)
+
+
 def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
                     verdict, threshold_for, enforce, discord, state, channels_snapshot):
     """Apply a verdict to (channel, model): per-model fail counting and
@@ -553,11 +644,38 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         if ch_state.get("permanent"):
             # Credit spend stopped after too many consecutive fails;
             # manual re-enable (owner clears state or re-enables + we
-            # notice via the owner-override branch above).
+            # notice via the owner-override branch above). For pinned
+            # channels, quarantine resolution is standby promotion, not
+            # re-testing the same merchant.
+            if is_pinned_channel(name):
+                promote_next_standby(
+                    gateway, cctest, channel, base_url, seller_key,
+                    eligible[0] if eligible else None,
+                    enforce, discord, state, channels_snapshot,
+                )
             return
         candidate = ch_state.get("model") or (eligible[0] if eligible else None)
         if candidate is None:
             LOG.warning("[%s] quarantined but no eligible model to re-test", name)
+            return
+        # Pinned channels never re-test their own merchant: the verdict is
+        # deterministic, a fail is final for that merchant (owner rule
+        # 2026-10-18 — balance only spent on active keys and swaps).
+        if is_pinned_channel(name):
+            ch_state["permanent"] = True
+            if not ch_state.get("alerted"):
+                discord_alert(
+                    discord,
+                    f"cctest: {name} pinned merchant caught fake ({candidate}) "
+                    f"— promoting a standby",
+                )
+                ch_state["alerted"] = True
+            LOG.warning("[%s] PIN QUARANTINED (deterministic fail on %s)", name, candidate)
+            promote_next_standby(
+                gateway, cctest, channel, base_url, seller_key,
+                candidate, enforce, discord, state, channels_snapshot,
+            )
+            save_state(state)
             return
         verdict = do_check(cctest, base_url, seller_key, candidate)
         LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)

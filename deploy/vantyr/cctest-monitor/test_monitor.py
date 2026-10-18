@@ -167,6 +167,75 @@ def test_yingz_parse():
     assert bad == []
 
 
+PIN_CHANNELS = [
+    # active pin quarantined by us (status 2) + two standbys (status 2)
+    {"id": 20, "name": "a6pin-fable-5", "status": 2, "group": "default",
+     "models": "claude-fable-5", "model_mapping": ""},
+    {"id": 21, "name": "a6pin-fable-5-1169", "status": 2, "group": "default",
+     "models": "claude-fable-5", "model_mapping": ""},
+    {"id": 22, "name": "a6pin-fable-5-3825", "status": 2, "group": "default",
+     "models": "claude-fable-5", "model_mapping": ""},
+]
+
+
+def test_pinned_fake_promotes_tested_standby():
+    # Owner rule: active pin caught fake → standbys are TESTED before
+    # promotion; only a passing standby is enabled; the fake one is not
+    # re-tested (balance conservation).
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {}
+    gw = FakeGW(chs)
+    # active pin quarantined by us with its failing model recorded
+    state["a6pin-fable-5"] = {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5",
+    }
+    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    # standby 1169 was tested (bad verdict) → marked bad, NOT enabled
+    assert state.get("bad_standbys", {}).get("claude-fable-5") == ["a6pin-fable-5-1169"], state
+    assert (21, 1) not in gw.writes, gw.writes  # 1169 not promoted
+    # the fake active pin is NOT re-tested: VerdictCC would fail anything;
+    # with no passing promotion available both standbys eventually marked
+
+
+def test_pinned_standby_promotion_on_pass():
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {"a6pin-fable-5": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5"}}
+
+    class StandbyPass:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    gw = FakeGW(chs)
+    m.run_cycle(gw, StandbyPass(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    # standby 1169 passed → promoted (enabled)
+    assert (21, 1) in gw.writes, gw.writes
+    assert "a6pin-fable-5-1169" not in state.get("bad_standbys", {}).get("claude-fable-5", [])
+
+
+def test_pinned_no_standby_alerts():
+    # No standbys left: alert, no crash, nothing enabled.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    # remove standbys
+    chs = [chs[0]] + [dict(c) for c in CHANNELS]
+    state = {"a6pin-fable-5": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5"}}
+    gw = FakeGW(chs)
+    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    assert gw.writes == [], gw.writes
+
+
 def test_a6pin_pinned_key_support():
     # Pinned A6 keys (one merchant+model per key): accepted prefix, exact
     # channel-name expansion (a6pin-fable-5 must NOT also match
