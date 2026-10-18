@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
 
-import { ApiKeysBaseUrl } from './components/api-keys-base-url'
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
 import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
 import { ApiKeysProvider } from './components/api-keys-provider'
@@ -36,7 +35,6 @@ export function ApiKeys() {
           <ApiKeysPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ApiKeysBaseUrl />
           <ApiKeysTable />
         </SectionPageLayout.Content>
       </SectionPageLayout>
