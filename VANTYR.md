@@ -2880,3 +2880,28 @@ tag deploy/2026-10-18-keys-base-url-v3.
 - Keys-page tests: api-addresses.test.tsx deleted (tested the removed
   popover); remaining keys failures are pre-existing nl-NL currency
   formatting issues in api-key-listing.test.tsx.
+
+## 2026-10-18 — Compact base-URL card on API Keys page (pinned-next38)
+
+`fix(keys): compact base-URL card, show both Anthropic and OpenAI URLs`
+(da2448620, tag deploy/2026-10-18-keys-base-url-v4).
+
+- Owner feedback on next37: the card's text was too long and the box
+  taller than the other toolbar controls. Reworked to h-8 (matches the
+  toolbar inputs), one compact row per base URL — "Anthropic
+  https://vantyr.xyz" and "OpenAI https://vantyr.xyz/v1" — each with
+  its own copy button (label shortened via route.replace(/-compatible$/)).
+  Fallback: single server_address/origin row when api_info is empty.
+- Base-URL fact (confirmed from live /api/status api_info): Anthropic-
+  native clients use https://vantyr.xyz (no suffix); OpenAI-compatible
+  clients use https://vantyr.xyz/v1. Two different base URLs, both now
+  shown.
+- Deploy (owner-approved): archive sha256 109c9292…47aab5 to
+  static/source/; web tree rsynced (backup pre-next37 from earlier
+  today reused); image pinned-next38 (4bbbc6f0bfbf) built on-server;
+  compose re-pinned after archive sync reset the image line again
+  (now a twice-confirmed gotcha); gateway recreated + healthy; notice
+  + footer updated (backups /tmp/source-notice-pre-next38.txt,
+  /opt/vantyr/backups/footer-pre-next38.txt). Live bundle
+  index.0e0bdae1b9.js carries the two-URL component; footer serves v4
+  links. Rollback: pinned-next37 (6ed9d8c63e55).
