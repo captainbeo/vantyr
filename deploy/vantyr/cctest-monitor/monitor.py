@@ -40,6 +40,15 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          the entry name). Production runs four sellers:
                          selora-*/a6-*/yingz-* plus mia-* (Mia Router
                          failover channels, https://miarouter.online).
+                         Pinned A6 keys (one merchant+model per key) use
+                         the entry name "a6pin-<model>" (e.g.
+                         a6pin-fable-5): the prefix routes them to the
+                         deterministic threshold (FAIL_THRESHOLD_A6PIN=1)
+                         and the channel-name suffix carries the model
+                         family, so the backend's grouping is the channel
+                         record itself — a pinned channel lists exactly
+                         one model, its name says which, and the monitor
+                         checks that one path deterministically.
                          Selora's sk-gw- key only authenticates from our
                          gateway's Go client (TLS-fingerprint-gated) — for
                          selora, point the URL at the gateway itself
@@ -342,10 +351,9 @@ def park(reason):
 def parse_seller_channels(raw, known_prefixes):
     """Parse SELLER_CHANNELS entries "name|base_url|seller_key". The name is
     a prefix matched against gateway channel names at runtime: one entry
-    covers every gateway channel whose name starts with it (production
-    runs three sellers: selora-*/a6-* primary, fallback, and unlimited
-    variants over 2 seller keys, plus mia-* failover channels from
-    Mia Router)."""
+    covers every gateway channel whose name starts with it. Pinned A6
+    keys use "a6pin-<model>" names (one merchant+model per key — see the
+    module docstring)."""
     sellers = []
     for entry in raw.split(","):
         parts = [p.strip() for p in entry.split("|") if p.strip()]
@@ -363,10 +371,13 @@ def parse_seller_channels(raw, known_prefixes):
 
 
 def expand_seller_to_channels(channels, seller_prefix, base_url, seller_key):
-    """Resolve one seller entry to the gateway channels it covers:
-    every channel whose name starts with the entry's name."""
-    matches = [ch for ch in channels if (ch.get("name") or "").startswith(seller_prefix)]
-    return matches
+    """Resolve one seller entry to the gateway channels it covers.
+    General sellers: every channel whose name starts with the entry name.
+    Pinned entries ("a6pin-<model>", one key per merchant+model): EXACT
+    name match — "a6pin-fable-5" must not also grab "a6pin-fable-5-1"."""
+    if seller_prefix.startswith("a6pin"):
+        return [ch for ch in channels if (ch.get("name") or "") == seller_prefix]
+    return [ch for ch in channels if (ch.get("name") or "").startswith(seller_prefix)]
 
 
 def main():
@@ -380,7 +391,7 @@ def main():
         return 1
     sellers = parse_seller_channels(
         os.environ.get("SELLER_CHANNELS", ""),
-        known_prefixes=("selora", "a6", "mia", "yingz"),
+        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz"),
     )
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")
@@ -411,6 +422,12 @@ def main():
     # yingz-* = cheap prepaid seller, unverified — same noise tolerance
     # as a6/mia until live verdicts say otherwise.
     fail_threshold_prefixes = (
+        # Pinned (merchant/model) A6 keys are deterministic: a bad verdict
+        # IS the merchant serving a fake, no lottery noise to average out.
+        # Threshold 1 → one confirmed swap quarantines exactly that
+        # merchant's channel; traffic shifts to the next ladder step and
+        # the owner re-pins the key to a fresh merchant.
+        ("a6pin", max(1, int(os.environ.get("FAIL_THRESHOLD_A6PIN", "1")))),
         ("selora", max(1, int(os.environ.get("FAIL_THRESHOLD_SELORA", "1")))),
         ("a6", max(1, int(os.environ.get("FAIL_THRESHOLD_A6", "2")))),
         ("mia", max(1, int(os.environ.get("FAIL_THRESHOLD_MIA", "2")))),

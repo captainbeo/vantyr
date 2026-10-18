@@ -167,6 +167,43 @@ def test_yingz_parse():
     assert bad == []
 
 
+def test_a6pin_pinned_key_support():
+    # Pinned A6 keys (one merchant+model per key): accepted prefix, exact
+    # channel-name expansion (a6pin-fable-5 must NOT also match
+    # a6pin-fable-5-1), and deterministic threshold 1.
+    good = m.parse_seller_channels(
+        "a6pin-fable-5|https://api.a6api.com|sk-pin",
+        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz"))
+    assert good == [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")]
+
+    channels = [
+        {"name": "a6pin-fable-5"}, {"name": "a6-default-primary"},
+        {"name": "a6pin-fable-5-1"},
+    ]
+    matched = m.expand_seller_to_channels(channels, "a6pin-fable-5", "u", "k")
+    assert [c["name"] for c in matched] == ["a6pin-fable-5"], matched
+
+    prefixes = (("a6pin", 1), ("selora", 1), ("a6", 2), ("mia", 2), ("yingz", 2))
+    def threshold_for(name):
+        for prefix, t in prefixes:
+            if name.startswith(prefix):
+                return t
+        return 3
+    assert threshold_for("a6pin-fable-5") == 1
+    assert threshold_for("a6pin-fable-5-1") == 1
+    assert threshold_for("a6-default-primary") == 2
+
+    # production regression: main()'s known_prefixes includes a6pin
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "monitor.py"), encoding="utf-8").read()
+    match = re.search(r'known_prefixes=\(("[^"]+"(?:,\s*"[^"]+")*)\)', src)
+    assert match, "known_prefixes tuple not found"
+    prefixes_in_src = tuple(p.strip() for p in match.group(1).replace('"', "").split(","))
+    assert "a6pin" in prefixes_in_src, prefixes_in_src
+    assert re.search(r'\("a6pin",\s*max\(1,\s*int\(os\.environ\.get\("FAIL_THRESHOLD_A6PIN",\s*"1"\)\)\)\)', src), \
+        "a6pin threshold entry missing"
+
+
 def test_yingz_in_production_prefixes():
     # main()'s own known_prefixes tuple must include yingz — the test in
     # test_yingz_parse passes prefixes explicitly, so it cannot catch a
