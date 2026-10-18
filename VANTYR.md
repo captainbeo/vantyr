@@ -2849,3 +2849,34 @@ pinned-next35 21f92401d855 + pinned-next36 d6e39cd540c7):**
 with "Beschikbare plekken 4/4 — plekken momenteel beschikbaar";
 screenshot archived. Wallet tests 14/14; typecheck + lint clean;
 router/model/controller suites green on server.
+
+## 2026-10-18 — API base URL inline on the API Keys page (pinned-next37)
+
+`feat(keys): show API base URL inline in the table toolbar` (ab1616e01) +
+`fix(keys): remove duplicate base-URL card above the table` (c3989900c),
+tag deploy/2026-10-18-keys-base-url-v3.
+
+- Owner request: the base URL was hard to find — only behind the
+  "API Addresses" popover on the keys page. Now a small inline card
+  (globe icon, label, URL, one-click copy button) sits in the API Keys
+  table toolbar next to the "Filter by API key" search input. The
+  "API Addresses" popover is removed. URL source: first api_info entry,
+  falling back to server_address, then window.location.origin.
+- An earlier iteration (ac2469e8f) mistakenly placed the card on the
+  wallet page next to Order History; reverted (9063eea9f) after owner
+  correction, then re-applied on the keys toolbar. v1 (06ef987c2) also
+  left a duplicate render above the table; fixed in c3989900c.
+- Deploy (owner-approved): source archive sha256 f6005117…aa6179
+  uploaded to static/source/; /opt/vantyr web tree rsynced from the
+  archive (backup /opt/vantyr-backup-web-pre-next37); stale deleted
+  test file removed manually (tar extract does not delete); image
+  pinned-next37 (6ed9d8c63e55) built on-server; compose.yaml pinned
+  (the archive sync had reset the image line to `pinned` — fixed with
+  sed, known gotcha); gateway recreated + healthy; source-notice.txt +
+  Footer option updated (backups in /tmp + /opt/vantyr/backups).
+- Live verification: bundle index.1c71f59f31.js carries "API Base URL";
+  /api/status footer serves the new tag links; archive 200 (8,324,001
+  B); site 200. pinned-next36 (d6e39cd540c7) retained for rollback.
+- Keys-page tests: api-addresses.test.tsx deleted (tested the removed
+  popover); remaining keys failures are pre-existing nl-NL currency
+  formatting issues in api-key-listing.test.tsx.
