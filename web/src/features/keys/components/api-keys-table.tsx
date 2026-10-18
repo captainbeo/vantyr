@@ -54,6 +54,7 @@ import {
 import type { ApiKey } from '../types'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import { ApiKeyActivityCell } from './api-key-timestamp-cell'
+import { ApiKeysBaseUrl } from './api-keys-base-url'
 import {
   ApiKeyCell,
   ModelLimitsCell,
@@ -354,13 +355,16 @@ export function ApiKeysTable() {
         searchPlaceholder: t('Filter by name...'),
         searchDebounceMs: 500,
         additionalSearch: (
-          <Input
-            placeholder={t('Filter by API key...')}
-            aria-label={t('Filter by API key...')}
-            value={tokenFilterInput}
-            onChange={(e) => setTokenFilterInput(e.target.value)}
-            className='w-full sm:w-50 lg:w-60'
-          />
+          <>
+            <ApiKeysBaseUrl />
+            <Input
+              placeholder={t('Filter by API key...')}
+              aria-label={t('Filter by API key...')}
+              value={tokenFilterInput}
+              onChange={(e) => setTokenFilterInput(e.target.value)}
+              className='w-full sm:w-50 lg:w-60'
+            />
+          </>
         ),
         filters: [
           {
