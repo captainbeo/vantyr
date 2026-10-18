@@ -631,7 +631,8 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
 
 
 def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
-                    verdict, threshold_for, enforce, discord, state, channels_snapshot):
+                    verdict, threshold_for, enforce, discord, state, channels_snapshot,
+                    seller_registry=None):
     """Apply a verdict to (channel, model): per-model fail counting and
     failover escalation. Shared by the nominal path and the
     serving-channel attribution path."""
@@ -649,6 +650,8 @@ def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
             failover_model(
                 gateway, channel, ch_state, name, model, verdict,
                 enforce, discord, channels_snapshot,
+                cctest=cctest, base_url=base_url, seller_key=seller_key,
+                state=state, seller_registry=seller_registry,
             )
     elif verdict in PASS_VERDICTS:
         ch_state["fails"] = 0
@@ -839,6 +842,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             process_verdict(
                 gateway, cctest, actual_ch, base_url, seller_key, candidate,
                 verdict, threshold_for, enforce, discord, state, channels_snapshot,
+                seller_registry,
             )
             # Nominal channel's counters stay untouched (no attribution).
             save_state(state)
@@ -853,6 +857,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     process_verdict(
         gateway, cctest, channel, base_url, seller_key, candidate,
         verdict, threshold_for, enforce, discord, state, channels_snapshot,
+        seller_registry,
     )
     if verdict in SOFT_VERDICTS:
         now = time.time()
@@ -871,7 +876,8 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     save_state(state)
 
 
-def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord, channels_snapshot):
+def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord, channels_snapshot,
+                   cctest=None, base_url=None, seller_key=None, state=None, seller_registry=None):
     """Confirmed bad verdict for `model` on this channel: remove the model
     from the channel's list so New API re-routes it to another provider.
     Coverage gate: if no other enabled channel in the same group still
@@ -891,6 +897,16 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
         LOG.info("[%s] model %s is the only entry; escalating to channel quarantine instead", name, model)
         if enforce:
             start_quarantine(gateway, ch_state, int(ch["id"]), name, model, verdict, discord)
+            # Pinned channels: the quarantine IS the merchant-swap trigger —
+            # promote the next standby (enable-first, then verify). Without
+            # this the model is left with no active pin until the next
+            # cycle's quarantined-re-test branch notices.
+            if is_pinned_channel(name):
+                promote_next_standby(
+                    gateway, cctest, ch, base_url, seller_key, model,
+                    enforce, discord, state, channels_snapshot,
+                    seller_registry,
+                )
         else:
             LOG.warning("[%s] OBSERVE-ONLY: would quarantine channel (%s -> %s)", name, model, verdict)
         return
