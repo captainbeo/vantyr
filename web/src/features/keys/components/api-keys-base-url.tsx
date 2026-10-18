@@ -23,6 +23,11 @@ import { CopyButton } from '@/components/copy-button'
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { useStatus } from '@/hooks/use-status'
 
+/** Shorten "Anthropic-compatible" -> "Anthropic" for the toolbar row. */
+function shortLabel(route: string): string {
+  return route.replace(/-compatible$/i, '').trim()
+}
+
 export function ApiKeysBaseUrl() {
   const { t } = useTranslation()
   const { status } = useStatus()
@@ -33,31 +38,48 @@ export function ApiKeysBaseUrl() {
       status.server_address.trim()) ||
     ''
 
-  const primary = items.length ? items[0] : null
-  const url = primary?.url || serverAddress || window.location.origin
-  const label = primary?.route || t('API Base URL')
+  const rows = items.length
+    ? items.map((item) => ({
+        label: shortLabel(item.route),
+        url: item.url,
+        fullLabel: item.route,
+      }))
+    : [
+        {
+          label: t('API Base URL'),
+          url: serverAddress || window.location.origin,
+          fullLabel: t('API Base URL'),
+        },
+      ]
 
   return (
-    <div className='bg-muted/40 flex min-w-0 items-center gap-2 rounded-lg border px-3 py-1.5'>
+    <div className='bg-muted/40 flex h-8 min-w-0 items-center gap-2 rounded-lg border px-3'>
       <Globe
         className='text-muted-foreground size-3.5 shrink-0'
         aria-hidden='true'
       />
-      <div className='min-w-0 flex-1'>
-        <div className='text-muted-foreground text-[11px] leading-4'>
-          {label}
-        </div>
-        <code className='block truncate text-xs font-medium select-all'>
-          {url}
-        </code>
+      <div className='flex min-w-0 items-center gap-x-4'>
+        {rows.map((row) => (
+          <div
+            key={row.url}
+            className='flex min-w-0 items-center gap-1.5'
+          >
+            <span className='text-muted-foreground shrink-0 text-[11px] leading-none'>
+              {row.label}
+            </span>
+            <code className='truncate text-xs leading-none font-medium select-all'>
+              {row.url}
+            </code>
+            <CopyButton
+              value={row.url}
+              size='icon'
+              tooltip={t('Copy API URL')}
+              aria-label={`${t('Copy API URL')}: ${row.fullLabel} (${row.url})`}
+              className='size-6 shrink-0 [&_svg]:size-3'
+            />
+          </div>
+        ))}
       </div>
-      <CopyButton
-        value={url}
-        size='icon'
-        tooltip={t('Copy API URL')}
-        aria-label={`${t('Copy API URL')}: ${url}`}
-        className='shrink-0'
-      />
     </div>
   )
 }
