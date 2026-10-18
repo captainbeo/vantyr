@@ -236,6 +236,75 @@ def test_pinned_no_standby_alerts():
     assert gw.writes == [], gw.writes
 
 
+def test_pinned_standby_checked_with_own_key():
+    # A standby's pre-promotion check must bill the STANDBY's key, not the
+    # failed channel's key — each pin is a different per-merchant key.
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {"a6pin-fable-5": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5"}}
+    seen_keys = []
+
+    class KeySpy:
+        @staticmethod
+        def check(b, k, mo):
+            seen_keys.append(k)
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    gw = FakeGW(chs)
+    sellers = [
+        ("a6pin-fable-5", "https://api.a6api.com", "sk-FAILED-KEY"),
+        ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-STANDBY-1169"),
+        ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-STANDBY-3825"),
+    ]
+    m.run_cycle(gw, KeySpy(), sellers, ("claude", "gpt"), 168, threshold_for, 3,
+                True, None, state)
+    # The standby check ran with the standby 1169's key, never the failed key
+    assert "sk-STANDBY-1169" in seen_keys, seen_keys
+    assert "sk-FAILED-KEY" not in seen_keys, seen_keys
+
+
+def test_pinned_standby_model_membership_not_prefix():
+    # sonnet-5 and sonnet-5-5 are different models: a sonnet-5 standby set
+    # must not include sonnet-5-5 pins (name-prefix collision).
+    chs = [
+        {"id": 30, "name": "a6pin-sonnet-5", "status": 2, "group": "default",
+         "models": "claude-sonnet-5", "model_mapping": ""},
+        {"id": 31, "name": "a6pin-sonnet-5-1204", "status": 2, "group": "default",
+         "models": "claude-sonnet-5", "model_mapping": ""},
+        {"id": 32, "name": "a6pin-sonnet-5-5-1204", "status": 2, "group": "default",
+         "models": "claude-sonnet-5-5", "model_mapping": ""},
+    ]
+    # failed active = a6pin-sonnet-5-5 quarantined for claude-sonnet-5-5
+    state = {"a6pin-sonnet-5-5-1204": {
+        "rotation": ["claude-sonnet-5-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-sonnet-5-5"}}
+
+    class FailAll:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "not_claude"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    # run with the sonnet-5-5 entry: its standby search must consider ONLY
+    # claude-sonnet-5-5 pins (none here beyond the failed one) — the
+    # sonnet-5 standby must NOT be tested or marked bad.
+    gw = FakeGW(chs)
+    m.run_cycle(gw, FailAll(), [("a6pin-sonnet-5-5-1204", "https://api.a6api.com", "k")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    bad = state.get("bad_standbys", {})
+    # sonnet-5's pin name must never appear in sonnet-5-5's bad list
+    assert "a6pin-sonnet-5-1204" not in bad.get("claude-sonnet-5-5", []), bad
+    assert bad.get("claude-sonnet-5-5", []) == [], bad  # no other 5-5 standby exists
+
+
 def test_a6pin_pinned_key_support():
     # Pinned A6 keys (one merchant+model per key): accepted prefix, exact
     # channel-name expansion (a6pin-fable-5 must NOT also match

@@ -488,12 +488,22 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             except Exception as e:
                 LOG.warning("channel list failed (%s); skipping this cycle", e)
                 return
+    # channel name → seller key, built from ALL seller entries BEFORE any
+    # processing: standby promotion must check a standby with the standby's
+    # OWN key (each pin is a different per-merchant key), and a promotion
+    # triggered while iterating entry N needs entry N+1's key already
+    # registered.
+    seller_registry = {}
+    for name, base_url, seller_key in sellers:
+        for ch in expand_seller_to_channels(channels, name, base_url, seller_key):
+            seller_registry[ch.get("name")] = seller_key
+    for name, base_url, seller_key in sellers:
         allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
             process_channel(
                 gateway, cctest, channel, base_url, seller_key, model_prefixes,
                 usage_window_hours, threshold_for, permanent_fails, enforce,
-                discord, state, channels, allowed,
+                discord, state, channels, allowed, seller_registry,
             )
             save_state(state)
 
@@ -514,26 +524,36 @@ def is_pinned_channel(name):
 
 
 def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
-                         model, enforce, discord, state, channels_snapshot):
+                         model, enforce, discord, state, channels_snapshot,
+                         seller_registry=None):
     """Pinned-channel failover (owner rule 2026-10-18): when the active pin
     for a model is caught fake, find that model's STANDBY pin channels
     (a6pin-<name>-<merchant>, disabled), TEST the first untested standby
     via cctest, and enable it only on a pass. A failing standby is marked
     bad in state (never retried); the next standby is tried the following
-    cycle. Nothing is promoted without passing the check first."""
+    cycle. Nothing is promoted without passing the check first.
+
+    Idempotency: promotion stops once ANY pin for the model is enabled
+    (a promoted standby becomes the active pin; the next cycle's regular
+    traffic-gated check covers it from there). Standby discovery uses
+    MODEL-MEMBERSHIP, not name prefixes — a6pin-sonnet-5-* and
+    a6pin-sonnet-5-5-* are different models and must not collide."""
     if not model:
         LOG.warning("[pin] quarantined pin has no model; no standby search")
         return
-    # The standby prefix comes from the FAILED channel's own name stem:
-    # active pin a6pin-fable-5 ↔ standbys a6pin-fable-5-<merchant>. The
-    # name stem and the model slug can differ (name uses the short family
-    # form; the model list holds the full slug).
-    failed_name = failed_channel.get("name") or ""
-    stem = failed_name[len("a6pin-"):] if failed_name.startswith("a6pin-") else model
+    # stop if a pin for this model is already active again (idempotence)
+    for ch in (channels_snapshot or []):
+        if is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED \
+                and model in [mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()]:
+            LOG.info("[pin] %s already has an active pin (%s) — no promotion", model, ch.get("name"))
+            return
+    # standby set = disabled pins whose model list is EXACTLY this model
     standbys = [
         ch for ch in (channels_snapshot or [])
-        if (ch.get("name") or "").startswith(f"a6pin-{stem}-")
+        if is_pinned_channel(ch.get("name") or "")
         and int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED
+        and [mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()] == [model]
+        and (ch.get("name") or "") != (failed_channel.get("name") or "")
     ]
     if not standbys:
         discord_alert(
@@ -563,8 +583,11 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         return
     s_mapping = parse_model_mapping(standby.get("model_mapping"))
     upstream = s_mapping.get(model, model)
-    # TEST BEFORE PROMOTE — one cctest check on the standby key.
-    verdict = do_check(cctest, base_url, seller_key, upstream)
+    # TEST BEFORE PROMOTE — one cctest check on the standby's OWN key.
+    # Every pin has a different key (per-merchant+model); a standby's
+    # check must never bill the failed channel's key.
+    s_key = (seller_registry or {}).get(standby_name, seller_key)
+    verdict = do_check(cctest, base_url, s_key, upstream)
     LOG.info("[pin] standby test %s (upstream %s) -> %s", standby_name, upstream, verdict)
     if verdict in PASS_VERDICTS:
         if enforce:
@@ -615,7 +638,8 @@ def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
 
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
                     usage_window_hours, threshold_for, permanent_fails, enforce,
-                    discord, state, channels_snapshot, model_allowlist=None):
+                    discord, state, channels_snapshot, model_allowlist=None,
+                    seller_registry=None):
     name = channel["name"]
     channel_id = int(channel["id"])
     ch_state = state.setdefault(
@@ -652,6 +676,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
                     gateway, cctest, channel, base_url, seller_key,
                     eligible[0] if eligible else None,
                     enforce, discord, state, channels_snapshot,
+                    seller_registry,
                 )
             return
         candidate = ch_state.get("model") or (eligible[0] if eligible else None)
@@ -674,6 +699,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             promote_next_standby(
                 gateway, cctest, channel, base_url, seller_key,
                 candidate, enforce, discord, state, channels_snapshot,
+                seller_registry,
             )
             save_state(state)
             return
