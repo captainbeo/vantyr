@@ -417,4 +417,69 @@ describe('Model Routing dashboard', () => {
     // cooldown expiry restored on the benched standby entry
     expect(await screen.findByText(/expires in/)).toBeInTheDocument()
   })
+
+  it('switches the ladder between groups with the group selector', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/api/channel') {
+        return {
+          data: {
+            success: true,
+            data: {
+              items: [
+                ...CHANNELS,
+                channelFixture({
+                  id: 11,
+                  name: 'selora-unlimited',
+                  models: 'claude-fable-5',
+                  group: 'unlimited',
+                  status: 1,
+                  priority: 30,
+                }),
+              ],
+              total: 3,
+              page: 1,
+              page_size: 100,
+            },
+          },
+        }
+      }
+      if (url === '/api/cctest/status') {
+        return { data: { success: true, data: CC_OK } }
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ModelRouting />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
+    await waitFor(() => {
+      expect(screen.getByText('Routing ladder')).toBeInTheDocument()
+    })
+    // default-group ladder shows the pins, not the unlimited channel
+    expect(screen.queryByText('selora-unlimited')).toBeNull()
+    // switch to the unlimited group
+    const groupSelect = screen.getByRole('combobox', { name: 'Group' })
+    await userEvent.click(groupSelect)
+    await userEvent.click(await screen.findByText('unlimited'))
+    await waitFor(() => {
+      expect(screen.getByText('selora-unlimited')).toBeInTheDocument()
+    })
+    // the pin rows left the LADDER (the standby-pool section still lists
+    // them — the pool is group-independent by design)
+    const ladderPinRows = screen
+      .getAllByText('a6pin-fable-5-1169')
+      .filter((el) => el.closest('ol') !== null)
+    expect(ladderPinRows).toHaveLength(0)
+  })
 })

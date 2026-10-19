@@ -794,6 +794,200 @@ def test_action_promote():
         m.RUNTIME = None
 
 
+def test_pool_prefix_expansion():
+    # The bare "a6pin" seller entry covers EVERY pin channel (pool
+    # auto-discovery); exact-name entries still match exactly.
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    chs.append({"id": 23, "name": "a6pin-fable-5-9999", "status": 2,
+                "group": "default", "models": "claude-fable-5", "model_mapping": ""})
+    pool = m.expand_seller_to_channels(chs, "a6pin", "https://vantyr.xyz", "sk-RELAY")
+    names = {c["name"] for c in pool}
+    assert "a6pin-fable-5" in names and "a6pin-fable-5-9999" in names, names
+    # general sellers unchanged: prefix expansion, no a6pin grab
+    gen = m.expand_seller_to_channels(chs, "selora", "https://x", "sk")
+    assert all(c["name"].startswith("selora") for c in gen), gen
+    # legacy exact-name entry: exact only
+    exact = m.expand_seller_to_channels(chs, "a6pin-fable-5", "https://vantyr.xyz", "sk")
+    assert [c["name"] for c in exact] == ["a6pin-fable-5"], exact
+
+
+def test_parse_a6_key_name():
+    sku, merchant, name = m.parse_a6_key_name("FABLE 5 | 4665")
+    assert (sku, merchant, name) == ("claude-fable-5", "4665", "a6pin-fable-5-4665")
+    assert m.parse_a6_key_name("Fable 5.1 | 3825") == ("claude-fable-5-1", "3825", "a6pin-fable-5-1-3825")
+    # GPT stems keep their family-suffix: gpt-6-sol → a6pin-6-sol-<m>
+    assert m.parse_a6_key_name("SOL | 123") == ("gpt-6-sol", "123", "a6pin-6-sol-123")
+    assert m.parse_a6_key_name("6.1 SOL | 5942") == ("gpt-6-1-sol", "5942", "a6pin-6-1-sol-5942")
+    assert m.parse_a6_key_name("OPUS 5.5 | 4756") == ("claude-opus-5-5", "4756", "a6pin-opus-5-5-4756")
+    assert m.parse_a6_key_name("WHAT MODEL | 1") == (None, None, None)
+    assert m.parse_a6_key_name("") == (None, None, None)
+    assert m.parse_a6_key_name("no pipe here") == (None, None, None)
+
+
+class FakeA6M:
+    def __init__(self, tokens, reveals=None):
+        self.tokens = tokens
+        self.revealed = []
+        self.reveals = reveals or {}
+
+    def list_tokens(self):
+        return self.tokens
+
+    def reveal_key(self, token_id):
+        self.revealed.append(token_id)
+        if token_id not in self.reveals:
+            raise RuntimeError("no key")
+        return self.reveals[token_id]
+
+
+class SyncGW(FakeGW):
+    def __init__(self, channels):
+        super().__init__(channels)
+        self.created = []
+
+    def create_channel(self, name, key, models, group, base_url, priority=20):
+        self.created.append({
+            "name": name, "key": key, "models": models, "group": group,
+            "base_url": base_url, "priority": priority,
+        })
+        return True
+
+
+def test_sync_creates_standby_pins():
+    chs = [dict(c) for c in PIN_CHANNELS]  # a6pin-fable-5(-1169/-3825) exist
+    gw = SyncGW(chs)
+    a6m = FakeA6M(
+        [
+            {"id": 1, "name": "FABLE 5 | 4665"},      # new → create
+            {"id": 2, "name": "OPUS 5 | 851"},        # new → create
+            {"id": 3, "name": "FABLE 5 | 1169"},      # exists → skip
+            {"id": 4, "name": "WEIRD NAME"},          # unmapped → skipped+noted
+        ],
+        reveals={1: "sk-a", 2: "sk-b"},
+    )
+    state = {}
+    m.sync_a6_keys(gw, a6m, chs, state, None)
+    created_names = [c["name"] for c in gw.created]
+    assert created_names == ["a6pin-fable-5-4665", "a6pin-opus-5-851"], created_names
+    body = gw.created[0]
+    assert body["models"] == "claude-fable-5"
+    assert body["group"] == "default,unlimited"
+    assert body["base_url"] == "https://api.a6api.com"
+    assert body["priority"] == 20
+    assert state["_sync"]["created"] == created_names
+    assert state["_sync"]["skipped_existing"] == 1
+    assert state["_sync"]["unmatched"] == ["WEIRD NAME"]
+    # idempotent: re-run with the created channels in the list → no creates
+    chs2 = chs + [
+        {"id": 40, "name": "a6pin-fable-5-4665", "models": "claude-fable-5"},
+        {"id": 41, "name": "a6pin-opus-5-851", "models": "claude-opus-5"},
+    ]
+    gw2 = SyncGW(chs2)
+    m.sync_a6_keys(gw2, a6m, chs2, {}, None)
+    assert gw2.created == [], gw2.created
+
+
+def test_sync_reveal_budget_and_failure():
+    # reveal failure or budget (5/cycle) stops creating; never fatal
+    chs = [{"id": 1, "name": "a6pin-fable-5", "models": "claude-fable-5"}]
+    gw = SyncGW(chs)
+    tokens = [{"id": i, "name": f"FABLE 5 | {i}"} for i in range(100, 112)]
+    a6m = FakeA6M(tokens, reveals={i: f"sk-{i}" for i in range(100, 105)})
+    state = {}
+    m.sync_a6_keys(gw, a6m, chs, state, None)
+    assert len(gw.created) == 5, len(gw.created)  # reveal budget
+    # reveal failure: one bad reveal → stop for the cycle, no exception
+    gw2 = SyncGW(chs)
+    a6m2 = FakeA6M([{"id": 5, "name": "FABLE 5 | 555"}], reveals={})
+    m.sync_a6_keys(gw2, a6m2, chs, state, None)
+    assert gw2.created == []
+
+
+def test_sync_a6_list_failure_is_nonfatal():
+    class BrokenA6M:
+        def list_tokens(self):
+            raise RuntimeError("A6 down")
+
+    chs = [dict(c) for c in PIN_CHANNELS]
+    gw = SyncGW(chs)
+    m.sync_a6_keys(gw, BrokenA6M(), chs, {}, None)  # must not raise
+    assert gw.created == []
+
+
+class SickGW(FakeGW):
+    def __init__(self, channels, error_counts, success_counts):
+        super().__init__(channels)
+        self.error_counts = error_counts
+        self.success_counts = success_counts
+
+    def count_logs(self, log_type, channel_id, window_minutes):
+        if log_type == 5:
+            return self.error_counts.get(channel_id)
+        return self.success_counts.get(channel_id)
+
+
+def test_pin_is_sick():
+    # errors>0 and successes==0 → sick
+    assert m.pin_is_sick(SickGW([], {9: 3}, {9: 0}), 9, 60) is True
+    # errors with some successes → healthy (degraded but serving)
+    assert m.pin_is_sick(SickGW([], {9: 3}, {9: 2}), 9, 60) is False
+    # no traffic at all → not sick
+    assert m.pin_is_sick(SickGW([], {9: 0}, {9: 0}), 9, 60) is False
+    # query failure → None (never rotate on missing evidence)
+    assert m.pin_is_sick(SickGW([], {}, {9: 2}), 9, 60) is None
+    assert m.pin_is_sick(SickGW([], {9: 1}, {}), 9, 60) is None
+
+
+def test_sick_pin_rotation_in_cycle():
+    # An active pin with errors-only traffic is quarantined and a standby
+    # promoted within the cycle (same path as a confirmed fake).
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1  # a6pin-fable-5 active
+    chs[0]["id"] = 20
+    gw = SickGW(chs, {20: 4}, {20: 0})
+    # 1169 must be healthy for promotion (its check passes)
+    state = {"a6pin-fable-5": {"rotation": ["claude-fable-5"], "idx": 0, "fails": 0, "quarantined": False}}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    m.run_cycle(
+        gw, PassCC(),
+        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
+    )
+    # active pin quarantined (status 2 + state)
+    assert chs[0]["status"] == 2, chs[0]
+    assert state["a6pin-fable-5"]["quarantined"] is True
+    # standby promoted (enabled first) — promotion requires enforce
+    assert (21, 1) in gw.writes, gw.writes
+    # healthy pins are NOT rotated: run again with successes present
+    chs2 = [dict(c) for c in PIN_CHANNELS]
+    chs2[0]["status"] = 1
+    chs2[0]["id"] = 20
+    gw2 = SickGW(chs2, {20: 4}, {20: 5})
+    state2 = {}
+    m.run_cycle(
+        gw2, PassCC(),
+        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        ("claude", "gpt"), 168, threshold_for, 3, True, None, state2,
+    )
+    assert chs2[0]["status"] == 1, chs2[0]  # still active
+
+
+def test_status_payload_includes_sync():
+    state = {"_meta": {"last_cycle_at": "x"}, "_sync": {"last_sync_at": "y", "created": ["a6pin-a-1"]}}
+    payload = m.status_payload(state, m.read_display_config())
+    assert payload["last_sync_at"] == "y"
+    assert "_sync" not in payload["channels"]
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

@@ -24,7 +24,7 @@ import {
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -35,6 +35,13 @@ import {
 } from '@/components/drawer-layout'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Sheet,
   SheetContent,
@@ -105,16 +112,30 @@ export function ModelDetailDrawer(props: {
 }) {
   const { t } = useTranslation()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [groupFilter, setGroupFilter] = useState<string>('default')
 
   const open = props.model !== null && props.summary !== null
 
+  const modelGroups = useMemo(
+    () =>
+      [
+        ...new Set(
+          props.rows
+            .filter((row) => row.model === props.model)
+            .map((row) => row.group)
+        ),
+      ].sort(),
+    [props.rows, props.model]
+  )
+  // reset the filter when a different model opens (groups differ per model)
+  useEffect(() => {
+    if (modelGroups.length > 0 && !modelGroups.includes(groupFilter)) {
+      setGroupFilter(modelGroups[0] ?? 'default')
+    }
+  }, [modelGroups, groupFilter])
+
   const modelRows = props.rows.filter(
-    (row) =>
-      row.model === props.model &&
-      (row.group === 'default' ||
-        !props.rows.some(
-          (r) => r.model === props.model && r.group === 'default'
-        ))
+    (row) => row.model === props.model && row.group === groupFilter
   )
 
   const activeRow = modelRows.find(
@@ -207,9 +228,41 @@ export function ModelDetailDrawer(props: {
                   )}
                   icon={<ListOrdered className='size-4' />}
                 />
+                {modelGroups.length > 1 && (
+                  <div className='flex items-center gap-2'>
+                    <span className='text-muted-foreground text-xs'>
+                      {t('Group')}
+                    </span>
+                    <Select
+                      value={groupFilter}
+                      onValueChange={(value) => {
+                        if (value) setGroupFilter(value)
+                      }}
+                    >
+                      <SelectTrigger
+                        className='h-7 w-32'
+                        aria-label={t('Group')}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {modelGroups.map((group) => (
+                          <SelectItem key={group} value={group}>
+                            {group}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <LadderRows
                   rows={modelRows}
-                  activeChannelName={props.summary.activeChannelName}
+                  activeChannelName={
+                    groupFilter === 'default'
+                      ? props.summary.activeChannelName
+                      : (modelRows.find((row) => row.status === 1)
+                          ?.channelName ?? null)
+                  }
                 />
               </SideDrawerSection>
 

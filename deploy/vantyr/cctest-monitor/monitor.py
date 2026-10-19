@@ -56,14 +56,30 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          <merchant> (standbys — created disabled). Only
                          the active pin serves and is checked (owner rule
                          2026-10-18: only test what is actually used;
-                         balance conservation). One SELLER_CHANNELS entry
-                         per pin key, named exactly after its channel.
+                         balance conservation). The single entry
+                         "a6pin|<gateway>|<relay>" covers the WHOLE pin
+                         pool (pool auto-discovery, owner rule 2026-10-19):
+                         every a6pin-* channel in the gateway is in the
+                         pool, and daily keys created by sync_a6_keys (or
+                         by hand) get cycle coverage with no .env change.
+                         Legacy exact-name entries (a6pin-<model>) still
+                         match exactly.
                          Selora's sk-gw- key only authenticates from our
                          gateway's Go client (TLS-fingerprint-gated) — for
                          selora, point the URL at the gateway itself
                          (https://vantyr.xyz) with a Vantyr relay token;
                          checks then ride the real customer path and
                          channel attribution comes from the usage log.
+  A6_MANAGE_TOKEN        optional: A6 dashboard token for the key-sync job
+  A6_MANAGE_USER         optional: A6 user id (New-Api-User header) for the
+                         key-sync job. With both set, every cycle lists A6
+                         tokens, parses the owner's "<MODEL> | <merchant>"
+                         names, and creates missing pin channels as
+                         standbies (reveal rate limit ~5/cycle).
+  SICK_WINDOW_MINUTES    sick-pin rotation window, default 60 — an active
+                         pin with error logs and zero successes in the
+                         window is quarantined + rotated (owner rule
+                         2026-10-19: unavailability rotates like a fake).
   MODEL_PREFIXES         comma list, default "claude,gpt"
   USAGE_WINDOW_HOURS     traffic gate, default 168 (7 days)
   CYCLE_MINUTES          default 10
@@ -233,6 +249,59 @@ class Gateway:
             raise RuntimeError(f"abilities fix failed: {http_status} {payload}")
         return True
 
+    def create_channel(self, name, key, models, group, base_url, priority=20):
+        """Create a standby pin channel (POST /api/channel/, mode single).
+        Requires the channel:sensitive_write PAT scope. Abilities are built
+        automatically on create. Returns True on success."""
+        payload, http_status = self._request(
+            "POST", "/api/channel/",
+            {
+                "mode": "single",
+                "channel": {
+                    "type": 60,
+                    "name": name,
+                    "key": key,
+                    "base_url": base_url,
+                    "models": models,
+                    "group": group,
+                    "priority": priority,
+                    "weight": 1,
+                    "status": 2,  # standby: disabled until promoted
+                },
+            },
+        )
+        if http_status != 200 or not payload.get("success"):
+            raise RuntimeError(f"channel create failed for {name!r}: {http_status} {payload}")
+        return True
+
+    def update_channel_group(self, channel_id, group):
+        """Edit only the channel's group list via PUT /api/channel/.
+        Safety: group is non-sensitive (controller/channel_authz.go) and
+        GORM struct Updates() skips zero values, so the channel key,
+        models and every other field are preserved untouched. Abilities
+        are rebuilt automatically by the update path."""
+        payload, http_status = self._request(
+            "PUT", "/api/channel/",
+            {"id": channel_id, "group": group},
+        )
+        if http_status != 200 or not payload.get("success"):
+            raise RuntimeError(f"channel group update failed: {http_status} {payload}")
+        return True
+
+    def count_logs(self, log_type, channel_id, window_minutes):
+        """Total log rows of `log_type` (2=consume/success, 5=error) for one
+        channel in the window. Returns None on query failure (never
+        misclassifies a channel as sick or healthy on a transport error)."""
+        since = int(time.time()) - int(window_minutes) * 60
+        query = urllib.parse.urlencode({
+            "p": 1, "page_size": 1, "type": log_type,
+            "channel": channel_id, "start_timestamp": since,
+        })
+        payload, status = self._request("GET", f"/api/log/?{query}")
+        if status != 200 or not payload.get("success"):
+            return None
+        return (payload.get("data") or {}).get("total") or 0
+
     def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
         """Traffic gate: did anyone other than the monitor's own token use
         this model on this channel recently? Without the exclusion the
@@ -347,6 +416,188 @@ class CCTest:
         return None
 
 
+# ---------------------------------------------------------------------------
+# A6 management API (key sync — the owner creates "<MODEL> | <merchant>"
+# keys on A6's dashboard daily; this keeps the gateway pin pool in step
+# without manual channel creation).
+# ---------------------------------------------------------------------------
+
+# Owner's A6-side key naming: "<MODEL> | <merchant ch id>", e.g.
+# "FABLE 5 | 4665" → model claude-fable-5, merchant 4665. Map the model
+# part of the name to our SKU (the model part uses spaces/dots, our SKUs
+# use dashes).
+A6_KEY_NAME_TO_SKU = {
+    "fable 5": "claude-fable-5",
+    "fable 5.1": "claude-fable-5-1",
+    "opus 5": "claude-opus-5",
+    "opus 5.5": "claude-opus-5-5",
+    "sonnet 5": "claude-sonnet-5",
+    "sonnet 5.5": "claude-sonnet-5-5",
+    "astra": "gpt-6-astra",
+    "sol": "gpt-6-sol",
+    "6.1 sol": "gpt-6-1-sol",
+}
+
+
+def parse_a6_key_name(raw):
+    """'"FABLE 5 | 4665"' → (sku, merchant, channel-name). Name parts are
+    case-insensitive; returns (None, None, None) when the name does not
+    follow the convention or maps to no known SKU."""
+    if not raw:
+        return None, None, None
+    parts = [p.strip() for p in str(raw).split("|")]
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        return None, None, None
+    sku = A6_KEY_NAME_TO_SKU.get(parts[0].lower())
+    if sku is None:
+        return None, None, None
+    stem = sku.replace("claude-", "", 1).replace("gpt-", "", 1)
+    channel_name = f"a6pin-{stem}-{parts[1]}"
+    return sku, parts[1], channel_name
+
+
+class A6Management:
+    """A6 dashboard management API client (A6 is a New API fork; the owner's
+    dedicated account token list). Key reveal is rate-limited (~5 per batch,
+    ~5 min cooldown between batches) — pacing handled by the caller."""
+
+    def __init__(self, base, token, user_id):
+        self.base = base.rstrip("/")
+        self.token = token
+        self.user_id = user_id
+
+    def list_tokens(self):
+        """All tokens on the A6 account: [{id, name, ...}, ...]. Name
+        follows the "<MODEL> | <merchant>" convention."""
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "New-Api-User": str(self.user_id),
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+        url = f"{self.base}/api/token/?p=1&page_size=100"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode())
+        if not payload.get("success"):
+            raise RuntimeError(f"A6 token list failed: {payload}")
+        items = (payload.get("data") or {}).get("items") or []
+        # Token list may paginate; keep fetching while more pages exist.
+        total = (payload.get("data") or {}).get("total") or len(items)
+        page = 1
+        while len(items) < total:
+            page += 1
+            url = f"{self.base}/api/token/?p={page}&page_size=100"
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                payload = json.loads(resp.read().decode())
+            if not payload.get("success"):
+                break
+            more = (payload.get("data") or {}).get("items") or []
+            if not more:
+                break
+            items.extend(more)
+        return items
+
+    def reveal_key(self, token_id):
+        """Reveal one token's sk- key. Rate limit is ~5 reveals per batch
+        with a ~5 min cooldown after — the sync job paces itself and treats
+        a rate-limit response as 'try again next cycle'."""
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "New-Api-User": str(self.user_id),
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+        req = urllib.request.Request(
+            f"{self.base}/api/token/{token_id}/key",
+            data=b"{}", method="POST", headers=headers,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                payload = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"A6 key reveal rate-limited/failed: {e.code}") from e
+        if not payload.get("success"):
+            raise RuntimeError(f"A6 key reveal failed: {payload}")
+        key = (payload.get("data") or {}).get("key") or ""
+        if not key:
+            raise RuntimeError(f"A6 key reveal returned empty key for token {token_id}")
+        return key
+
+
+def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a6api.com", group="default,unlimited"):
+    """A6 → gateway key sync (owner rule 2026-10-19: every A6 key on the
+    management account becomes a standby pin channel for its model).
+
+    Idempotent: A6 tokens whose derived channel name already exists are
+    skipped. New keys are revealed (≤ A6_SYNC_BATCH reveals per cycle, the
+    A6-side rate limit) and created as standby channels (status 2, P20,
+    both groups, exactly the one model). Unknown/unparseable names are
+    logged + alerted once per cycle summary, never fatal."""
+    reveals_this_cycle = 0
+    max_reveals = 5
+    existing = {ch.get("name") for ch in channels}
+    created, skipped, unmatched = [], 0, []
+    try:
+        tokens = a6m.list_tokens()
+    except Exception as e:
+        LOG.warning("[sync] A6 token list failed (%s); sync skipped this cycle", e)
+        return
+    for token in tokens:
+        name = token.get("name") or ""
+        sku, merchant, channel_name = parse_a6_key_name(name)
+        if channel_name is None:
+            if name:
+                unmatched.append(name)
+            continue
+        if channel_name in existing:
+            skipped += 1
+            continue
+        if reveals_this_cycle >= max_reveals:
+            LOG.info("[sync] reveal budget reached; %d+ remaining keys sync next cycle", 1)
+            break
+        try:
+            key = a6m.reveal_key(token.get("id"))
+        except Exception as e:
+            LOG.warning("[sync] reveal failed for %r (%s); will retry next cycle", name, e)
+            break
+        reveals_this_cycle += 1
+        try:
+            gateway.create_channel(channel_name, key, sku, group, base_url)
+        except Exception as e:
+            LOG.error("[sync] channel create FAILED for %r: %s", channel_name, e)
+            continue
+        created.append(channel_name)
+        existing.add(channel_name)
+        LOG.info("[sync] created standby pin %s for %s (merchant %s)", channel_name, sku, merchant)
+    state["_sync"] = {
+        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "created": created,
+        "skipped_existing": skipped,
+        "unmatched": unmatched,
+    }
+    if created:
+        discord_alert(discord, f"cctest sync: created {len(created)} standby pin(s): {', '.join(created)}")
+    if unmatched:
+        LOG.warning("[sync] %d A6 token name(s) not in the SKU map: %s", len(unmatched), ", ".join(unmatched[:5]))
+
+
+def pin_is_sick(gateway, channel_id, window_minutes):
+    """Sick-pin detection (owner rule 2026-10-19): a pin whose recent
+    traffic is all failures and no successes is as unusable as a fake —
+    rotate it. Returns True (sick), False (healthy), or None (no evidence/
+    query failed — NEVER rotate on missing evidence)."""
+    errors = gateway.count_logs(5, channel_id, window_minutes)
+    if errors is None:
+        return None
+    if errors == 0:
+        return False
+    successes = gateway.count_logs(2, channel_id, window_minutes)
+    if successes is None:
+        return None
+    return errors > 0 and successes == 0
+
+
 def provider_for(model):
     """cctest detection line: claude → Anthropic /v1/messages, codex →
     OpenAI /v1/responses. GPT-family models ride the codex line."""
@@ -406,7 +657,7 @@ def park(reason):
 RUNTIME = None
 
 # Top-level state keys that are not per-channel state entries.
-RESERVED_STATE_KEYS = ("bad_standbys", "_meta")
+RESERVED_STATE_KEYS = ("bad_standbys", "_meta", "_sync")
 
 
 def read_display_config():
@@ -445,6 +696,7 @@ def status_payload(state, config):
     return {
         **config,
         "last_cycle_at": (state.get("_meta") or {}).get("last_cycle_at"),
+        "last_sync_at": (state.get("_sync") or {}).get("last_sync_at"),
         "channels": channels,
         "bad_standbys": state.get("bad_standbys") or {},
     }
@@ -722,8 +974,15 @@ def parse_seller_channels(raw, known_prefixes):
 def expand_seller_to_channels(channels, seller_prefix, base_url, seller_key):
     """Resolve one seller entry to the gateway channels it covers.
     General sellers: every channel whose name starts with the entry name.
-    Pinned entries ("a6pin-<model>", one key per merchant+model): EXACT
-    name match — "a6pin-fable-5" must not also grab "a6pin-fable-5-1"."""
+    The "a6pin" entry is a POOL prefix (owner rule 2026-10-19): it covers
+    EVERY a6pin-* channel in the gateway — daily merchant keys created by
+    sync_a6_keys (or by hand) join the pool with zero .env changes. All pin
+    checks are gateway-routed with the relay token, so one entry covers
+    the whole pool. Exact-name entries like "a6pin-fable-5-1" (one key per
+    merchant+model, from the pre-pool .env) still match exactly — the pool
+    branch only fires for the bare "a6pin" prefix."""
+    if seller_prefix == "a6pin":
+        return [ch for ch in channels if (ch.get("name") or "").startswith("a6pin")]
     if seller_prefix.startswith("a6pin"):
         return [ch for ch in channels if (ch.get("name") or "") == seller_prefix]
     return [ch for ch in channels if (ch.get("name") or "").startswith(seller_prefix)]
@@ -802,11 +1061,24 @@ def main():
         full_check=os.environ.get("CCTEST_FULL_CHECK", "false").lower() in ("1", "true", "yes"),
     )
     discord = os.environ.get("DISCORD_WEBHOOK") or None
+    # A6 key sync (optional: envs A6_MANAGE_TOKEN + A6_MANAGE_USER enable
+    # automatic standby-pool creation from the owner's daily A6 keys).
+    a6m = None
+    a6_manage_token = os.environ.get("A6_MANAGE_TOKEN")
+    a6_manage_user = os.environ.get("A6_MANAGE_USER")
+    if a6_manage_token and a6_manage_user:
+        a6m = A6Management(
+            os.environ.get("A6_MANAGE_BASE", "https://a6api.com"),
+            a6_manage_token, a6_manage_user,
+        )
+    else:
+        LOG.info("A6 key sync disabled (A6_MANAGE_TOKEN/A6_MANAGE_USER not set)")
+    sick_window_minutes = max(1, int(os.environ.get("SICK_WINDOW_MINUTES", "60")))
 
     LOG.info(
-        "cctest-monitor starting: enforce=%s cycle=%dm prefixes=%s sellers=%s thresholds(prefix)=%s",
+        "cctest-monitor starting: enforce=%s cycle=%dm prefixes=%s sellers=%s thresholds(prefix)=%s a6sync=%s",
         enforce, cycle_minutes, model_prefixes,
-        [s[0] for s in sellers], fail_threshold_prefixes,
+        [s[0] for s in sellers], fail_threshold_prefixes, a6m is not None,
     )
 
     state = load_state()
@@ -827,7 +1099,7 @@ def main():
             run_cycle(
                 gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 threshold_for, permanent_fails, enforce, discord, state,
-                seller_model_filter,
+                seller_model_filter, a6m, sick_window_minutes,
             )
         except Exception:
             LOG.exception("cycle failed")
@@ -836,7 +1108,7 @@ def main():
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
               threshold_for, permanent_fails, enforce, discord, state,
-              seller_model_filter=None):
+              seller_model_filter=None, a6m=None, sick_window_minutes=60):
     seller_model_filter = seller_model_filter or {}
     channels = None
     for name, base_url, seller_key in sellers:
@@ -846,6 +1118,15 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             except Exception as e:
                 LOG.warning("channel list failed (%s); skipping this cycle", e)
                 return
+    # A6 key sync (best effort, never fatal): pulls the owner's daily
+    # "<MODEL> | <merchant>" keys into the pool as standby channels before
+    # the registry is built, so new pins get coverage this same cycle.
+    if a6m is not None:
+        try:
+            sync_a6_keys(gateway, a6m, channels, state, discord)
+            channels = gateway.list_channels()  # re-list: sync may have created
+        except Exception:
+            LOG.exception("[sync] unexpected failure; continuing cycle")
     # channel name → seller key, built from ALL seller entries BEFORE any
     # processing: standby promotion must check a standby with the standby's
     # OWN key (each pin is a different per-merchant key), and a promotion
@@ -855,6 +1136,12 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     for name, base_url, seller_key in sellers:
         for ch in expand_seller_to_channels(channels, name, base_url, seller_key):
             seller_registry[ch.get("name")] = seller_key
+    # Active pins per model, for sick-pin rotation after their checks.
+    active_pins = {}
+    for ch in channels:
+        if is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED:
+            for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
+                active_pins.setdefault(m, ch)
     for name, base_url, seller_key in sellers:
         allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
@@ -863,6 +1150,39 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 usage_window_hours, threshold_for, permanent_fails, enforce,
                 discord, state, channels, allowed, seller_registry,
             )
+            save_state(state)
+    # Sick-pin rotation (owner rule 2026-10-19): a pin with recent failures
+    # and zero successes is as unusable as a fake — quarantine + promote,
+    # exactly the fake path. Inconclusive cctest verdicts alone never
+    # rotate (fail-open), but the gateway's own error log is hard evidence.
+    if enforce:
+        for model, pin in active_pins.items():
+            sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes)
+            if sick is not True:
+                continue
+            pin_name = pin.get("name")
+            LOG.warning("[sick] active pin %s (ch %s) failing with no successes — rotating", pin_name, pin.get("id"))
+            ch_state = state.setdefault(pin_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+            ch_state.update({
+                "quarantined": True,
+                "quarantined_since": datetime.now(timezone.utc).isoformat(),
+                "permanent": True,
+                "model": model,
+            })
+            try:
+                gateway.set_status(int(pin["id"]), CHANNEL_MANUALLY_DISABLED)
+                gateway.fix_abilities()
+                discord_alert(discord, f"cctest: active pin {pin_name} for {model} is failing with no successes — rotating to next standby")
+                entry = find_seller_entry(sellers, channels, pin_name)
+                if entry:
+                    promote_next_standby(
+                        gateway, cctest, pin, entry[0], entry[1], model,
+                        enforce, discord, state, channels, seller_registry,
+                    )
+                else:
+                    LOG.error("[sick] %s not covered by any SELLER_CHANNELS entry; quarantined without promotion", pin_name)
+            except Exception as e:
+                LOG.error("[sick] rotation FAILED for %s (stays active): %s", pin_name, e)
             save_state(state)
     # Freshness marker for the status server: an old last_cycle_at (vs
     # cycle_minutes) visibly signals a broken cycle on the admin page. Not
