@@ -3076,3 +3076,40 @@ SECURITY FLAG for the owner (pre-existing, unrelated files):
 `deploy/vantyr/cctest-monitor/rebuild_env.py` (committed 0f44c3236,
 pushed to the public repo) contains the live sidecar PAT and cctest
 key in plaintext at lines 44-45 — rotate both and scrub.
+## 2026-10-19 — claude-fable-5-1: dot mapping removed (A6 dash pool is native)
+
+Owner question: are Fable 5.1 dot/dash spellings handled correctly
+through A6? A6 serves BOTH — but they are DIFFERENT merchant pools:
+
+- `claude-fable-5.1` (dot): 31 merchants. Cheapest ~$0.12/$0.60.
+  Probe evidence: a 10-token request bills 898 prompt tokens (a
+  ~888-token hidden prompt injected by the merchant pool) with
+  OpenAI-style usage reporting. Output model name echo: dash.
+- `claude-fable-5-1` (dash): 78 merchants. Cheapest ~$0.059/$0.29;
+  cheapest authenticity-guaranteed $0.108/$0.54. Probe evidence:
+  exact token billing (10 prompt, 5 completion), Anthropic-style
+  usage with cache_creation/cached fields. Native pass-through.
+
+**Problem found and fixed:** ch5/ch6 model_mapping had
+`claude-fable-5-1 → claude-fable-5.1` (set 2026-10-12 when the dot
+spelling was the only one A6's token permissions allowed). That
+routed all our fable-5-1 traffic into the DOT pool — phantom
+prompt-token inflation at ~900/request visible in ch5 logs
+(907/902/910-token rows for tiny requests, billed to customers via
+upstream usage: `usage_billing_path: upstream`), plus higher cost.
+Fix: model_mapping cleared to {} on ch5 + ch6 (model_mapping is a
+non-sensitive field — the monitor PAT can edit it). Verified: forced
+ch5/ch6 channel tests with model=claude-fable-5-1 now bill cleanly
+(1 prompt / 51 completion, no is_model_mapped flag, cache_ratio
+0.2); A6-side direct dash probe bills exact 10 tokens with genuine
+cache reporting. Selora (ch1/4) and Mia (ch7) list the dash spelling
+natively — unaffected. cctest.ai does not list claude-fable-5-1 (nor
+any dot Claude spelling), so no customer-facing alias entry is
+needed (unlike gpt-6.1-sol).
+
+Monitor note: fable-5-1 has NO pin channels (pins exist only for
+claude-fable-5) — it rides the general tier, so its merchants are
+checked via the ch5 entry under the traffic gate (usage in 7 days)
+and A6's own smart routing across 78 dash-pool merchants. If this
+SKU's volume grows, consider pins on the new A6 account like the
+other Claude models.
