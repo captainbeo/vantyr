@@ -3458,3 +3458,16 @@ Namecheap-tool-set brevo/SPF TXT records were the only ones publishing).
   (reload-doesn't-apply gotcha applies).
 - Verification passed; sitemap.xml submitted to Search Console by the
   owner. Indexing begins from Google's side now.
+
+## 2026-10-19 — 5-min key sync + SOL pool live (pinned-next43, same tag redeploy)
+
+Owner added SOL keys on A6 ("6 SOL | <merchant>" ×5) and asked for
+real-time pickup. The sync loop now runs on its own daemon thread every
+SYNC_INTERVAL_MINUTES (default 5, env CCTEST_SYNC_INTERVAL_MINUTES) —
+decoupled from the 60-min cctest cycle (cheap sync vs expensive checks).
+The SKU map learned '6 sol' (A6's "GPT 6 SOL" marketing name). Live: all
+5 SOL keys synced as standbys on the first tick; first pin
+(a6pin-6-sol-5703) enabled, verified attr_match, gpt-6-sol relays
+through it (usage-log attribution). Real-time sync is bounded by A6's
+~5-reveal-per-batch rate limit, so a big new batch lands over 2-3
+5-minute ticks — acceptable.
