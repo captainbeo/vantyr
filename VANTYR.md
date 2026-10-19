@@ -3311,3 +3311,31 @@ tree-wide after a teammate's format-script crash stripped ~676 files
 (`bun run copyright` repaired; HEAD was clean — only the working
 tree was affected). 25 vitest tests; bundle grep-verified live
 ('Enforcement paused' present); verify action live attr_match.
+
+## 2026-10-19 — Hero video fix: poster visible under relay map (pinned-next42, LIVE)
+
+`fix(home): video poster visible under relay map — aspect ratio + right
+column` (9703c6b6b, tag deploy/2026-10-19-hero-video-fix). Owner-reported:
+video not visible on the homepage despite pinned-next41 serving it.
+
+- Root cause was TWO layout bugs, both invisible to DOM-level tests:
+  1. The poster `<button>` is absolute-positioned inside a wrapper with
+     no height of its own → wrapper collapsed to 2px tall (live geometry
+     check measured 315×2). Fixed: wrapper carries `aspect-video` (16:9).
+  2. HeroVideo was a sibling grid child of the relay map in the 2-column
+     hero grid → on desktop it wrapped into a NEW grid cell (left
+     column, row 2) instead of stacking under the map. Fixed: map +
+     video share one right-column `flex flex-col items-center` container.
+- Regression test added (aspect-video on the wrapper); home suite 22/22.
+  Deploy: image pinned-next42 (c55067d806b7), binary grep-verified
+  (aspect-video ×3), compose repointed, source-notice + Footer updated,
+  archive sha256
+  1d9ef15ec8db2fae9b10330dcf06a15a769ac9d3d45b1dada249121ec50322aa.
+- Live: new bundle index.10caad9268.js carries the component; local
+  preview geometry: video 416×234, same column as the map, 32px below
+  it. Videos 206, homepage 200, gateway healthy.
+- Lesson recorded: DOM-presence tests pass on invisible layouts — the
+  click-to-play and label assertions all passed while the box was 2px.
+  Visual/layout changes need a geometry assertion (aspect-ratio class)
+  or a real preview check before shipping.
+- Rollback: pinned-next41 (a6c6487c9d86) via compose repoint.
