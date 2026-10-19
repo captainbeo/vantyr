@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# Private / authenticated areas — no value for crawlers, skip them.
+Disallow: /api/
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /setup
+Disallow: /dashboard
+Disallow: /wallet
+Disallow: /keys
+Disallow: /profile
+Disallow: /oauth
+Disallow: /console
+
+Sitemap: https://vantyr.xyz/sitemap.xml

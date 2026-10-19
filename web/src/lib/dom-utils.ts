@@ -16,6 +16,51 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+/**
+ * Document-head DOM helpers (favicon, title).
+ */
+const MARKETING_ROUTES = [
+  /^\/$/,
+  /^\/about\/?$/,
+  /^\/pricing(\/|$)/,
+  /^\/rankings\/?$/,
+  /^\/privacy-policy\/?$/,
+  /^\/user-agreement\/?$/,
+]
+
+function isMarketingRoute(pathname: string): boolean {
+  return MARKETING_ROUTES.some((re) => re.test(pathname))
+}
+
+/**
+ * Build the runtime document title for a system name and path.
+ *
+ * Marketing routes keep the static SEO title from `index.html` untouched so
+ * crawlers (and users mid-navigation) always see the descriptive page title;
+ * the system name replaces it only on authenticated app routes, where the
+ * title is admin branding ("Vantyr — Console") rather than a search target.
+ */
+export function buildDocumentTitle(systemName: string, pathname: string): string | null {
+  const name = systemName.trim()
+  if (!name) return null
+  if (isMarketingRoute(pathname)) return null
+  if (/\s[—-]\s/.test(name)) return name
+  return `${name} — Console`
+}
+
+/** Apply a runtime title, respecting the marketing-route SEO-title policy. */
+export function applyDocumentTitleToDom(systemName: string, pathname: string) {
+  if (typeof document === 'undefined') return
+  const title = buildDocumentTitle(systemName, pathname)
+  if (!title) return
+  if (document.title === title) return
+  document.title = title
+  const metaTitle = document.querySelector(
+    'meta[name="title"]'
+  ) as HTMLMetaElement | null
+  if (metaTitle) metaTitle.setAttribute('content', title)
+}
+
 export function applyFaviconToDom(url: string) {
   if (typeof document === 'undefined' || !url) return
   try {
