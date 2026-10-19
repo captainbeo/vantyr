@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -74,6 +56,23 @@ function channelFixture(partial: Record<string, unknown>) {
   }
 }
 
+const CC_OK = {
+  enforce: true,
+  cycle_minutes: 60,
+  standby_cooldown_hours: 3,
+  permanent_fails: 3,
+  thresholds: {},
+  last_cycle_at: '2026-10-19T00:00:00',
+  channels: {
+    'a6pin-fable-5': {
+      last_verdicts: {
+        'claude-fable-5': { verdict: 'official', at: '2026-10-19T00:05:00' },
+      },
+    },
+  },
+  bad_standbys: {},
+}
+
 const CHANNELS = [
   channelFixture({ id: 8, name: 'a6pin-fable-5', status: 1, priority: 20 }),
   channelFixture({
@@ -83,33 +82,6 @@ const CHANNELS = [
     priority: 20,
   }),
 ]
-
-const CC_STATUS = {
-  data: {
-    success: true,
-    data: {
-      enforce: true,
-      cycle_minutes: 60,
-      standby_cooldown_hours: 3,
-      permanent_fails: 3,
-      thresholds: {},
-      last_cycle_at: '2026-10-19T00:00:00',
-      channels: {
-        'a6pin-fable-5': {
-          last_verdicts: {
-            'claude-fable-5': {
-              verdict: 'official',
-              at: '2026-10-19T00:05:00',
-            },
-          },
-        },
-      },
-      bad_standbys: {
-        'claude-fable-5': { 'a6pin-fable-5-1169': Date.now() / 1000 - 60 },
-      },
-    },
-  },
-}
 
 async function renderPage(options?: { cctestFails?: boolean }) {
   const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
@@ -125,7 +97,7 @@ async function renderPage(options?: { cctestFails?: boolean }) {
       if (options?.cctestFails) {
         throw new Error('monitor down')
       }
-      return CC_STATUS
+      return { data: { success: true, data: CC_OK } }
     }
     throw new Error(`Unexpected request: ${url}`)
   })
@@ -175,44 +147,96 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Model Routing page', () => {
-  it('renders one summary row per model with the active channel and verdict badge', async () => {
+describe('Model Routing dashboard', () => {
+  it('renders KPI tiles with healthy/attention counts', async () => {
     await renderPage()
     await waitFor(() => {
-      expect(screen.getAllByText('claude-fable-5').length).toBeGreaterThan(0)
+      expect(screen.getByText('Healthy')).toBeInTheDocument()
     })
-    expect(screen.getAllByText('a6pin-fable-5').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('official').length).toBeGreaterThan(0)
-    // cooldown badge for the benched standby (mark 60s ago, 3h cooldown)
-    expect(screen.getByText(/expires in/)).toBeInTheDocument()
+    expect(screen.getByText('1 / 1')).toBeInTheDocument()
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
+    expect(screen.getByText('Standby pool')).toBeInTheDocument()
+    expect(screen.getByText('Monitor')).toBeInTheDocument()
   })
 
-  it('shows the degraded banner and routing-only table when the monitor is unreachable', async () => {
-    await renderPage({ cctestFails: true })
-    await waitFor(() => {
-      expect(
-        screen.getByText('Monitor unavailable — showing routing only')
-      ).toBeInTheDocument()
+  it('renders one health card per model with active channel and verdict', async () => {
+    await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
     })
-    expect(screen.queryByText('Verify now')).toBeNull()
+    expect(card).toBeInTheDocument()
+    expect(screen.getByText('a6pin-fable-5')).toBeInTheDocument()
+    expect(screen.getByText('official')).toBeInTheDocument()
+    // standby dot row + count
+    expect(screen.getByText('1 standbys')).toBeInTheDocument()
   })
 
-  it('filters the detail table by the model search input', async () => {
+  it('does not show the attention strip when everything is healthy', async () => {
     await renderPage()
     await waitFor(() => {
-      expect(screen.getAllByText('claude-fable-5').length).toBeGreaterThan(0)
+      expect(screen.getByText('Healthy')).toBeInTheDocument()
     })
-    const search = screen.getByLabelText('Search models')
-    await userEvent.type(search, 'nonexistent-model')
+    // "Needs attention" appears only as the KPI tile label, not the strip
+    const attentionElements = screen.getAllByText('Needs attention')
+    expect(attentionElements).toHaveLength(1)
+  })
+
+  it('shows the attention strip for a quarantined active pin', async () => {
+    const quarantinedStatus = {
+      ...CC_OK,
+      channels: {
+        'a6pin-fable-5': { quarantined: true },
+      },
+    }
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/api/channel') {
+        return {
+          data: {
+            success: true,
+            data: { items: CHANNELS, total: 2, page: 1, page_size: 100 },
+          },
+        }
+      }
+      if (url === '/api/cctest/status') {
+        return { data: { success: true, data: quarantinedStatus } }
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ModelRouting />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
     await waitFor(() => {
-      expect(
-        screen.getByText('No channels serve this model')
-      ).toBeInTheDocument()
+      expect(screen.getByText(/active pin quarantined/)).toBeInTheDocument()
     })
   })
 
-  it('triggers a verify POST for a channel row', async () => {
+  it('opens the detail drawer on card click and shows the ladder + standby pool', async () => {
+    await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
+    await waitFor(() => {
+      expect(screen.getByText('Routing ladder')).toBeInTheDocument()
+    })
+    expect(screen.getAllByText('Standby pool').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('a6pin-fable-5-1169').length).toBeGreaterThan(0)
+  })
+
+  it('fires a verify POST from the drawer', async () => {
     const { post } = await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
     const verifyButton = await screen.findByRole('button', {
       name: 'Verify now',
     })
@@ -226,8 +250,12 @@ describe('Model Routing page', () => {
     })
   })
 
-  it('promotes a standby after the confirmation dialog', async () => {
+  it('fires a promote POST after the confirm dialog inside the drawer', async () => {
     const { post } = await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
     const promoteButton = await screen.findByRole('button', {
       name: 'Promote standby',
     })
@@ -240,6 +268,23 @@ describe('Model Routing page', () => {
         { model: 'claude-fable-5' },
         expect.anything()
       )
+    })
+  })
+
+  it('degrades gracefully when the monitor is unreachable', async () => {
+    await renderPage({ cctestFails: true })
+    await waitFor(() => {
+      expect(
+        screen.getByText('Monitor unavailable — showing routing only')
+      ).toBeInTheDocument()
+    })
+    // KPI monitor tile shows Down
+    expect(screen.getByText('Down')).toBeInTheDocument()
+    // cards still render (routing-only)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /claude-fable-5/ })
+      ).toBeInTheDocument()
     })
   })
 })

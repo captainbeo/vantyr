@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { describe, expect, it } from 'vitest'
 
 import type { Channel } from '@/features/channels/types'
@@ -304,5 +286,120 @@ describe('buildModelSummaries', () => {
     )
     const summaries = buildModelSummaries(rows, 0)
     expect(summaries[0]?.activeChannelName).toBeNull()
+  })
+
+  it('classifies health: pass verdict on the active pin is healthy', () => {
+    const channels = [
+      channel({
+        id: 8,
+        name: 'a6pin-fable-5',
+        models: 'claude-fable-5',
+        status: 1,
+        priority: 20,
+      }),
+      channel({
+        id: 9,
+        name: 'a6pin-fable-5-3825',
+        models: 'claude-fable-5',
+        status: 2,
+        priority: 20,
+      }),
+    ]
+    const rows = buildRoutingRows(channels, CC_STATUS)
+    const summaries = buildModelSummaries(rows, 1_000_000 + 100)
+    expect(summaries[0]?.health).toBe('healthy')
+    expect(summaries[0]?.attentionReason).toBeNull()
+    expect(summaries[0]?.activeMerchant).toBeNull()
+    // standby pool detail is exposed for the drawer
+    expect(summaries[0]?.standbys).toHaveLength(1)
+    expect(summaries[0]?.standbys[0]?.merchant).toBe('3825')
+    expect(summaries[0]?.standbys[0]?.state).toBe('ready')
+  })
+
+  it('classifies health: bad verdict on the active pin is attention', () => {
+    const status: CctestStatus = {
+      ...CC_STATUS,
+      channels: {
+        'a6pin-fable-5': {
+          last_verdicts: {
+            'claude-fable-5': { verdict: 'attr_swapped', at: 'x' },
+          },
+        },
+      },
+    }
+    const rows = buildRoutingRows(
+      [
+        channel({
+          id: 8,
+          name: 'a6pin-fable-5',
+          models: 'claude-fable-5',
+          status: 1,
+        }),
+      ],
+      status
+    )
+    const summaries = buildModelSummaries(rows, 0)
+    expect(summaries[0]?.health).toBe('attention')
+    expect(summaries[0]?.attentionReason).toBe('bad-verdict')
+  })
+
+  it('classifies health: quarantined active pin is attention, active pin without verdict is uncertain', () => {
+    const status: CctestStatus = {
+      ...CC_STATUS,
+      channels: {
+        'a6pin-fable-5': { quarantined: true },
+      },
+    }
+    const quarantinedRows = buildRoutingRows(
+      [
+        channel({
+          id: 8,
+          name: 'a6pin-fable-5',
+          models: 'claude-fable-5',
+          status: 1,
+        }),
+      ],
+      status
+    )
+    const quarantined = buildModelSummaries(quarantinedRows, 0)
+    expect(quarantined[0]?.health).toBe('attention')
+    expect(quarantined[0]?.attentionReason).toBe('quarantined-active')
+
+    const plainRows = buildRoutingRows(
+      [
+        channel({
+          id: 8,
+          name: 'a6pin-fable-5',
+          models: 'claude-fable-5',
+          status: 1,
+        }),
+      ],
+      null
+    )
+    const plain = buildModelSummaries(plainRows, 0)
+    expect(plain[0]?.health).toBe('uncertain')
+    expect(plain[0]?.attentionReason).toBeNull()
+  })
+
+  it('classifies health: all standbys in cooldown is attention (no rotation available)', () => {
+    const channels = [
+      channel({
+        id: 8,
+        name: 'a6pin-fable-5',
+        models: 'claude-fable-5',
+        status: 1,
+      }),
+      channel({
+        id: 9,
+        name: 'a6pin-fable-5-1169',
+        models: 'claude-fable-5',
+        status: 2,
+      }),
+    ]
+    const rows = buildRoutingRows(channels, CC_STATUS)
+    const summaries = buildModelSummaries(rows, 1_000_000 + 100)
+    expect(summaries[0]?.health).toBe('attention')
+    expect(summaries[0]?.attentionReason).toBe('no-standbys-ready')
+    expect(summaries[0]?.standbys[0]?.state).toBe('cooldown')
   })
 })

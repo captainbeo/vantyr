@@ -1,24 +1,12 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import type { Channel } from '@/features/channels/types'
 
-import type { CctestStatus, ModelSummary, RoutingRow } from '../types'
+import type {
+  CctestStatus,
+  ModelHealth,
+  ModelSummary,
+  RoutingRow,
+  StandbyEntry,
+} from '../types'
 
 // ============================================================================
 // Channel × cctest join — pure functions, no React
@@ -130,7 +118,23 @@ export function buildRoutingRows(
   return rows
 }
 
-/** Per-model summary: active channel, verdict, standby pool health. */
+// Verdict categories (mirror the monitor's PASS/SOFT/BAD sets — the
+// inconclusive/unknown values fall through as uncertain).
+const PASS_VERDICTS = new Set(['official', 'attr_match'])
+const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
+
+function standbyStateFor(
+  row: RoutingRow,
+  nowSeconds: number
+): StandbyEntry['state'] {
+  if (row.quarantined) return 'quarantined'
+  if (row.cooldownExpiresAt !== null && row.cooldownExpiresAt > nowSeconds) {
+    return 'cooldown'
+  }
+  return 'ready'
+}
+
+/** Per-model summary: health, active channel/merchant, verdict, standby pool. */
 export function buildModelSummaries(
   rows: RoutingRow[],
   nowSeconds: number
@@ -163,17 +167,51 @@ export function buildModelSummaries(
     const standbyRows = pool.filter(
       (row) => row.provider === 'a6pin' && row.status !== 1
     )
-    const inCooldown = standbyRows.filter(
-      (row) =>
-        row.cooldownExpiresAt !== null && row.cooldownExpiresAt > nowSeconds
-    )
+    const standbys: StandbyEntry[] = standbyRows.map((row) => ({
+      channelId: row.channelId,
+      channelName: row.channelName,
+      merchant: row.merchant,
+      state: standbyStateFor(row, nowSeconds),
+      verdict: row.verdict,
+      cooldownExpiresAt: row.cooldownExpiresAt,
+    }))
+    const inCooldown = standbys.filter((entry) => entry.state === 'cooldown')
     const activeVerdict = active?.verdict ?? null
+    const activeMerchant = active?.merchant ?? null
+
+    // Health classification (single source of truth for cards + KPIs):
+    // attention = serving problem (quarantined/no active/bad verdict) or a
+    // standby pool that can't cover a rotation; uncertain = the active pin's
+    // verdict is unknown/inconclusive (may be fine — re-verify to know).
+    let health: ModelHealth = 'healthy'
+    let attentionReason: ModelSummary['attentionReason'] = null
+    if (active == null) {
+      health = 'attention'
+      attentionReason = 'no-active'
+    } else if (active.quarantined) {
+      health = 'attention'
+      attentionReason = 'quarantined-active'
+    } else if (activeVerdict != null && BAD_VERDICTS.has(activeVerdict)) {
+      health = 'attention'
+      attentionReason = 'bad-verdict'
+    } else if (standbys.length > 0 && standbys.length === inCooldown.length) {
+      // Rotation is the recovery action — if every standby is cooling down
+      // there is nothing to rotate to right now.
+      health = 'attention'
+      attentionReason = 'no-standbys-ready'
+    } else if (activeVerdict == null || !PASS_VERDICTS.has(activeVerdict)) {
+      health = 'uncertain'
+    }
     summaries.push({
       model,
+      health,
+      attentionReason,
       activeChannelName: active?.channelName ?? null,
+      activeMerchant,
       verdict: activeVerdict,
-      standbyFresh: standbyRows.length - inCooldown.length,
+      standbyFresh: standbys.length - inCooldown.length,
       standbyCooldown: inCooldown.length,
+      standbys,
     })
   }
   summaries.sort((a, b) => a.model.localeCompare(b.model))

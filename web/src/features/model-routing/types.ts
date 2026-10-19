@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import type { Channel } from '@/features/channels/types'
 
 /** One (model × group × channel) routing assignment, joined client-side. */
@@ -72,21 +54,44 @@ export type CctestStatus = {
   /** Marks per model → standby channel → unix timestamp. Legacy state
    * written by older monitor versions stores `[]` for a cleared model —
    * reads must tolerate non-object values. */
-  bad_standbys: Record<
-    string,
-    Record<string, number> | unknown[] | null
-  >
+  bad_standbys: Record<string, Record<string, number> | unknown[] | null>
 }
 
-/** Compact per-model row for the summary card. */
+/** Per-model health classification driving the dashboard. */
+export type ModelHealth = 'healthy' | 'attention' | 'uncertain'
+
+/** One standby pin in the model's pool, for the detail drawer. */
+export type StandbyEntry = {
+  channelId: number
+  channelName: string
+  merchant: string | null
+  /** 'ready' | 'cooldown' | 'quarantined' — derived state. */
+  state: 'ready' | 'cooldown' | 'quarantined'
+  verdict: string | null
+  cooldownExpiresAt: number | null
+}
+
+/** Compact per-model row for the health card + KPI rollups. */
 export type ModelSummary = {
   model: string
+  health: ModelHealth
+  /** Human one-line reason when health !== 'healthy' (untranslated
+   * classification key; the UI maps it to an i18n string). */
+  attentionReason:
+    | 'quarantined-active'
+    | 'no-active'
+    | 'bad-verdict'
+    | 'no-standbys-ready'
+    | null
   activeChannelName: string | null
+  activeMerchant: string | null
   verdict: string | null
   /** Fresh (never-marked) standby pin count for the model. */
   standbyFresh: number
   /** Standby pins currently in cooldown (marked, not yet expired). */
   standbyCooldown: number
+  /** Standby pool detail for the drawer (name, merchant, state, verdict). */
+  standbys: StandbyEntry[]
 }
 
 /** The channel shape this feature reads from GET /api/channel/. */
