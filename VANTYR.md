@@ -3471,3 +3471,56 @@ The SKU map learned '6 sol' (A6's "GPT 6 SOL" marketing name). Live: all
 through it (usage-log attribution). Real-time sync is bounded by A6's
 ~5-reveal-per-batch rate limit, so a big new batch lands over 2-3
 5-minute ticks — acceptable.
+
+## 2026-10-20 — SEO Phase B: per-locale landing shells (pinned-next44, LIVE)
+
+`feat(seo): Phase B — prerendered per-locale landing shells + hreflang`
+(b854611a2, tag deploy/2026-10-19-seo-phase-b). Owner-approved ("Go ahead").
+Implements growth plan §2.3 — the translated landings were previously
+invisible to search engines because the SPA's i18n is localStorage-based.
+
+- **What ships:** 11 non-English locales get static, crawler-readable landing
+  shells at /<locale>/ (fr ru zh zh-TW vi ja de nl tr es ar), each with
+  translated <html lang>/dir, title (hero headline), description, canonical,
+  og/twitter, and the full 13-entry hreflang cluster. Apex stays English +
+  x-default. Interactive routes (/sign-up, /pricing, dashboard) stay SPA.
+- **How it's built:** web/scripts/prerender/ (entry.tsx server-renders the
+  Home landing per locale via renderToString + the app's QueryClient +
+  in-memory TanStack router; run.mjs Bun-bundles it stubbing image/CSS/three,
+  renders all locales, writes dist/<locale>/index.html). Dockerfile runs
+  `bun run build` then `bun run prerender` as a SEPARATE cached layer (the
+  prerender's 58MB bundling is slow; the split lets a prerender retry skip
+  the rsbuild build). useHomePageContent now inits isLoaded when window is
+  undefined so renderToString yields the landing, not "Loading..." (browser
+  unchanged; home tests 22/22).
+- **Serving — the part that needed Caddy, not the gateway:** the gateway's
+  static.Serve did NOT serve /<locale>/ as a directory index — it 301-looped
+  (/fr/ -> /fr -> /fr/). Fix: the shells are ALSO shipped to
+  static/locale/<locale>/index.html (the Caddy-served volume, same pattern as
+  /docs) and a Caddy `@locales` handle rewrites /<locale>/ ->
+  /locale/<locale>/index.html with file_server; a second `@localesBare`
+  matcher 308-redirects /fr -> /fr/. So the prerendered HTML reaches the
+  browser from Caddy, not the embedded FS.
+- Deploy: web tree + Dockerfile rsynced from the tag archive (backup
+  /opt/vantyr-backup-web-pre-seo-phase-b; /bin/bash verified); image
+  pinned-next44 (a0e1beca1ad2) built on-server, binary grep-verified (French
+  hero, Arabic hero, 156 hreflang); compose repointed (backup
+  compose.yaml.bak-next43-seo-phase-b); Caddyfile edited (backups
+  Caddyfile.bak-pre-locale-shells) + FULL docker restart (reload-doesn't-
+  apply gotcha). Source archive sha256
+  b302d698581b679b2699b79988b27da5879d5219c5c367394d3f8ac01bc6eb35 +
+  source-notice.txt updated, serving 200.
+- **NOTE on tag reuse:** this image is the merged state = another session's
+  cctest work (ebc8c575b: 5-min key-sync, SOL pool, pin-only A6) PLUS my SEO
+  Phase B (b854611a2). That session had rebuilt and re-tagged pinned-next43
+  on the server with their image (4d91c646c3a8); my next43 (9b6fdfbc53a7)
+  was overwritten. I used pinned-next44 to avoid the collision. Coordinate
+  tags with concurrent sessions — don't reuse a tag another session may hold.
+- **Live verification (all pass):** /fr/ title "Les vrais modèles. 98% en
+  moins sur la facture." + French hero; /ar/ dir=rtl + Arabic hero; /ja/,
+  /zh-TW/, /vi/, /de/ translated titles; /nl /tr /es /ru /zh all 200; /fr
+  308->/fr/; apex title unchanged (English); /pricing + /dashboard SPA
+  fallback 200; sitemap/og-image 200; gateway healthy on next44.
+- Rollback: pinned-next43 (c55067d806b7 — the other session's merged image)
+  via compose repoint + `compose up -d --no-deps gateway`; remove the two
+  @locales Caddy handles + restart Caddy.
