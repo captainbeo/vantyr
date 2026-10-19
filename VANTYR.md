@@ -3432,3 +3432,29 @@ Sick pins rotate. Unlimited keeps A6 via pins in both groups.
   active pin per model, sync creating standbys, sick rotation live.
   Rollback: restore SQL backup, re-enable general channels, monitor
   image monitor.py.bak-pre-pinonly, compose pin back to next42.
+
+## 2026-10-19 — Search Console verification (HTML-file method, verified)
+
+Owner verified vantyr.xyz in Google Search Console after two Namecheap
+DNS-side records (TXT verification + www CNAME) failed to publish to
+Namecheap's own authoritative nameservers for hours (panel-saved, never
+visible on dns1/dns2.registrar-servers.com — a zone publish problem on
+their side, not a record mistake; the hand-set A record and the
+Namecheap-tool-set brevo/SPF TXT records were the only ones publishing).
+
+- Solution path: Search Console URL-prefix property
+  (https://vantyr.xyz) + HTML-bestand method. File
+  google284d5739d80e2caa.html lives in static/verification/ and is
+  served at the site root by a new Caddy handle
+  `handle /google*.html { root * /srv/vantyr-static/verification; file_server }`.
+  Missing verification files return a clean 404 (not the SPA fallback).
+- A `www.vantyr.xyz` block was also added to the Caddyfile (verification
+  file on www + 308 redirect of everything else to the apex) in
+  anticipation of the www CNAME publishing; it has not published yet —
+  the block is dormant until it does, and Caddy will fetch the www
+  certificate on first request then.
+- Caddyfile backups: Caddyfile.bak-pre-google-verification,
+  Caddyfile.bak-pre-www. Config validated + full container restart
+  (reload-doesn't-apply gotcha applies).
+- Verification passed; sitemap.xml submitted to Search Console by the
+  owner. Indexing begins from Google's side now.
