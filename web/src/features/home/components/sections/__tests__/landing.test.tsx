@@ -118,6 +118,13 @@ describe('Control Room landing sections', () => {
     expect(
       screen.getByRole('heading', { name: /Open a channel/ })
     ).toBeInTheDocument()
+
+    // Sign-up explainer video: click-to-play poster renders inside the hero
+    // (under the relay map). No <video> element mounts until the user opts in.
+    expect(
+      screen.getByRole('button', { name: 'Play the sign-up video' })
+    ).toBeInTheDocument()
+    expect(document.querySelector('video')).toBeNull()
   })
 
   it('switches the hero action and hides the final CTA when authenticated', async () => {

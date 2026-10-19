@@ -7052,6 +7052,9 @@
     "No standby promoted — next standby will be tried next cycle": "No standby promoted — next standby will be tried next cycle",
     "{{model}} on {{channel}}: {{verdict}}": "{{model}} on {{channel}}: {{verdict}}",
     "Standby promotion failed": "Standby promotion failed",
-    "inconclusive": "inconclusive"
+    "inconclusive": "inconclusive",
+    "How to sign up with Vantyr": "كيفية التسجيل في Vantyr",
+    "Play the sign-up video": "شغّل فيديو التسجيل",
+    "How to sign up · 60 seconds": "طريقة التسجيل · 60 ثانية"
   }
 }
