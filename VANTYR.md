@@ -2398,3 +2398,89 @@ now, owner can request). The cctest monitor probes via a default-group
 token (covers all default-group channels incl. a6-unlimited's
 default-group side); its channel-quarantine actions are admin API,
 unaffected.
+
+## 2026-10-19 — Model Routing admin page + cctest status/action API
+
+Owner request (A6 pin integration): a per-model view of which
+merchant/key serves each model, the routing ladder, verification
+status, and standby cooldowns — plus actions. Nothing native covers
+this (Channels console is channel-centric; Models → "Bound Channels"
+shows names only; the cctest monitor had no read surface at all —
+verdicts/cooldowns lived only in state.json + docker logs + Discord).
+
+Three pieces, no Go changes (config-first):
+
+1. **cctest monitor status/action server** (monitor.py, all stdlib):
+   ThreadingHTTPServer daemon thread, port 8787 (env `STATUS_PORT`;
+   compose maps `CCTEST_STATUS_PORT`). Started BEFORE the env checks in
+   main(), so a parked monitor still answers status (empty channels,
+   `last_cycle_at: null`) — the page can distinguish parked from dead.
+   Endpoints:
+   - `GET /api/cctest/status` — full state projection (config display
+     mirror, per-channel state incl. new `last_verdicts`, `bad_standbys`,
+     `_meta.last_cycle_at` freshness stamp written at the end of every
+     run_cycle). Reads STATE_PATH fresh per request (atomic writes make
+     that a consistent snapshot).
+   - `POST /api/cctest/verify` `{channel, model}` — runs the exact
+     cycle check path on demand (seller-entry lookup, mapping-aware
+     check name, serving-channel attribution, process_verdict → may
+     enforce failover exactly like a cycle check).
+   - `POST /api/cctest/promote` `{model}` — owner-triggered merchant
+     rotation: quarantines the model's active pin (status 2 + state),
+     then promote_next_standby (enable-first, verify, demote-on-fail);
+     observe-mode → 409, parked → 503.
+   - `GET /status` — same payload, unauthenticated, container-internal
+     debug (docker exec / curl inside the network).
+   Auth = gateway pass-through (Bearer forwarded to
+   GATEWAY_URL/api/user/self). Status contract is deliberate for the
+   SPA's axios interceptor: expired/absent → 401 (refresh path),
+   role < 10 → 403 (NO refresh loop — a 401 here would log non-admins
+   out), gateway unreachable/5xx → 503 (page degrades).
+   `record_verdict` now persists the latest verdict per
+   (channel, model) at all four check sites (process_verdict, standby
+   verification, quarantine re-test, removed-model re-test).
+2. **Caddy**: `handle /api/cctest/*` → `reverse_proxy
+   cctest-monitor:8787` (read_timeout 300s — promote runs a
+   synchronous cctest check), placed before the gateway catch-all.
+   Docker-network service DNS; no port publish.
+3. **Web**: `web/src/features/model-routing/` (route `/model-routing`,
+   sidebar Admin group "Model Routing", 12 locales). Client-side join:
+   fetchAllChannels (paginated getChannels reuse; page_size caps at
+   100 and production runs 40+ channels) × cctest status → per
+   (model × group) rows (provider from name prefix, merchant parsed
+   from `a6pin-<model-stem>-<merchant>` names, status_reason from
+   other_info, verdict by channel name, cooldown =
+   bad_standbys + standby_cooldown_hours). Page = per-model summary
+   (active channel, verdict, standby fresh/cooldown counts, Promote
+   standby action w/ ConfirmDialog) + full ladder table (model/group/
+   channel/merchant/priority/status/verification/cooldown columns,
+   Verify now action per enabled row). Degraded banner when the
+   monitor is unreachable (routing-only view). ROLE.ADMIN route guard.
+
+Verification: monitor 32/32 dry-run tests (7 new: last_verdicts at all
+sites, payload projection, status-server auth matrix incl. 401/403/503
+on an ephemeral port, verify + promote actions mocked). Live smoke on
+this machine: parked monitor serves /status 200, /api/cctest/status
+401 (no token) / 403 (user) / 200 (admin via stub gateway) / 503 (dead
+gateway); POST while parked → 503. Web: 15 vitest tests (join + page
+behavior with api spies), typecheck + oxlint + oxfmt clean, routeTree
+regenerated. Local browser preview hits the sign-in redirect (prod
+auth) — page behavior is covered by the mocked suite; production
+verification happens at deploy (below).
+
+Deploy (owner-gated, not yet run): rebuild cctest-monitor image
+(build context must exist at /opt/vantyr/deploy/vantyr/cctest-monitor
+— re-copy source if a staging cleanup wiped it), start with plain
+`docker start` if the gateway service_healthy gate wedges, reload
+Caddy, rebuild the gateway image for the SPA (frontend changes need
+on-server image rebuild + compose pin + recreate). Then: `curl -H
+"Authorization: Bearer <admin>" https://vantyr.xyz/api/cctest/status`;
+load /model-routing; non-admin → 403; headerless → 401; one Verify
+action (watch docker logs + credits); promote battery per the
+2026-10-18 pattern (usage-log attribution proves the promoted pin
+serves the model).
+
+SECURITY FLAG for the owner (pre-existing, unrelated files):
+`deploy/vantyr/cctest-monitor/rebuild_env.py` (committed 0f44c3236,
+pushed to the public repo) contains the live sidecar PAT and cctest
+key in plaintext at lines 44-45 — rotate both and scrub.
