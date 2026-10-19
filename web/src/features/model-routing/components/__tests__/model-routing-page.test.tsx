@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -286,5 +304,117 @@ describe('Model Routing dashboard', () => {
         screen.getByRole('button', { name: /claude-fable-5/ })
       ).toBeInTheDocument()
     })
+  })
+
+  it('shows Enforcement paused when the monitor reports enforce=false', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/api/channel') {
+        return {
+          data: {
+            success: true,
+            data: { items: CHANNELS, total: 2, page: 1, page_size: 100 },
+          },
+        }
+      }
+      if (url === '/api/cctest/status') {
+        return {
+          data: {
+            success: true,
+            data: {
+              ...CC_OK,
+              enforce: false,
+              bad_standbys: {
+                'claude-fable-5': {
+                  'a6pin-fable-5-1169': Date.now() / 1000 - 60,
+                },
+              },
+            },
+          },
+        }
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ModelRouting />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+    await waitFor(() => {
+      expect(screen.getByText('Enforcement paused')).toBeInTheDocument()
+    })
+  })
+
+  it('labels disabled ladder rows as Disabled (not Standby) and shows cooldown expiry on standby entries', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/api/channel') {
+        return {
+          data: {
+            success: true,
+            data: {
+              items: [
+                ...CHANNELS,
+                channelFixture({
+                  id: 10,
+                  name: 'mia-failover',
+                  models: 'claude-fable-5',
+                  group: 'default',
+                  status: 3,
+                  priority: 5,
+                }),
+              ],
+              total: 3,
+              page: 1,
+              page_size: 100,
+            },
+          },
+        }
+      }
+      if (url === '/api/cctest/status') {
+        return {
+          data: {
+            success: true,
+            data: {
+              ...CC_OK,
+              bad_standbys: {
+                'claude-fable-5': {
+                  'a6pin-fable-5-1169': Date.now() / 1000 - 60,
+                },
+              },
+            },
+          },
+        }
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ModelRouting />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+    // all standbys cooling → attention strip also matches /claude-fable-5/;
+    // pick the health card by its full aria-label
+    const card = await screen.findByRole('button', {
+      name: /^claude-fable-5: /,
+    })
+    await userEvent.click(card)
+    // auto-disabled row labeled with the canonical key, not "Auto disabled"
+    expect(await screen.findByText('Auto Disabled')).toBeInTheDocument()
+    expect(screen.queryByText('Auto disabled')).toBeNull()
+    // status-2 standby rows: Disabled label (channel-managed, not pin-pool language)
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0)
+    // cooldown expiry restored on the benched standby entry
+    expect(await screen.findByText(/expires in/)).toBeInTheDocument()
   })
 })

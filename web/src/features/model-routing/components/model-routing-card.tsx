@@ -1,4 +1,27 @@
-import { AlertTriangle, HelpCircle, ShieldCheck } from 'lucide-react'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import {
+  AlertTriangle,
+  ChevronRight,
+  HelpCircle,
+  ShieldCheck,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
@@ -57,17 +80,10 @@ export function ModelRoutingCard(props: {
             {healthLabel}
           </div>
         </div>
-        <span className='text-muted-foreground/50 group-hover:text-primary size-4 shrink-0 transition-colors'>
-          <svg viewBox='0 0 24 24' fill='none' className='size-4'>
-            <path
-              d='M9 6l6 6-6 6'
-              stroke='currentColor'
-              strokeWidth='2'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-            />
-          </svg>
-        </span>
+        <ChevronRight
+          aria-hidden='true'
+          className='text-muted-foreground/50 group-hover:text-primary size-4 shrink-0 transition-colors'
+        />
       </div>
 
       <div className='text-muted-foreground space-y-1 text-xs'>

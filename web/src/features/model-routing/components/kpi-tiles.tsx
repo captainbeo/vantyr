@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import { Activity, AlertTriangle, Layers, RadioTower } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +44,7 @@ export function KpiTiles(props: {
   summaries: ModelSummary[]
   lastCycleAt: string | null
   monitorDown: boolean
+  enforce: boolean
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -64,6 +83,10 @@ export function KpiTiles(props: {
     ? t('Monitor unreachable')
     : (props.lastCycleAt ?? t('No cycle yet'))
 
+  let monitorValue = t('Enforcing')
+  if (props.monitorDown) monitorValue = t('Down')
+  else if (!props.enforce) monitorValue = t('Enforcement paused')
+
   const tiles: KpiTile[] = [
     {
       id: 'healthy',
@@ -95,7 +118,7 @@ export function KpiTiles(props: {
     {
       id: 'monitor',
       label: t('Monitor'),
-      value: props.monitorDown ? t('Down') : t('Enforcing'),
+      value: monitorValue,
       description: t('last cycle {{time}}', {
         time: lastCycleLabel,
       }),

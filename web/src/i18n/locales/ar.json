@@ -7085,6 +7085,7 @@
     "merchant {{id}}": "merchant {{id}}",
     "standby pin": "standby pin",
     "Standby": "Standby",
-    "No active channel — traffic fails over": "No active channel — traffic fails over"
+    "No active channel — traffic fails over": "No active channel — traffic fails over",
+    "Enforcement paused": "Enforcement paused"
   }
 }

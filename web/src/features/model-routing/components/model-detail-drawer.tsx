@@ -1,3 +1,22 @@
+import i18next from 'i18next'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -23,6 +42,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { ModelSummary, RoutingRow } from '../types'
@@ -43,6 +64,18 @@ const PASS_VERDICTS = new Set(['official', 'attr_match'])
 const SOFT_VERDICTS = new Set(['official_flawed', 'reversed'])
 const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
 
+function locale(): string | undefined {
+  return toIntlLocale(i18next.resolvedLanguage || i18next.language)
+}
+
+function formatRemaining(seconds: number): string {
+  const hours = seconds / 3600
+  if (hours >= 1) {
+    return `${formatNumber(Math.ceil(hours), locale())}h`
+  }
+  return `${formatNumber(Math.max(1, Math.ceil(seconds / 60)), locale())}m`
+}
+
 function verdictVariant(
   verdict: string | null
 ): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -55,8 +88,8 @@ function verdictVariant(
 
 function statusLabel(status: number, t: (key: string) => string): string {
   if (status === 1) return t('Enabled')
-  if (status === 2) return t('Standby')
-  return t('Auto disabled')
+  if (status === 2) return t('Disabled')
+  return t('Auto Disabled')
 }
 
 export function ModelDetailDrawer(props: {
@@ -223,7 +256,12 @@ export function ModelDetailDrawer(props: {
                           {entry.state === 'cooldown' && (
                             <StatusBadge
                               variant='warning'
-                              label={t('Cooldown')}
+                              label={t('expires in {{hours}}', {
+                                hours: formatRemaining(
+                                  (entry.cooldownExpiresAt ?? 0) -
+                                    Date.now() / 1000
+                                ),
+                              })}
                               copyable={false}
                             />
                           )}
