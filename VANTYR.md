@@ -3113,3 +3113,64 @@ checked via the ch5 entry under the traffic gate (usage in 7 days)
 and A6's own smart routing across 78 dash-pool merchants. If this
 SKU's volume grows, consider pins on the new A6 account like the
 other Claude models.
+
+
+## 2026-10-19 — Model Routing deploy (pinned-next40, LIVE)
+
+Deployed per the approved plan (owner: "Please deploy"). Branch
+feat/payment-rails merged the pinned-next39 line first (merge 056894e6f
+— the server tree was 8 commits ahead from another session's
+model-list-visibility deploy; merge prevents reverting it), then:
+
+- **SECURITY incident during deploy (contained):** the merge push
+  exposed `deploy/vantyr/cctest-monitor/rebuild_env.py` (live sidecar
+  PAT + cctest key in plaintext, committed 0f44c3236, never previously
+  on public main) to github.com/captainbeo/vantyr. Fixed same-hour:
+  file deleted (4756c6ecc), main + deploy tag re-pointed, source
+  archive rebuilt clean (rebuild_env absent). **Sidecar PAT rotated
+  live** (DB: old row deleted, new `nap_nLl_…` with the same scopes +
+  `profile:read` added — the status server's auth passthrough calls
+  /api/user/self, which needs it; verified 200). The old PAT in
+  history is dead. **Owner still owes: rotate the cctest key at
+  cctest.ai** (its plaintext is in history and out of my reach).
+- cctest-monitor: new image built from the synced tree (md5-verified
+  vs the commit; LF-normalized), container recreated (`docker rm -f` +
+  `compose up -d cctest-monitor --no-deps` — NOT restart: the gateway
+  service_healthy gate can wedge, and `docker restart` reuses the OLD
+  image, see the 2026-10-19 image-drift crash note). Status server
+  live on 8787; first cycle stamp 03:09Z; logs clean.
+- Caddy: `handle /api/cctest/*` → `cctest-monitor:8787`
+  (read_timeout 300s). GOTCHA confirmed again: `caddy reload` after
+  editing the mounted file did NOT apply the new handle (config
+  validated fine) — full `docker restart vantyr-caddy-1` did. Verify
+  after every Caddyfile change.
+- Gateway image `pinned-next40` (93edce429bdb → rebuilt 04681829ab13
+  after the legacy-state fix) from the synced web tree; binary
+  grep-verified for model-routing; compose repointed (backup
+  /tmp/compose-bak-model-routing.yaml).
+- AGPL protocol complete: public main c5d8788b9, tag
+  deploy/2026-10-19-model-routing, archive
+  sha256 d1c4747a5423d60f4a5a948ed134b6f77d628c35f4e4fdc8a2878e2aa37fca10
+  (rebuilt after the tag moved), source-notice.txt + Footer updated,
+  archive serves 200.
+- Post-deploy hardening: live state.json contains `bad_standbys`
+  models mapped to `[]` (legacy from pre-2026-10-19 monitor writes).
+  The join's typeof-guard was already safe; made tolerance explicit +
+  test (c5d8788b9) and rebuilt the image — first deploy verification
+  caught a real edge before any admin opened the page.
+- **Live verification (all passed):** /api/cctest/status 401
+  unauthenticated / 401 garbage / **403 role-1 user** (throwaway PAT,
+  deleted after) / 200 admin — the full designed matrix. Deployed SPA
+  bundle contains the route; /model-routing unauthenticated →
+  sign-in redirect (route guard works). Data joins verified: 39
+  channels (32 pins, 7 enabled), verdicts persisted (fable-5-4756
+  attr_match), cooldowns live. **Real relay: claude-fable-5 → OK,
+  usage log attributes to a6pin-fable-5-4756, quota billed** (money
+  gate). **Verify action live: 11s, verdict attr_match, persisted to
+  status.** Promote refusal paths 409/400 correct; an actual merchant
+  rotation was not fired (live routing change — the monitor's own
+  promotions prove that code path).
+- Rollback: `pinned-next39` (5ed204e721b4) — repoint compose.yaml,
+  `docker compose up -d --no-deps gateway`; remove the Caddy
+  /api/cctest/* handle + restart Caddy; monitor: `docker rm -f
+  vantyr-cctest-monitor` + rebuild from monitor.py.bak-pre-model-routing.
