@@ -2905,3 +2905,59 @@ tag deploy/2026-10-18-keys-base-url-v3.
   /opt/vantyr/backups/footer-pre-next38.txt). Live bundle
   index.0e0bdae1b9.js carries the two-URL component; footer serves v4
   links. Rollback: pinned-next37 (6ed9d8c63e55).
+
+## 2026-10-19 — Model display dedup: gpt-6.1-sol alias hidden (pinned-next39)
+
+`fix(models): hide catalog-hidden models from public and dashboard model
+lists` (017ca3b19, tag deploy/2026-10-19-model-list-visibility).
+
+- Problem: the A6 upstream spelling `gpt-6.1-sol` (dot) must stay
+  routable (cctest.ai's model dropdown uses the dot spelling — customers
+  testing there would get 503 model_not_found otherwise), but both
+  spellings appeared in /v1/models and Model Overview as duplicate
+  models. Audit: cctest's pre-registered list matches all 9 other SKUs
+  exactly (claude-fable-5, -5-1, opus-5, -5-5, sonnet-5, -5-5,
+  gpt-6-astra, gpt-6-sol — the only collision is gpt-6.1-sol); cctest
+  does not list claude-fable-5-1 at all (untestable there, our spelling
+  unchanged). Zero customer dot-name requests before the fix (1 log row
+  total — my verification).
+- Config half (live immediately): models-table row
+  `gpt-6.1-sol` status=0 (id 11) — updatePricing already skips
+  status!=1 rows, hiding it from Model Overview with zero code; plus
+  CacheRatio entry gpt-6.1-sol=0.6 added (the alias was missing it —
+  canonical has 0.6, alias silently fell to the 1.0 default and
+  overcharged cache reads by 40%). Backup:
+  /opt/vantyr/backups/pre-alias-hide-2026-10-19.sql.gz.
+- Code half: GetGroupsEnabledModels (the shared choke point for
+  /v1/models and the dashboard model list) was a raw abilities DISTINCT
+  ignoring the models.status visibility policy the pricing catalog
+  applies. New model.FilterHiddenModelNames applies the same
+  exact/prefix/suffix/contains catalog resolution at that choke point;
+  routing, billing, and no-metadata models are untouched. Focused test
+  pair + model/service/controller suites green locally and on-server
+  (golang:1.26.1-alpine, vantyr-gomod/gobuild volumes).
+- Deploy: image pinned-next39 (5ed204e721b4) built on-server from the
+  tag archive; binary grep-verified for FilterHiddenModelNames (1 hit);
+  compose repointed (backup compose.yaml.bak-next38). AGPL protocol in
+  full: public main pushed (017ca3b19), tag pushed, source archive
+  sha256 cd383346eb5400967c7694f9bdf7f1012d38f535afbf37234549ea6621c8eb06
+  published, source-notice.txt + Footer updated (backup
+  /opt/vantyr/backups/footer-pre-next39.txt).
+- Live verification: /api/pricing shows 9 models (alias gone,
+  canonical present); /v1/models shows 9 (same); both spellings still
+  relay through ch34 → gpt-6.1-sol upstream and bill IDENTICALLY (135
+  quota for 4388+5 tokens each, cache_ratio 0.6 + cache_tokens 4224 in
+  both log rows — the money gate per AGENTS.md). Gateway healthy, zero
+  errors; / /docs/ /pricing /about /login 200; footer serves next39
+  links. Rollback: pinned-next38 (compose.yaml.bak-next38; delete the
+  models-table row to restore the alias display).
+- cctest-monitor fix in the same window: the running container baked a
+  pre-cooldown monitor.py (list-format bad_standbys) while the state
+  file already held dict-format entries → every standby demotion since
+  2026-10-18 12:00 crashed the cycle (4 failures/24h; zero completed
+  cycles). Current repo code (list→dict migration, 3h cooldown)
+  redeployed: image rebuilt, container restarted, startup cycle through
+  all 32 pins with zero errors; astra promote→verify→demote→cooldown-
+  retry flow now completes (5312/2757 re-verified, both still
+  attr_swapped). Stale "24h cooldown" demote-log text corrected to read
+  the env value (b1d6a2287 on feat/payment-rails).
