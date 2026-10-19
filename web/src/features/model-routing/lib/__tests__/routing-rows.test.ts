@@ -125,6 +125,28 @@ describe('buildRoutingRows', () => {
     expect(rows).toHaveLength(0)
   })
 
+  it('tolerates legacy bad_standbys list values (older monitor state)', () => {
+    const channels = [
+      channel({ id: 8, name: 'a6pin-fable-5', models: 'claude-fable-5' }),
+    ]
+    const legacy: CctestStatus = {
+      ...CC_STATUS,
+      bad_standbys: {
+        'claude-fable-5': [],
+        'claude-sonnet-5': null,
+        'gpt-6-astra': { 'a6pin-6-astra-2938': 1_000_000 },
+      },
+    }
+    const rows = buildRoutingRows(channels, legacy)
+    expect(rows[0]?.cooldownExpiresAt).toBeNull()
+    // a real dict entry still resolves
+    const astraRows = buildRoutingRows(
+      [channel({ id: 12, name: 'a6pin-6-astra-2938', models: 'gpt-6-astra' })],
+      legacy
+    )
+    expect(astraRows[0]?.cooldownExpiresAt).toBe(1_000_000 + 3 * 3600)
+  })
+
   it('sorts by model, then group, then priority descending', () => {
     const rows = buildRoutingRows(
       [

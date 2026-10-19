@@ -69,7 +69,13 @@ export type CctestStatus = {
   thresholds: Record<string, number>
   last_cycle_at: string | null
   channels: Record<string, CctestChannelState>
-  bad_standbys: Record<string, Record<string, number>>
+  /** Marks per model → standby channel → unix timestamp. Legacy state
+   * written by older monitor versions stores `[]` for a cleared model —
+   * reads must tolerate non-object values. */
+  bad_standbys: Record<
+    string,
+    Record<string, number> | unknown[] | null
+  >
 }
 
 /** Compact per-model row for the summary card. */

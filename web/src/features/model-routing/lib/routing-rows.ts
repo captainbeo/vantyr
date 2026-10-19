@@ -89,7 +89,14 @@ export function buildRoutingRows(
     for (const model of models) {
       for (const group of effectiveGroups) {
         const verdictEntry = lastVerdicts[model]
-        const badMark = cctest?.bad_standbys?.[model]?.[channel.name]
+        // Legacy monitor state stores `[]` for a cleared model — the
+        // typeof guard below keeps that harmless, but make the lookup
+        // explicit about it.
+        const modelMarks = cctest?.bad_standbys?.[model]
+        const badMark =
+          modelMarks != null && typeof modelMarks === 'object'
+            ? (modelMarks as Record<string, number>)[channel.name]
+            : undefined
         rows.push({
           model,
           group,
