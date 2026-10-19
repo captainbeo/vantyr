@@ -582,6 +582,218 @@ def test_removed_model_recovers():
     assert any("claude-fable-5-1" in models for _, models in gw.model_edits), gw.model_edits
 
 
+def test_last_verdicts_recorded():
+    # Every verdict flowing through process_verdict is persisted per
+    # (channel, model) for the Model Routing page.
+    state = {}
+    gw = run([("selora", "https://x", "sk")], True, state, cc=VerdictCC())
+    st = state["selora-default-primary"]
+    entry = st["last_verdicts"]["claude-fable-5-1"]
+    assert entry["verdict"] == "unofficial", entry
+    assert "T" in entry["at"], entry  # ISO 8601
+    assert "_meta" in state and "last_cycle_at" in state["_meta"]
+
+
+def test_last_verdicts_inconclusive():
+    class NoneCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {}
+
+        @staticmethod
+        def verdict_category(r):
+            return None
+
+    state = {}
+    run([("selora", "https://x", "sk")], True, state, cc=NoneCC())
+    entry = state["selora-default-primary"]["last_verdicts"]["claude-fable-5-1"]
+    assert entry["verdict"] == "inconclusive", entry
+
+
+def test_last_verdicts_standby_verification():
+    # The promote/verify standby path records into the standby's own state.
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {"a6pin-fable-5": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5"}}
+    gw = FakeGW(chs)
+    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    entry = state["a6pin-fable-5-1169"]["last_verdicts"]["claude-fable-5"]
+    assert entry["verdict"] == "unofficial", entry
+
+
+def test_status_payload_projection():
+    state = {
+        "selora-default-primary": {"fails": 1, "last_verdicts": {"claude-fable-5-1": {"verdict": "official", "at": "2026-10-19T00:00:00"}}},
+        "bad_standbys": {"claude-fable-5": {"a6pin-fable-5-1169": 1.0}},
+        "_meta": {"last_cycle_at": "2026-10-19T00:10:00"},
+    }
+    payload = m.status_payload(state, {"enforce": True, "cycle_minutes": 60,
+                                       "standby_cooldown_hours": 3,
+                                       "permanent_fails": 3,
+                                       "thresholds": {}})
+    assert set(payload["channels"].keys()) == {"selora-default-primary"}, payload
+    assert payload["bad_standbys"]["claude-fable-5"]["a6pin-fable-5-1169"] == 1.0
+    assert payload["last_cycle_at"] == "2026-10-19T00:10:00"
+    assert payload["enforce"] is True
+    # empty state (fresh/parked) degrades cleanly
+    empty = m.status_payload({}, m.read_display_config())
+    assert empty["channels"] == {}
+    assert empty["last_cycle_at"] is None
+
+
+def test_status_server_auth():
+    # Auth matrix against a stub gateway on an ephemeral port:
+    # no header -> 401, low role -> 403, admin -> 200, dead gateway -> 503.
+    import json as _json
+    import threading as _threading
+    import urllib.error as _ure
+    import urllib.request as _ur
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class StubGW(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):
+            token = (self.headers.get("Authorization") or "").split("Bearer ")[-1]
+            role = 10 if token == "admin-token" else 1
+            body = _json.dumps({"success": True, "data": {"role": role}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    gw = ThreadingHTTPServer(("127.0.0.1", 0), StubGW)
+    _threading.Thread(target=gw.serve_forever, daemon=True).start()
+    stub = m.ThreadingHTTPServer(("127.0.0.1", 0), m.StatusHandler)
+    _threading.Thread(target=stub.serve_forever, daemon=True).start()
+
+    old = {k: os.environ.get(k) for k in ("GATEWAY_URL", "STATE_PATH")}
+    try:
+        os.environ["GATEWAY_URL"] = f"http://127.0.0.1:{gw.server_address[1]}"
+        os.environ["STATE_PATH"] = m.STATE_PATH
+        m.save_state({"_meta": {"last_cycle_at": "2026-10-19T00:00:00"}})
+
+        def hit(path, token=None):
+            req = _ur.Request(f"http://127.0.0.1:{stub.server_address[1]}{path}")
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            try:
+                with _ur.urlopen(req, timeout=10) as resp:
+                    return resp.status, _json.loads(resp.read().decode())
+            except _ure.HTTPError as e:
+                return e.code, {}
+
+        # no token -> 401
+        s, _ = hit("/api/cctest/status")
+        assert s == 401, s
+        # non-admin -> 403
+        s, _ = hit("/api/cctest/status", "user-token")
+        assert s == 403, s
+        # admin -> 200 + payload
+        s, payload = hit("/api/cctest/status", "admin-token")
+        assert s == 200, s
+        assert payload["data"]["last_cycle_at"] == "2026-10-19T00:00:00"
+        # unauthenticated debug endpoint serves the same payload
+        s, _ = hit("/status")
+        assert s == 200, s
+        # dead gateway -> 503
+        os.environ["GATEWAY_URL"] = "http://127.0.0.1:9"
+        s, _ = hit("/api/cctest/status", "admin-token")
+        assert s == 503, s
+        # unknown path -> 404
+        os.environ["GATEWAY_URL"] = "unused"
+        s, _ = hit("/nope", "admin-token")
+        assert s == 404, s
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        gw.shutdown()
+        stub.shutdown()
+
+
+def test_action_verify():
+    # POST verify runs the cycle path on demand and records the verdict.
+    chs = [dict(c) for c in CHANNELS]
+    state = {}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": VerdictCC(),
+        "sellers": [("selora", "https://x", "sk")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        status, payload = m.run_action_verify({"channel": "selora-default-primary", "model": "claude-fable-5-1"})
+        assert status == 200, payload
+        assert payload["data"]["verdict"] == "unofficial", payload
+        entry = state["selora-default-primary"]["last_verdicts"]["claude-fable-5-1"]
+        assert entry["verdict"] == "unofficial", entry
+        # threshold 1 + enforce + bad verdict + covered → model removed
+        # (model_edits records the REMAINING list, without the bad model)
+        assert any(
+            cid == 1 and "claude-fable-5-1" not in models
+            for cid, models in m.RUNTIME["gateway"].model_edits
+        ), m.RUNTIME["gateway"].model_edits
+        assert "claude-fable-5-1" not in chs[0]["models"], chs[0]["models"]
+        # unknown channel -> 404; missing body -> 400; parked -> 503
+        status, _ = m.run_action_verify({"channel": "nope", "model": "x"})
+        assert status == 404, status
+        status, _ = m.run_action_verify({})
+        assert status == 400, status
+    finally:
+        m.RUNTIME = None
+    status, _ = m.run_action_verify({"channel": "x", "model": "y"})
+    assert status == 503, status
+
+
+def test_action_promote():
+    # POST promote: quarantines the active pin, promotes + verifies the
+    # next standby, reports the promoted name and verdict.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1  # active pin enabled
+    state = {}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": VerdictCC(),
+        "sellers": [("a6pin-fable-5", "https://api.a6api.com", "sk-pin"),
+                    ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-1169"),
+                    ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-3825")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        status, payload = m.run_action_promote({"model": "claude-fable-5"})
+        assert status == 200, payload
+        assert payload["data"]["demoted"] == "a6pin-fable-5", payload
+        # 1169 enabled first (fake verdict demotes it back; 3825 not yet
+        # tried — one standby per promote call, next next cycle)
+        assert (21, 1) in m.RUNTIME["gateway"].writes
+        assert chs[1]["status"] == 2, chs[1]
+        # active pin quarantined in state
+        assert state["a6pin-fable-5"]["quarantined"] is True
+        # standby verdict recorded
+        entry = state["a6pin-fable-5-1169"]["last_verdicts"]["claude-fable-5"]
+        assert entry["verdict"] == "unofficial", entry
+        # promoted reported as None (both demoted, awaiting next cycle) or
+        # a passing standby name — here the fake verdict demotes, so None
+        assert payload["data"]["promoted"] is None, payload
+        # observe-mode refuses
+        m.RUNTIME["enforce"] = False
+        status, _ = m.run_action_promote({"model": "claude-fable-5"})
+        assert status == 409, status
+    finally:
+        m.RUNTIME = None
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

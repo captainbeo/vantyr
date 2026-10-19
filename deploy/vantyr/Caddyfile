@@ -31,6 +31,18 @@ vantyr.xyz {
         file_server
         try_files {path} /index.html
     }
+    # cctest monitor status/action API for the Model Routing admin page.
+    # /api/cctest/* (status GET + verify/promote POSTs) is served by the
+    # monitor sidecar, NOT the gateway; the monitor auth-checks requests
+    # against the gateway's /api/user/self (Bearer pass-through). Long
+    # read timeout: promote runs a synchronous cctest verification check.
+    handle /api/cctest/* {
+        reverse_proxy cctest-monitor:8787 {
+            transport http {
+                read_timeout 300s
+            }
+        }
+    }
     reverse_proxy gateway:3000 {
         transport http {
             read_timeout 600s

@@ -72,6 +72,9 @@ Env config (compose maps the CCTEST_* vars in deploy/vantyr/.env):
                          for selora-* channels, 2 for a6-*/mia-* channels
   PERMANENT_FAILS        consecutive fails before credit spend stops, default 3
   DISCORD_WEBHOOK        optional alerts
+  STATUS_PORT            status/action server port (default 8787) — Caddy
+                         proxies /api/cctest/* here; see the status-server
+                         section below park()
 """
 
 from __future__ import annotations
@@ -79,11 +82,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = logging.getLogger("cctest-monitor")
 
@@ -150,6 +155,15 @@ def save_state(state):
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2, sort_keys=True)
     os.replace(tmp, STATE_PATH)
+
+
+def record_verdict(ch_state, model, verdict):
+    """Remember the latest cctest verdict for (channel, model) — read by
+    the status server for the Model Routing admin page."""
+    ch_state.setdefault("last_verdicts", {})[model] = {
+        "verdict": verdict or "inconclusive",
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 class Gateway:
@@ -367,6 +381,322 @@ def park(reason):
         time.sleep(3600)
 
 
+# ---------------------------------------------------------------------------
+# Status + action server (Model Routing admin page support)
+#
+# The monitor is otherwise outbound-only: verdict and cooldown state lived
+# only in this container (state.json + logs + Discord). The admin console
+# needs a read surface, so the monitor also serves, on a container-internal
+# port (default 8787), proxied by Caddy at /api/cctest/*:
+#   GET  /api/cctest/status  admin-gated -> full state projection
+#   POST /api/cctest/verify  admin-gated -> run one cctest check now
+#   POST /api/cctest/promote admin-gated -> swap a model to the next standby
+#   GET  /status             unauthenticated, container-internal debug view
+#
+# Auth is gateway pass-through: the request's Bearer token is forwarded to
+# GATEWAY_URL/api/user/self. Status mapping is deliberate (the SPA's axios
+# 401 interceptor refreshes and retries, then logs the user out on a second
+# 401): expired/absent session -> 401 (the desired refresh path); valid
+# session but role < 10 -> 403 (no refresh loop, no logout); gateway
+# unreachable or malformed response -> 503 (page shows the degraded banner).
+# ---------------------------------------------------------------------------
+
+# Runtime context for POST actions: set by main() once gateway/cctest/sellers
+# exist; stays None when parked (status still works, actions 503).
+RUNTIME = None
+
+# Top-level state keys that are not per-channel state entries.
+RESERVED_STATE_KEYS = ("bad_standbys", "_meta")
+
+
+def read_display_config():
+    """Env mirror of main()'s display-relevant config. Deliberate
+    duplication: the status server starts before main() parses env (it must
+    answer while parked), so main()'s locals do not exist yet."""
+    def env_int(name, default):
+        try:
+            return max(1, int(os.environ.get(name, str(default))))
+        except ValueError:
+            return default
+    return {
+        "enforce": os.environ.get("ENFORCE", "false").lower() in ("1", "true", "yes"),
+        "cycle_minutes": env_int("CYCLE_MINUTES", 10),
+        "standby_cooldown_hours": env_int("STANDBY_COOLDOWN_HOURS", 3),
+        "permanent_fails": max(2, env_int("PERMANENT_FAILS", 3)),
+        "thresholds": {
+            "a6pin": env_int("FAIL_THRESHOLD_A6PIN", 1),
+            "selora": env_int("FAIL_THRESHOLD_SELORA", 1),
+            "a6": env_int("FAIL_THRESHOLD_A6", 2),
+            "mia": env_int("FAIL_THRESHOLD_MIA", 2),
+            "yingz": env_int("FAIL_THRESHOLD_YINGZ", 2),
+        },
+    }
+
+
+def status_payload(state, config):
+    """Pure projection of the persisted state + display config for the
+    admin page. Excludes reserved top-level keys from `channels` so _meta
+    and bad_standbys can never leak as pseudo-channel entries."""
+    channels = {
+        name: entry
+        for name, entry in state.items()
+        if name not in RESERVED_STATE_KEYS and isinstance(entry, dict)
+    }
+    return {
+        **config,
+        "last_cycle_at": (state.get("_meta") or {}).get("last_cycle_at"),
+        "channels": channels,
+        "bad_standbys": state.get("bad_standbys") or {},
+    }
+
+
+def check_admin(auth_header):
+    """Gateway pass-through auth. Returns (authorized, http_status):
+    (False, 401) no/malformed token or gateway says expired,
+    (False, 403) authenticated but role < 10,
+    (False, 503) gateway unreachable or malformed response,
+    (True, 200) admin."""
+    gateway_url = os.environ.get("GATEWAY_URL")
+    if not gateway_url:
+        return False, 503
+    token = None
+    if auth_header:
+        parts = auth_header.split(None, 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1].strip()
+    if not token:
+        return False, 401
+    payload, status = http_json(
+        "GET", gateway_url.rstrip("/") + "/api/user/self", token, timeout=10.0
+    )
+    if status == 0 or status >= 500:
+        return False, 503
+    if status != 200 or not payload.get("success"):
+        # Gateway rejected the session (401 expired, 403 ban, ...): mirror
+        # it as 401 so the SPA's refresh-and-retry interceptor runs.
+        return False, 401
+    role = (payload.get("data") or {}).get("role")
+    if not isinstance(role, int) or role < 10:
+        return False, 403
+    return True, 200
+
+
+def find_seller_entry(sellers, channels, channel_name):
+    """Resolve (base_url, seller_key) for the SELLER_CHANNELS entry that
+    covers the named channel — same expansion rule as the cycle (exact
+    match for a6pin entries, prefix for general sellers)."""
+    for name, base_url, seller_key in sellers:
+        for ch in expand_seller_to_channels(channels, name, base_url, seller_key):
+            if (ch.get("name") or "") == channel_name:
+                return base_url, seller_key
+    return None
+
+
+def run_action_verify(body):
+    """POST /api/cctest/verify {channel, model}: run the exact cycle check
+    path on demand — find the seller entry covering the channel, do the
+    model_mapping-aware check, run process_verdict (which records
+    last_verdicts and may trigger the same failover policy as the cycle)."""
+    channel_name = body.get("channel")
+    model = body.get("model")
+    if not channel_name or not model:
+        return 400, {"error": "body must be {\"channel\": ..., \"model\": ...}"}
+    if RUNTIME is None:
+        return 503, {"error": "monitor not initialized (parked?)"}
+    rt = RUNTIME
+    try:
+        channels = rt["gateway"].list_channels()
+    except Exception as e:
+        return 503, {"error": f"channel list failed: {e}"}
+    channel = next((c for c in channels if (c.get("name") or "") == channel_name), None)
+    if channel is None:
+        return 404, {"error": f"channel {channel_name!r} not found"}
+    entry = find_seller_entry(rt["sellers"], channels, channel_name)
+    if entry is None:
+        return 400, {"error": f"channel {channel_name!r} is not in SELLER_CHANNELS"}
+    base_url, seller_key = entry
+    # Same name logic as the cycle: gateway-routed checks send the SKU (the
+    # gateway applies model_mapping itself); direct checks send the upstream
+    # name (A6 registers gpt-6.1-sol, not our gpt-6-1-sol SKU).
+    mapping = parse_model_mapping(channel.get("model_mapping"))
+    upstream = mapping.get(model, model)
+    check_name = model if is_gateway_routed(base_url) else upstream
+    verdict = do_check(rt["cctest"], base_url, seller_key, check_name)
+    # Gateway-routed attribution: credit the verdict to the channel that
+    # actually served the check, exactly like the cycle does.
+    actual = None
+    if is_gateway_routed(base_url):
+        try:
+            actual = rt["gateway"].last_channel_for_model(check_name, window_minutes=15)
+        except Exception:
+            actual = None
+    target = channel
+    if actual is not None and actual != int(channel["id"]):
+        target = next((c for c in channels if int(c.get("id") or 0) == actual), channel)
+        LOG.info("[action] verify %s served by %s — attributing there", channel_name, target.get("name"))
+    ch_state = rt["state"].setdefault(target.get("name") or channel_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+    record_verdict(ch_state, model, verdict)
+    process_verdict(
+        rt["gateway"], rt["cctest"], target, base_url, seller_key, model,
+        verdict, rt["threshold_for"], rt["enforce"], rt["discord"], rt["state"],
+        channels, rt["seller_registry"],
+    )
+    save_state(rt["state"])
+    return 200, {"success": True, "data": {"verdict": verdict or "inconclusive", "channel": target.get("name") or channel_name}}
+
+
+def run_action_promote(body):
+    """POST /api/cctest/promote {model}: owner-triggered merchant rotation.
+    Quarantines the model's current active pin, then promotes the next
+    standby (enable-first, verify, demote-on-fail) via the same
+    promote_next_standby path a bad verdict takes. Enforce-only — in
+    observe mode there is nothing to rotate."""
+    model = body.get("model")
+    if not model:
+        return 400, {"error": "body must be {\"model\": ...}"}
+    if RUNTIME is None:
+        return 503, {"error": "monitor not initialized (parked?)"}
+    if not RUNTIME["enforce"]:
+        return 409, {"error": "monitor is in observe-only mode (ENFORCE=false)"}
+    rt = RUNTIME
+    try:
+        channels = rt["gateway"].list_channels()
+    except Exception as e:
+        return 503, {"error": f"channel list failed: {e}"}
+    active = next(
+        (c for c in channels
+         if is_pinned_channel(c.get("name") or "")
+         and int(c.get("status") or 0) == CHANNEL_ENABLED
+         and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]),
+        None,
+    )
+    if active is None:
+        return 409, {"error": f"no enabled pin channel serves {model!r}"}
+    active_name = active["name"]
+    entry = find_seller_entry(rt["sellers"], channels, active_name)
+    if entry is None:
+        return 400, {"error": f"channel {active_name!r} is not in SELLER_CHANNELS"}
+    base_url, seller_key = entry
+    # Quarantine the active pin first — promote_next_standby refuses to act
+    # while any pin for the model is enabled (idempotence guard), and the
+    # rotate intent is exactly "stop serving from this merchant now".
+    ch_state = rt["state"].setdefault(active_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+    ch_state.update({
+        "quarantined": True,
+        "quarantined_since": datetime.now(timezone.utc).isoformat(),
+        "permanent": True,
+        "model": model,
+    })
+    try:
+        rt["gateway"].set_status(int(active["id"]), CHANNEL_MANUALLY_DISABLED)
+        rt["gateway"].fix_abilities()
+    except Exception as e:
+        ch_state.update({"quarantined": False, "permanent": False, "model": ""})
+        return 503, {"error": f"quarantining {active_name} failed: {e}"}
+    LOG.warning("[action] owner-promoted rotation: quarantined active pin %s for %s", active_name, model)
+    discord_alert(rt["discord"], f"cctest: manual rotation for {model}: active pin {active_name} quarantined, promoting next standby")
+    promote_next_standby(
+        rt["gateway"], rt["cctest"], active, base_url, seller_key, model,
+        rt["enforce"], rt["discord"], rt["state"], channels,
+        rt["seller_registry"],
+    )
+    save_state(rt["state"])
+    # Report what happened: the promoted standby (if any) is now the enabled
+    # pin for the model.
+    new_active = next(
+        (c for c in channels
+         if is_pinned_channel(c.get("name") or "")
+         and int(c.get("status") or 0) == CHANNEL_ENABLED
+         and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]
+         and c.get("name") != active_name),
+        None,
+    )
+    promoted = None
+    if new_active is not None:
+        promoted = new_active.get("name")
+    verdict = None
+    if promoted:
+        st_state = rt["state"].get(promoted) or {}
+        verdict = (st_state.get("last_verdicts") or {}).get(model, {}).get("verdict")
+    return 200, {"success": True, "data": {"promoted": promoted, "verdict": verdict, "demoted": active_name}}
+
+
+class StatusHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_error_json(self, status, message):
+        self._send_json(status, {"success": False, "message": message})
+
+    def _check_admin(self):
+        allowed, status = check_admin(self.headers.get("Authorization"))
+        if not allowed:
+            if status == 401:
+                self._send_error_json(401, "authentication required")
+            elif status == 403:
+                self._send_error_json(403, "admin role required")
+            else:
+                self._send_error_json(503, "gateway unavailable")
+        return allowed
+
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/status":
+            self._send_json(200, {"success": True, "data": status_payload(load_state(), read_display_config())})
+            return
+        if path == "/api/cctest/status":
+            if not self._check_admin():
+                return
+            self._send_json(200, {"success": True, "data": status_payload(load_state(), read_display_config())})
+            return
+        self._send_error_json(404, "not found")
+
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path not in ("/api/cctest/verify", "/api/cctest/promote"):
+            self._send_error_json(404, "not found")
+            return
+        if not self._check_admin():
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length).decode()) if length else {}
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+        except (ValueError, json.JSONDecodeError):
+            self._send_error_json(400, "invalid JSON body")
+            return
+        if path == "/api/cctest/verify":
+            status, payload = run_action_verify(body)
+        else:
+            status, payload = run_action_promote(body)
+        if status == 200:
+            self._send_json(status, payload)
+        else:
+            self._send_json(status, {"success": False, "message": payload.get("error", "error"), "data": None})
+
+    def log_message(self, format, *args):
+        LOG.debug("status-server: %s", format % args)
+
+
+def start_status_server():
+    port = int(os.environ.get("STATUS_PORT", "8787"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), StatusHandler)
+    threading.Thread(
+        target=server.serve_forever, daemon=True, name="cctest-status"
+    ).start()
+    LOG.info("status server listening on :%d (/status, /api/cctest/*)", port)
+    return server
+
+
 def parse_seller_channels(raw, known_prefixes):
     """Parse SELLER_CHANNELS entries "name|base_url|seller_key". The name is
     a prefix matched against gateway channel names at runtime: one entry
@@ -401,6 +731,12 @@ def expand_seller_to_channels(channels, seller_prefix, base_url, seller_key):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    # Serve status even while parked: the admin page must distinguish
+    # "monitor parked" (empty channels, last_cycle_at null) from "monitor
+    # dead" (502 through Caddy).
+    global RUNTIME
+    start_status_server()
 
     gateway_url = os.environ.get("GATEWAY_URL")
     gateway_token = os.environ.get("GATEWAY_TOKEN")
@@ -474,6 +810,18 @@ def main():
     )
 
     state = load_state()
+    # POST actions (verify/promote) share the cycle's runtime objects. The
+    # cycle also maintains rt["seller_registry"] for standby promotion.
+    RUNTIME = {
+        "gateway": gateway,
+        "cctest": cctest,
+        "sellers": sellers,
+        "enforce": enforce,
+        "threshold_for": threshold_for,
+        "discord": discord,
+        "state": state,
+        "seller_registry": {},
+    }
     while True:
         try:
             run_cycle(
@@ -516,6 +864,12 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 discord, state, channels, allowed, seller_registry,
             )
             save_state(state)
+    # Freshness marker for the status server: an old last_cycle_at (vs
+    # cycle_minutes) visibly signals a broken cycle on the admin page. Not
+    # written on the exception path — a crashed cycle keeps the previous
+    # stamp, which is exactly the staleness we want to expose.
+    state["_meta"] = {"last_cycle_at": datetime.now(timezone.utc).isoformat()}
+    save_state(state)
 
 
 def is_gateway_routed(base_url):
@@ -631,6 +985,10 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     check_name = model
     verdict = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
+    st_state = state.setdefault(
+        standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
+    )
+    record_verdict(st_state, model, verdict)
     if verdict in PASS_VERDICTS:
         LOG.warning("[pin] %s PASSED verification for %s — active pin", standby_name, model)
         bad_marks.pop(standby_name, None)
@@ -666,6 +1024,7 @@ def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
     ch_state = state.setdefault(
         name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
     )
+    record_verdict(ch_state, model, verdict)
     if verdict in BAD_VERDICTS:
         ch_state["fails"] += 1
         model_fails = ch_state.setdefault("model_fails", {})
@@ -752,6 +1111,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             return
         verdict = do_check(cctest, base_url, seller_key, candidate)
         LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)
+        record_verdict(ch_state, candidate, verdict)
         if verdict in PASS_VERDICTS:
             release_quarantine(gateway, ch_state, channel_id, name, enforce, discord)
         elif verdict in BAD_VERDICTS:
@@ -790,6 +1150,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             mapping.get(removed_candidate, removed_candidate),
         )
         LOG.info("[%s] removed-model re-test %s -> %s", name, removed_candidate, verdict)
+        record_verdict(ch_state, removed_candidate, verdict)
         if verdict in PASS_VERDICTS:
             restore_model(gateway, channel, ch_state, name, removed_candidate, enforce, discord)
         elif verdict in BAD_VERDICTS:
