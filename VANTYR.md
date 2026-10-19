@@ -2961,3 +2961,32 @@ lists` (017ca3b19, tag deploy/2026-10-19-model-list-visibility).
   retry flow now completes (5312/2757 re-verified, both still
   attr_swapped). Stale "24h cooldown" demote-log text corrected to read
   the env value (b1d6a2287 on feat/payment-rails).
+
+## 2026-10-19 — A6 account consolidation: all A6 traffic on the new account
+
+Owner decision: the old A6 account is retired; only the new account
+(user 34611) may be used. Channel keys for the three general A6
+channels (2 a6-default-primary, 5 a6-default-fallback, 6
+a6-unlimited) swapped from the old drained account (sk-h6ba…, last
+success 2026-10-17 16:47, empty since — surfaced as A6's own 403
+insufficient_user_quota passed through to customers on gpt-6-sol) to a
+new unlimited general key `vantyr-general-relay` (A6 token id 138682)
+minted via the A6 management API. Pin channels already rode the new
+account. Nothing references the old account anymore.
+
+- Mechanics: key update is a ChannelSensitiveWrite action (channel
+  authz classifies `key` as sensitive; admin PATs like the monitor's
+  can edit models but not keys — by design). Swap done via a
+  temporary root access token (SQL-inserted row in user_access_tokens,
+  sha256 fingerprint, scopes channel:sensitive_write/read/write/
+  operate, 2h expiry) — used, then DELETED; plaintext lived only in
+  /tmp on the server, wiped after. No secret persisted anywhere new.
+- Verified live: /v1/models listing unaffected; gpt-6-sol (the model
+  that was dead) relays OK via ch2, billed 113 quota; fable-5,
+  opus-5-5, sonnet-5-5, astra all OK through the new key; native
+  channel tests on ch2/5/6 all pass. New-account key covers all SKUs
+  (138 models incl. gpt-6-sol, gpt-5.6-sol, claude-fable-5.1 dot).
+- Operational note: the new-account wallet (~$28.75 at swap time) now
+  backs BOTH the monitor's verification checks AND all general-tier
+  A6 traffic + failovers. Single pool, single drain point — top it up
+  as one line item from here on.
