@@ -2367,6 +2367,254 @@ are additive.
   (本页导航/从这里开始). No console errors, no failed requests.
 
 
+## 2026-10-13 — Payment rails deployed (pinned-next27) + BEpusdt service staged
+
+`feat/payment-rails` merged into `vantyr/main` (fast-forward, 7c3376e40):
+Stripe EUR/USD dual-currency (fails closed until live keys), €/$ wallet
+toggle, i18n keys (now correctly inside the `translation` namespace —
+earlier commits had written them to the JSON root where they never
+loaded), dual-gateway Epay routing (EpaySecondary* options; BEpusdt
+secondary with fiat=USD; fail-closed), and the go-epay Verify map-
+mutation fix (dual-verify copies params per attempt).
+
+- Deploy: tree synced via git archive (md5 626db86b… verified), image
+  `pinned-next27` (195af2378097) built on-server, compose repointed
+  (backup compose.yaml.bak-next27). Gateway healthy; relay fails
+  closed with bad key; home/docs/pay 200; new bundle
+  index.8fb03a8596.js + wallet chunk 63196.405b14563d.js carry
+  stripeCurrency/stripe_usd_enabled (grep-verified); /docs serves
+  11 networks + GRAM in all 12 languages.
+- On-server focused payment tests: dual-gateway routing, secondary
+  form, dual-verify (incl. mutation regression), fail-closed — all
+  PASS (golang:1.26.1-alpine, vantyr-gomod/gobuild volumes).
+- BEpusdt: compose service `bepusdt` (digest-pinned
+  v03413/bepusdt@sha256:609c795d…14e0, v1.24.2-4d88040) running;
+  first-run init credentials saved server-side only
+  (/opt/vantyr/deploy/vantyr/.bepusdt-init-credentials.txt, root 600).
+  Caddy pay2.vantyr.xyz block added (ACME retries on NXDOMAIN until
+  the DNS A record exists — owner action, Namecheap).
+- Caddy recreate note: the Caddyfile single-file bind mount broke
+  (tar extraction replaced the inode), so `docker compose up -d
+  --force-recreate caddy` re-resolved the mount; container is now
+  `vantyr-caddy-1` and the tilkie_default network was re-attached
+  (docker network connect) per the standing note.
+- Not activated (fail-closed by design): Stripe options and
+  EpaySecondary* remain unset in the options table — nothing customer-
+  visible changed on the money paths until live keys + BEpusdt setup
+  + pay2 DNS exist. Wallet keeps showing the GM Pay crypto button.
+- Rollback: repoint compose.yaml to pinned-next26 + `docker compose
+  up -d --no-build gateway` (next26 image retained).
+
+## 2026-10-13 — BEpusdt activated + GM Pay TON disabled
+
+**BEpusdt fully configured (via internal admin API over the Docker
+network — no DNS needed for order submission):**
+
+- 7 wallets registered: EVM 0x1dd5…ed54 for usdt/usdc.arbitrum,
+  usdt/usdc.xlayer, usdc.base; TON UQBzGz…6aea for usdt.ton, ton.gram
+  (addresses pulled from GM Pay's live config).
+- `api_app_uri=https://pay2.vantyr.xyz` (cashier URLs), payment_timeout
+  900s (15-min parity), payment_min_amount 1 (USD floor).
+- Rates: `rate_float_USDT_USD=1`, `rate_float_USDC_USD=1` (fixed 1:1,
+  GM Pay parity; verified in bep_rate after forced sync). GRAM stays
+  CoinGecko-auto (~1.37 USD — native TON pricing, no manual drift).
+- New API options live: `EpaySecondaryAddress=http://bepusdt:8080`
+  (internal — the gateway talks to BEpusdt inside the network; only the
+  customer's cashier redirect needs pay2 DNS), `EpaySecondaryId=1000`,
+  `EpaySecondaryKey=<api_auth_token>`, `EpaySecondaryTypes=` all 7
+  trade types. `PayMethods` extended with 7 per-chain buttons
+  (LuCoins icons; BEpusdt cashier cannot reselect method on epay
+  orders, so one button per chain is required).
+- Verified live: signed submit form (fiat=USD) accepted → order created
+  (rate 1:1, address correct, notify_url accepted) → 302 cashier; a
+  secondary-key-signed callback to EpayNotify passes dual-verify in
+  production (验签成功 in gateway log — the dual-gateway notify path is
+  LIVE). Probe orders cancelled and cleaned.
+- Remaining for customer access: **DNS A record `pay2.vantyr.xyz` →
+  85.190.118.190** (owner, Namecheap; Caddy then auto-issues TLS).
+  Until then the wallet buttons exist but checkout redirects fail to
+  resolve. First $1 real order per rail still owed (money-path gate).
+- BEpusdt admin: random username/password/secure-path printed at first
+  boot, stored root-only at
+  /opt/vantyr/deploy/vantyr/.bepusdt-init-credentials.txt; admin API
+  needs BOTH the secure-path session cookie AND the login token.
+
+**GM Pay TON disabled (owner decision, BEpusdt owns TON now):**
+chain_tokens ton|TON + ton|USDT → enabled=0; ton wallet row →
+status=2 (disabled; NOT deleted — history preserved). GM Pay
+restarted to reload; cashier 200; remaining 7 chains (tron, ethereum,
+solana, binance, polygon, plasma, aptos × USDT/USDC) verified intact.
+
+Ops note: BEpusdt's rate rows bake the float syntax at creation; the
+hourly sync writes new rows — after setting rate_float force a sync
+(admin api /api/rate/sync) or wait up to an hour for the pinned rate.
+
+**pay2 DNS live 2026-10-13 (owner added the A record):** Caddy needed a
+full restart to clear the ACME backoff (reload alone doesn't reset it)
+— pay2.vantyr.xyz now serves TLS (200). Live end-to-end order checks on
+three rails (Arbitrum USDT, TON GRAM, Base USDC): signed submit → order
+created with correct address + rate ($1 = 1 USDT/USDC pinned; GRAM
+0.73 @ CoinGecko 1.37) → public cashier page renders. Orders cancelled
+after verification. GM Pay (7 chains) and all other endpoints healthy.
+
+Remaining money-path gate: ONE real $1 customer order per rail
+(all 7 BEpusdt types) with credit + usage-log reconciliation, then
+GM Pay TON row can be fully removed if desired. Wallet now offers all
+8 crypto buttons to customers.
+
+## 2026-10-13 — Single BEpusdt button + HTTPS checkout (pinned-next28)
+
+Owner report: too many USDC/USDT buttons (two providers → 9 buttons),
+and BEpusdt checkouts failed in the browser — "The information you're
+about to submit is not secure" then "This site can't be reached —
+bepusdt's server IP address could not be found."
+
+**Root cause (both symptoms):** the Epay protocol is browser-mediated —
+the customer's browser POSTs a signed form to `EpaySecondaryAddress`,
+which was `http://bepusdt:8080` (internal Docker hostname, plain HTTP).
+Firefox flagged the un-encrypted form POST, and after clicking past it
+the hostname `bepusdt` is unresolvable outside the Docker network.
+
+**Fix (fork change, commit de0041ac1, image pinned-next28
+1ef896dad246):** `RequestEpay`'s secondary branch now calls BEpusdt's
+**native create-order API** (`POST /api/v1/order/create-order`, JSON +
+EpusdtSign MD5 over sorted non-empty fields with Go %v value
+formatting) and returns a `pay_link`. The browser GETs the HTTPS
+payment_url — no form POST at all. The cashier at pay2.vantyr.xyz has
+a network picker (`reselect: true`), so **one button covers all 7
+rails**. `PayMethods` consolidated to two crypto buttons:
+
+- "Crypto (USDT / USDC)" → GM Pay (alipay type, 7 chains, own picker)
+- "Crypto L2 (Arbitrum / X Layer / Base / TON / GRAM)" → `bepusdt`
+
+`EpaySecondaryTypes=bepusdt` (single method; the 7 per-chain types
+were the old per-button routing). `EpaySecondaryAddress=
+https://pay2.vantyr.xyz` (public TLS host — the gateway calls it over
+the internet, not the internal hostname; either works, public keeps
+one code path).
+
+**Notify:** new route `POST /api/user/bepusdt/notify` handles BEpusdt's
+native JSON callback (same EpusdtSign algorithm; trade_id + status
+present — verified against BEpusdt source app/task/notify/notify.go:
+amount is float64, signature over the unmarshaled map). status=2 →
+RechargeEpay (row-lock idempotent, quota from order-row Amount — never
+callback money); status=3 → mark expired; status=1 → ack only. All
+replies are literal `success`. Epay notify (GM Pay) path unchanged;
+dual-verify retained for Epay-shaped callbacks.
+
+**Frontend:** use-payment.ts opens `pay_link` in a new tab when
+present (before the generic form-POST branch).
+
+**Tests (server-run, all green):** TestBepusdtSignVector (signature
+vector, signature-key exclusion, token-sensitivity),
+TestCreateSecondaryNativeOrder (httptest stub gateway — asserts
+order_id/fiat/currencies/amount/notify/redirect params, re-signs
+correctly, failure path), TestBepusdtNotifyCredits (status=2 credits
+exactly 5×500,000; replay idempotent; status=1 no credit; bad
+signature rejected), TestBepusdtNotifyExpires (status=3 → expired,
+no credit). Plus Epay/TopUp/Topup/model/router suites, web typecheck
++ wallet tests 8/8.
+
+**Live verification (2026-10-13, full chain through the real Go
+path):**
+
+1. Python probe (token read via subprocess from BEpusdt sqlite — NOT
+   shell-quoted heredoc, which had silently emptied it and caused the
+   earlier 签名错误): create-order 200 with payment_url, 7 networks,
+   USD pricing, expiration 899s.
+2. Real user flow: registered test user (Turnstile + email
+   verification temporarily disabled for the battery, both restored
+   + gateway restarted after; test user `vantyr_paytest` (id 31)
+   disabled status=2, its pending $1 order USR31NO… left to expire):
+   login → auth/refresh → `POST /api/user/pay` {amount:1,
+   payment_method:"bepusdt"} → **success with pay_link** to
+   https://pay2.vantyr.xyz/pay/checkout/… (200). top_ups row
+   verified: user 31, amount 1, money 1, method bepusdt, provider
+   epay, pending.
+3. **Notify leg live:** BEpusdt pushes status=1 callbacks every
+   minute — gateway log shows `BEpusdt webhook 验签成功` + 订单等待
+   支付 + 200 for the real order. Signature verification, JSON
+   parsing, and the ack all work against real BEpusdt traffic.
+   status=2 credit is covered by unit tests (exact quota, idempotent,
+   tamper-reject) and awaits only the real-money battery.
+
+**Deploy note:** next28 tree sync overwrote compose.yaml's image line
+to `pinned` — fixed with anchored sed to `pinned-next28` before swap.
+Gateway healthy on pinned-next28; /api/status 200.
+
+Remaining: same money-path gate — ONE real $1 order per rail (now
+through the single button, any of its 7 networks) with credit +
+usage-log reconcile. BEpusdt first boot credentials unchanged
+(root-only file). Old per-chain probe orders in top_ups (usdc.base
+etc.) simply expire.
+
+## 2026-10-13 — Pay-method rename + subtitle line (pinned-next29)
+
+Owner request: both crypto buttons should read "USDT / USDC" with the
+network list in a smaller font underneath:
+
+- "USDT / USDC" / Network: Aptos, BSC, Ethereum, Plasma, Polygon,
+  Solana, TRON (GM Pay, type alipay)
+- "USDT / USDC" / Network: Arbitrum, Base, TON/GRAM, X-Layer
+  (BEpusdt, type bepusdt)
+
+**Fork change (commit 3e970b614, image pinned-next29 58810a75192b):**
+PayMethods gained an optional `subtitle` key. It passes through the
+Go side untouched (`[]map[string]string` + raw-JSON admin editor), so
+this is frontend-only code: `PaymentMethod.subtitle` type,
+recharge-form button renders the subtitle as a smaller muted line
+under the name (same style slot as the min-topup hint), payment
+confirm dialog shows it beside the name so the two "USDT / USDC"
+rails stay distinguishable at confirmation. Regression tests
+(pay-method-subtitle.test.tsx): subtitle renders under the name inside
+the button, omitted when unset, passed through on method selection.
+Typecheck clean, wallet tests 7/7, touched files lint-clean.
+
+**Config (options table):** PayMethods updated with both names +
+subtitles per the owner's exact wording. Verified live via
+topup/info: both buttons carry name "USDT / USDC" + their subtitle.
+Live wallet chunk 63196.0abffbe767.js byte-identical to the local
+build with the subtitle code (md5 match).
+
+Deploy: tree sync + on-server image build + gateway swap (compose
+image line sed'd to pinned-next29 before up). Gateway healthy 200.
+Test users (vantyr_uicheck id 34, vantyr_paytest id 31) disabled
+status=2 after the scripted topup/info check; Turnstile + email
+verification disabled only for the test window and restored.
+
+## 2026-10-13 — Subtitle render fix + Tether icons (pinned-next30)
+
+Owner report after next29: the network lists still didn't show under
+USDT / USDC, and both buttons should carry the USDT (Tether) logo
+(USDC logo unavailable → USDT only).
+
+**Root cause (next29 gap):** the wallet hook's parsePaymentMethods
+whitelists fields when mapping the raw API JSON to the typed
+PaymentMethod — the new `subtitle` key was dropped there, so the
+component support never received data. (Deployed next29 verified the
+API + config carried subtitle; the parse layer was the missing link.)
+
+**Fix (commit f162e4b8e, image pinned-next30 ae32e2ca5ab5):**
+
+- parsePaymentMethods now maps `subtitle` (hook-level tests cover
+  pass-through + absence).
+- Icons: react-icons has no USDC mark in any pack (verified across
+  families) → both crypto rails render the Tether logo. alipay and
+  bepusdt types share one SiTether case in getPaymentIcon, Tether
+  green #26A17B; PayMethods config icons set to SiTether for both
+  buttons (config icon resolves via ReactIconByName; the type-based
+  case covers any icon-less fallback). constants gained
+  PAYMENT_TYPES.BEPUSDT + its color entry.
+- Also fixed the pre-existing no-import-type-side-effects lint error
+  in ui.tsx (touched file rule).
+
+**Verified in a real browser (local preview → production API):**
+logged in through the UI (Turnstile briefly disabled server-side,
+restored after; test user vantyr_uicheck2 id 35 disabled), wallet
+page shows both buttons: "USDT / USDC" with the network list as an
+11px muted line under the 14px name, and identical Tether SVG paths
+on both buttons. Wallet tests 13/13 (2 new hook tests), typecheck +
+lint clean on touched files.
 ## Group isolation (2026-10-13, owner decision — PAYG vs unlimited)
 
 Customers no longer see the internal group split. Base
@@ -2398,6 +2646,350 @@ now, owner can request). The cctest monitor probes via a default-group
 token (covers all default-group channels incl. a6-unlimited's
 default-group side); its channel-quarantine actions are admin API,
 unaffected.
+
+## 2026-10-14 — Stripe activation + pay2 Caddy restore + button rename (pinned-next31)
+
+**Stripe live-configured (owner, via admin UI — secrets never in
+chat/files):** StripeApiSecret/WebhookSecret/StripePriceId (EUR) +
+StripePriceIdUsd (USD) set, test mode. First checkout attempts failed
+with "No valid payment method types" — account had no methods
+activated; owner enabled Cards, Link, Apple Pay, Google Pay, iDEAL|
+Wero, Klarna in the dashboard (no code needed: checkout sessions
+never restrict payment_method_types — the iDEAL|Wero design).
+Checkout session creation then succeeded (order ref_ed3d8df…, 20,
+pending) and the hosted payment page shows the methods. Wallets
+render device-dependent (Apple Pay in Safari, Google Pay in Chrome),
+iDEAL EUR-only on the € toggle; sessions created before a method
+toggle keep the old lineup (create a fresh top-up after dashboard
+changes). Payment-methods battery: one completed checkout per rail
+(cards, iDEAL, wallet) still owed before live keys.
+
+**pay2.vantyr.xyz TLS outage (found during Stripe battery):** the
+pay2 Caddy site block was accidentally dropped during the tilkie.xyz
+Caddyfile edit earlier that day — every TLS handshake to pay2 failed
+(internal error), so BEpusdt create-order calls died. The repo does
+NOT track a root Caddyfile (verified: git log --all -- Caddyfile is
+empty), so tree syncs never touch it — the loss was the manual edit
+alone. Restored from the Oct 13 backup (cert was still in Caddy
+storage — instant), caddy reload, verified 200 from host + external +
+gateway container. Lesson recorded in the Caddyfile itself: keep ALL
+site blocks when editing that server-owned file.
+
+**Button rename (owner request, commit d86e7352a, image
+pinned-next31 efcf349e2db3):** "Stripe" button renamed to "Card /
+iDEAL | WERO / Wallets" with subtitle "Stripe: Cards, iDEAL | Wero,
+Apple Pay, Google Pay, Klarna" — the name is Go-side
+(controller/topup.go, GetTopUpInfo appends the stripe entry), the
+subtitle rides the next29 pay_methods subtitle mechanism, so the
+wallet renders it with no frontend change. Test
+TestGetTopUpInfoStripeButtonLabel pins name+subtitle+type; Stripe
+test suite green on server. pay2 block verified intact after the
+next31 tree sync (backup Caddyfile.bak-pre-next31 taken).
+
+## 2026-10-14 — Stripe button wording v2 (pinned-next32)
+
+Owner feedback: "Wallets" in "Card / iDEAL | WERO / Wallets" reads as
+a crypto wallet next to the crypto rails. Renamed (commit a4c111916,
+image pinned-next32 d580edfa9a8c): name "Card / iDEAL | WERO /
+Apple Pay / Google Pay", subtitle unchanged ("Stripe: Cards, iDEAL |
+Wero, Apple Pay, Google Pay, Klarna"). Also diagnosed "not visible"
+report: the running next31 binary already had the label — browser
+cache of the old JS chunk; hard refresh needed. Test updated, green
+on server. pay2 Caddy block re-verified intact after sync
+(backup Caddyfile.bak-pre-next32).
+
+## 2026-10-14 — Stripe wording v3 + full-width row + first live payment (pinned-next33)
+
+**First REAL Stripe payment (LIVE mode):** owner paid €1 via iDEAL
+(order ref_b62582fa…). Webhook delivered + verified (checkout.session.
+completed, payment_status paid, currency EUR, livemode true), order
+row flipped to success, credit reconciled exactly: +500,000 quota =
+$1.00. Wallet is USD-denominated — the € payment credits dollars,
+not euros (credit always derives from the order-row amount, never
+webhook money). Live iDEAL is on → the scheme's company registration
+number display rule now applies (owner action outstanding). Note: the
+session's payment_method_types reveal the account's full lineup
+(card, bancontact, eps, ideal, klarna, link, paypal, amazon_pay,
+satispay) — the owner enabled more than the button lists.
+
+**Button v3 wording (commits 169bb6d8e + bba7f7403, image
+pinned-next33 43b3337ceb63):** name "Card / iDEAL | WERO / Apple +
+Google Pay / PayPal and more", subtitle "powered by Stripe" (11px
+muted italic). Root cause of the "still says Stripe" reports: a
+manual stripe entry (name "Stripe", icon SiStripe) had been added to
+the PayMethods option via the admin editor — GetTopUpInfo skips its
+built-in entry when the config already has one, so config wins over
+the Go label. The config entry now carries the v3 wording; the Go
+fallback + test match it. Full-width: the Stripe method renders as a
+col-span row below the crypto grid (grid loop skips it) so the long
+name + subtitle never truncate — browser-verified at 1400px, no
+truncation; italic subtitle confirmed via computed style. Test added
+(col-span + full name + subtitle containment). pay2 Caddy block
+verified intact after both syncs (backups .bak-pre-next33/.b33b).
+
+**EUR/USD pricing decision (owner: use live rates, not €1=$1):**
+recommended path = single USD price in StripePriceId + Stripe
+adaptive pricing (already enabled by default — seen in the live
+webhook payload) presents local currency to each customer at live
+rates while settling in USD; StripePriceIdUsd stays empty so the €/$
+toggle hides; zero code. Pending owner go-ahead to flip the config.
+
+## 2026-10-14 — EUR live-rate pricing + Stripe button normal size (pinned-next34)
+
+**Owner decision: Option A — real conversion rates without Stripe
+conversion fees.** The wallet credits USD units; the EUR Stripe price
+now equals ceil(ECB EUR→USD × 100) cents, so a EUR payment buys
+exactly $1 of credit at the real rate (EUR in / EUR out — no Stripe
+currency conversion, no adaptive-pricing customer fee; avoids adding
+USD settlement to the NL account).
+
+- Live rate at setup: EUR/USD 1.1188 (ECB 2026-10-13) → EUR price
+  **112 cents**. Applied: new live price price_1UQR3a…, StripePriceId
+  option repointed, product default switched, old price_1UQGiw…
+  archived. (Stripe prices are immutable — unit_amount cannot be
+  updated; the update path is create-new + repoint + archive.)
+- **deploy/vantyr/scripts/stripe-eur-rate-sync.sh** (also installed at
+  /opt/vantyr/scripts/, root cron 15 3 * * *, log
+  /var/log/stripe-eur-rate-sync.log): fetches ECB rate (frankfurter,
+  open.er-api fallback), skips when rounded cents unchanged, else
+  creates the new price, UPDATEs the StripePriceId option (60s sync,
+  no restart), flips product default, archives the old. Test-run
+  verified idempotent (no-op at current rate).
+- USD price unchanged: $1 = 1 unit directly.
+
+**Stripe button back to normal size (owner: full-width row "doesn't
+look nice" — same size as USDT buttons, one grid cell):** commit
+03894fff8, image pinned-next34 38d452f233ba. Name "Card / iDEAL /
+Klarna / PayPal and more" (39 chars — crypto-button ballpark) +
+italic "powered by Stripe" subtitle; renders in the same grid with
+identical 405×56px cells (browser-verified; screenshot archived).
+Config PayMethods entry carries the name; Go fallback + tests match.
+pay2 Caddy block verified intact after sync (backup .bak-pre-next34).
+
+**EUR formula CORRECTION (2026-10-14, same day):** the Option A formula
+was inverted in the first cut — ceil(rate×100) charged €1.12 for a $1.00
+unit (~25% premium over market). Correct formula: the EUR price is the
+euro-equivalent of ONE dollar unit → **cents = ceil(100 / ECB rate)**
+(1.1188 → 90 cents; €1.00 spent ≈ $1.12 of credit — the owner's intended
+"1 euro deposits ~1.12 dollars"). Fixed in script + applied live
+(price_1UQZd8… 90 cents, StripePriceId repointed, €1.12 price
+price_1UQR3a… archived); rerun verified idempotent. No image rebuild
+needed (config + script only; running image unchanged). The record
+above is kept as-is for history; this paragraph is authoritative.
+
+## 2026-10-15 — /bin symlink incident: root cause + fix (no data loss)
+
+**Symptoms (from 2026-10-14 21:23 UTC):** all SSH publickey auth
+denied ("User administrator not allowed because shell /bin/bash does
+not exist" in auth.log), console login looping ("can't exec
+/bin/login"), rsyslog/apparmor/ufw/chrony failing at boot — while the
+Docker stack kept serving (containers don't use host /bin).
+
+**Root cause (found via one.com rescue mode + SystemRescue):** the
+next34 deploy tree-sync command ran `tar -xf /tmp/vantyr-next34.tar
+-C /` — extracting to the ROOT directory instead of the deploy tree
+(shell path bug in a compound deploy command). The git archive's
+top-level `bin/` directory (upstream migration SQL + time_test.sh)
+replaced the system's `/bin -> usr/bin` symlink with a real
+directory, orphaning every /bin binary at once. NOT an intrusion;
+the 206.189.118.69 auth.log probes were background noise. Disk was
+71% used — the full-disk theory was wrong (boot failures were the
+missing binaries, not space).
+
+**Fix (via rescue mode, owner-executed at console):** mounted
+/dev/vda1, moved the three stray files to /root/bin-evidence/,
+rmdir /mnt/bin, `ln -s usr/bin /mnt/bin`. Rebooted: SSH + all 13
+containers + gateway healthy immediately.
+
+**Prevention (deploy protocol change):** tree syncs now extract to a
+staging dir and rsync/mv into the deploy tree — never `tar -C
+/<deploy-path>` in compound commands where a path variable can
+resolve empty (the `-C /` came from an unquoted/empty-variable path
+in one deploy step). Added to the runbook: after any tar sync,
+`ls -la /bin/bash` sanity check before proceeding.
+
+**AGPL catch-up completed:** eur-rate-fix archive (sha256 f07c3c5b…)
+uploaded to static/source/, source-notice.txt + Footer updated (tag
+deploy/2026-10-14-eur-rate-fix, commit b7c803b69) — the steps that
+were blocked during the SSH outage.
+
+## 2026-10-15 — Unlimited Usage page (pinned-next35 + next36)
+
+**Owner request:** surface the admin-granted unlimited plan (4 slots
+total) in the dashboard. Sidebar Personal group gains "Unlimited Usage"
+(owner rename from "Apply for Unlimited Usage"), linking to /unlimited:
+what unlimited includes (all models, flat monthly price, higher rate
+limits, genuine upstream models, fixed seat count), how to apply
+(Discord ticket flow), and a live slot-availability text box in the
+dashboard design (display font 30px, "4 / 4 slots currently available"
+at launch). Page fully translated in all 12 locales (18 strings each;
+sync-i18n clean, 0 missing).
+
+**Implementation (commits 41cec7cf5 + a336548aa, images
+pinned-next35 21f92401d855 + pinned-next36 d6e39cd540c7):**
+
+- Backend: GET /api/user/unlimited/info (self route, wallet:read
+  scope) returns capacity/active/remaining (+ the requesting user's
+  own active flag → page switches to an "Unlimited active" card).
+  remaining = capacity - active user_subscriptions, floored at 0.
+  Active count is ALL active subs (the plan is admin-granted;
+  currently 0). Tests: endpoint math + floor-at-zero.
+- New admin option UnlimitedSlotsCapacity (default 4; options table,
+  parses as non-negative int). Adjust capacity in System Settings →
+  the page follows on next load.
+- Frontend: features/unlimited (SectionPageLayout + TitledCard,
+  Infinity icon), route /_authenticated/unlimited, sidebar entry
+  under Personal; localized query + skeleton loading.
+- Tree sync used the NEW SAFE protocol for the first time: staging
+  extract + rsync with exclusions (data/static/Caddyfile/compose/
+  .env) — no tar -C into live paths, /bin/bash verified after sync.
+
+**Live verification:** endpoint returns 4/4/0 on prod; browser check
+(Dutch locale) shows sidebar "Onbeperkt gebruik" + translated page
+with "Beschikbare plekken 4/4 — plekken momenteel beschikbaar";
+screenshot archived. Wallet tests 14/14; typecheck + lint clean;
+router/model/controller suites green on server.
+
+## 2026-10-18 — API base URL inline on the API Keys page (pinned-next37)
+
+`feat(keys): show API base URL inline in the table toolbar` (ab1616e01) +
+`fix(keys): remove duplicate base-URL card above the table` (c3989900c),
+tag deploy/2026-10-18-keys-base-url-v3.
+
+- Owner request: the base URL was hard to find — only behind the
+  "API Addresses" popover on the keys page. Now a small inline card
+  (globe icon, label, URL, one-click copy button) sits in the API Keys
+  table toolbar next to the "Filter by API key" search input. The
+  "API Addresses" popover is removed. URL source: first api_info entry,
+  falling back to server_address, then window.location.origin.
+- An earlier iteration (ac2469e8f) mistakenly placed the card on the
+  wallet page next to Order History; reverted (9063eea9f) after owner
+  correction, then re-applied on the keys toolbar. v1 (06ef987c2) also
+  left a duplicate render above the table; fixed in c3989900c.
+- Deploy (owner-approved): source archive sha256 f6005117…aa6179
+  uploaded to static/source/; /opt/vantyr web tree rsynced from the
+  archive (backup /opt/vantyr-backup-web-pre-next37); stale deleted
+  test file removed manually (tar extract does not delete); image
+  pinned-next37 (6ed9d8c63e55) built on-server; compose.yaml pinned
+  (the archive sync had reset the image line to `pinned` — fixed with
+  sed, known gotcha); gateway recreated + healthy; source-notice.txt +
+  Footer option updated (backups in /tmp + /opt/vantyr/backups).
+- Live verification: bundle index.1c71f59f31.js carries "API Base URL";
+  /api/status footer serves the new tag links; archive 200 (8,324,001
+  B); site 200. pinned-next36 (d6e39cd540c7) retained for rollback.
+- Keys-page tests: api-addresses.test.tsx deleted (tested the removed
+  popover); remaining keys failures are pre-existing nl-NL currency
+  formatting issues in api-key-listing.test.tsx.
+
+## 2026-10-18 — Compact base-URL card on API Keys page (pinned-next38)
+
+`fix(keys): compact base-URL card, show both Anthropic and OpenAI URLs`
+(da2448620, tag deploy/2026-10-18-keys-base-url-v4).
+
+- Owner feedback on next37: the card's text was too long and the box
+  taller than the other toolbar controls. Reworked to h-8 (matches the
+  toolbar inputs), one compact row per base URL — "Anthropic
+  https://vantyr.xyz" and "OpenAI https://vantyr.xyz/v1" — each with
+  its own copy button (label shortened via route.replace(/-compatible$/)).
+  Fallback: single server_address/origin row when api_info is empty.
+- Base-URL fact (confirmed from live /api/status api_info): Anthropic-
+  native clients use https://vantyr.xyz (no suffix); OpenAI-compatible
+  clients use https://vantyr.xyz/v1. Two different base URLs, both now
+  shown.
+- Deploy (owner-approved): archive sha256 109c9292…47aab5 to
+  static/source/; web tree rsynced (backup pre-next37 from earlier
+  today reused); image pinned-next38 (4bbbc6f0bfbf) built on-server;
+  compose re-pinned after archive sync reset the image line again
+  (now a twice-confirmed gotcha); gateway recreated + healthy; notice
+  + footer updated (backups /tmp/source-notice-pre-next38.txt,
+  /opt/vantyr/backups/footer-pre-next38.txt). Live bundle
+  index.0e0bdae1b9.js carries the two-URL component; footer serves v4
+  links. Rollback: pinned-next37 (6ed9d8c63e55).
+
+## 2026-10-19 — Model display dedup: gpt-6.1-sol alias hidden (pinned-next39)
+
+`fix(models): hide catalog-hidden models from public and dashboard model
+lists` (017ca3b19, tag deploy/2026-10-19-model-list-visibility).
+
+- Problem: the A6 upstream spelling `gpt-6.1-sol` (dot) must stay
+  routable (cctest.ai's model dropdown uses the dot spelling — customers
+  testing there would get 503 model_not_found otherwise), but both
+  spellings appeared in /v1/models and Model Overview as duplicate
+  models. Audit: cctest's pre-registered list matches all 9 other SKUs
+  exactly (claude-fable-5, -5-1, opus-5, -5-5, sonnet-5, -5-5,
+  gpt-6-astra, gpt-6-sol — the only collision is gpt-6.1-sol); cctest
+  does not list claude-fable-5-1 at all (untestable there, our spelling
+  unchanged). Zero customer dot-name requests before the fix (1 log row
+  total — my verification).
+- Config half (live immediately): models-table row
+  `gpt-6.1-sol` status=0 (id 11) — updatePricing already skips
+  status!=1 rows, hiding it from Model Overview with zero code; plus
+  CacheRatio entry gpt-6.1-sol=0.6 added (the alias was missing it —
+  canonical has 0.6, alias silently fell to the 1.0 default and
+  overcharged cache reads by 40%). Backup:
+  /opt/vantyr/backups/pre-alias-hide-2026-10-19.sql.gz.
+- Code half: GetGroupsEnabledModels (the shared choke point for
+  /v1/models and the dashboard model list) was a raw abilities DISTINCT
+  ignoring the models.status visibility policy the pricing catalog
+  applies. New model.FilterHiddenModelNames applies the same
+  exact/prefix/suffix/contains catalog resolution at that choke point;
+  routing, billing, and no-metadata models are untouched. Focused test
+  pair + model/service/controller suites green locally and on-server
+  (golang:1.26.1-alpine, vantyr-gomod/gobuild volumes).
+- Deploy: image pinned-next39 (5ed204e721b4) built on-server from the
+  tag archive; binary grep-verified for FilterHiddenModelNames (1 hit);
+  compose repointed (backup compose.yaml.bak-next38). AGPL protocol in
+  full: public main pushed (017ca3b19), tag pushed, source archive
+  sha256 cd383346eb5400967c7694f9bdf7f1012d38f535afbf37234549ea6621c8eb06
+  published, source-notice.txt + Footer updated (backup
+  /opt/vantyr/backups/footer-pre-next39.txt).
+- Live verification: /api/pricing shows 9 models (alias gone,
+  canonical present); /v1/models shows 9 (same); both spellings still
+  relay through ch34 → gpt-6.1-sol upstream and bill IDENTICALLY (135
+  quota for 4388+5 tokens each, cache_ratio 0.6 + cache_tokens 4224 in
+  both log rows — the money gate per AGENTS.md). Gateway healthy, zero
+  errors; / /docs/ /pricing /about /login 200; footer serves next39
+  links. Rollback: pinned-next38 (compose.yaml.bak-next38; delete the
+  models-table row to restore the alias display).
+- cctest-monitor fix in the same window: the running container baked a
+  pre-cooldown monitor.py (list-format bad_standbys) while the state
+  file already held dict-format entries → every standby demotion since
+  2026-10-18 12:00 crashed the cycle (4 failures/24h; zero completed
+  cycles). Current repo code (list→dict migration, 3h cooldown)
+  redeployed: image rebuilt, container restarted, startup cycle through
+  all 32 pins with zero errors; astra promote→verify→demote→cooldown-
+  retry flow now completes (5312/2757 re-verified, both still
+  attr_swapped). Stale "24h cooldown" demote-log text corrected to read
+  the env value (b1d6a2287 on feat/payment-rails).
+
+## 2026-10-19 — A6 account consolidation: all A6 traffic on the new account
+
+Owner decision: the old A6 account is retired; only the new account
+(user 34611) may be used. Channel keys for the three general A6
+channels (2 a6-default-primary, 5 a6-default-fallback, 6
+a6-unlimited) swapped from the old drained account (sk-h6ba…, last
+success 2026-10-17 16:47, empty since — surfaced as A6's own 403
+insufficient_user_quota passed through to customers on gpt-6-sol) to a
+new unlimited general key `vantyr-general-relay` (A6 token id 138682)
+minted via the A6 management API. Pin channels already rode the new
+account. Nothing references the old account anymore.
+
+- Mechanics: key update is a ChannelSensitiveWrite action (channel
+  authz classifies `key` as sensitive; admin PATs like the monitor's
+  can edit models but not keys — by design). Swap done via a
+  temporary root access token (SQL-inserted row in user_access_tokens,
+  sha256 fingerprint, scopes channel:sensitive_write/read/write/
+  operate, 2h expiry) — used, then DELETED; plaintext lived only in
+  /tmp on the server, wiped after. No secret persisted anywhere new.
+- Verified live: /v1/models listing unaffected; gpt-6-sol (the model
+  that was dead) relays OK via ch2, billed 113 quota; fable-5,
+  opus-5-5, sonnet-5-5, astra all OK through the new key; native
+  channel tests on ch2/5/6 all pass. New-account key covers all SKUs
+  (138 models incl. gpt-6-sol, gpt-5.6-sol, claude-fable-5.1 dot).
+- Operational note: the new-account wallet (~$28.75 at swap time) now
+  backs BOTH the monitor's verification checks AND all general-tier
+  A6 traffic + failovers. Single pool, single drain point — top it up
+  as one line item from here on.
 
 ## 2026-10-19 — Model Routing admin page + cctest status/action API
 

@@ -99,6 +99,32 @@ func resolveModelMetadata(records []Model, names []string) map[string]*Model {
 	return resolved
 }
 
+// FilterHiddenModelNames removes names the model catalog marks as not
+// visible (models.status != 1), applying the same exact/prefix/suffix/
+// contains resolution as the public pricing catalog. Routing and billing are
+// unaffected: names stay in abilities and ratio tables; only display lists
+// built on this filter drop them.
+func FilterHiddenModelNames(names []string) []string {
+	if len(names) == 0 {
+		return names
+	}
+	var metadata []Model
+	if err := DB.Find(&metadata).Error; err != nil {
+		// Catalog metadata is optional; on read failure keep every name
+		// rather than hiding or crashing the model list.
+		return names
+	}
+	resolved := resolveModelMetadata(metadata, names)
+	visible := make([]string, 0, len(names))
+	for _, name := range names {
+		if meta := resolved[name]; meta != nil && meta.Status != 1 {
+			continue
+		}
+		visible = append(visible, name)
+	}
+	return visible
+}
+
 // FillModelSquareStates applies the same metadata policy as the public catalog
 // to live routes, then aggregates concrete models for metadata rule rows.
 func FillModelSquareStates(rows []*Model, configured map[string][]int, connections []ModelConnection) error {
