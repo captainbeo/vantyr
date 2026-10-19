@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build",
+    "build:prerender": "rsbuild build && bun scripts/prerender/run.mjs",
+    "prerender": "bun scripts/prerender/run.mjs",
     "build:check": "tsgo -b && rsbuild build",
     "typecheck": "tsgo -b",
     "lint": "oxlint -c .oxlintrc.json .",

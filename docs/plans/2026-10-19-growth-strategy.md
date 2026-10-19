@@ -121,29 +121,42 @@ indexable) and Search Console remains the authoritative source either
 way; a free month of rank tracking is still nice to have once pages are
 indexed.
 
-### 2.3 Phase B — locale URLs + prerendering (the real unlock, ~1–2 dev-days)
+### 2.3 Phase B — locale URLs + prerendering (implemented 2026-10-19, deploy pending)
 
-Recommended approach — prerendered marketing shells served per-locale,
-SPA untouched:
+Approach shipped: prerendered marketing shells served per-locale, SPA
+untouched. Verified end-to-end in the browser (French LTR + Arabic RTL
+both render translated hero/title).
 
-- A small Node script (run in the web build): server-renders the landing
-  sections (`web/src/features/home/`) with i18next initialized per locale
-  → writes `dist/fr/index.html`, `dist/ru/index.html`, etc. with the
-  correct `<html lang>`, title, meta, og tags, and the visible
-  translated content as static HTML.
-- Caddy serves `/fr/` → that static file (same pattern as the existing
-  `/docs` prefix handling). No hydration: the shell is the marketing
-  page; interactive routes (`/sign-up`, `/pricing`, dashboard) stay SPA.
-  If hydration is ever wanted, it is an upgrade, not a prerequisite.
-- hreflang cluster: 12 locales × home (+ /pricing, /unlimited) in the
-  sitemap with `xhtml:link rel="alternate" hreflang="…"`. This is the
-  entire international moat: "cheap claude api" in Turkish, Vietnamese,
-  Spanish or Arabic has a fraction of the English competition.
-- Alternative (rejected): full SSR migration of the SPA. Large diff
-  against the config-first/minimal-delta instinct, and the marketing
-  pages don't need it.
-- Alternative (rejected): prerender.io-style bot-only rendering. Google
-  sees content users don't; fragile; no hreflang story.
+- **`web/scripts/prerender/`**: `entry.tsx` server-renders the landing
+  (`@/features/home` `Home`) per locale with i18next; `run.mjs` bundles
+  it with Bun (stubbing image/CSS/three imports), renders all 11
+  non-English locales, and writes `dist/<locale>/index.html` with
+  per-locale `<html lang>`/`dir`, title (hero headline, translated),
+  description (translated tagline), canonical, og/twitter, and the full
+  13-entry hreflang cluster. `dist-server.mjs` is a local static server
+  for previewing dist.
+- **SSR fix that made it work:** `useHomePageContent` initialized
+  `isLoaded: false` and only set it in a `useEffect`, which never runs
+  in `renderToString` — so the prerender only produced the "Loading…"
+  branch. It now initializes `isLoaded = typeof window === 'undefined'`
+  (browser path unchanged; jsdom tests still pass 22/22).
+- **Serving:** the shells land inside the embedded `web/dist`, so the
+  gateway's existing `static.Serve` (gin + `http.FileServer`) serves
+  `/fr/` → `dist/fr/index.html` automatically; no Caddy or Go change.
+  Unknown paths still fall through to the SPA. Interactive routes
+  (`/sign-up`, `/pricing`, dashboard) remain SPA.
+- **Build wiring:** `bun run prerender` after `bun run build` (rsbuild
+  wipes `dist/` on each build, so prerender must run after);
+  `build:prerender` combines both; the Dockerfile now runs
+  `build && prerender` so deployed images include the shells.
+- **Sitemap:** homepage entry carries `xhtml:link rel="alternate"` for
+  all 12 locales + x-default, with `xmlns:xhtml` declared.
+- The en landing stays the default at `/` and is the x-default.
+- Verification: 11/11 shells written; titles translated and concise;
+  hreflang ×13 per shell; fr/ar serve 200 with translated hero;
+  `oxlint` clean on new files; home tests 22/22; production build OK.
+- **Deploy is the remaining step** (image build + swap, then the locale
+  URLs go live and Google can index them).
 
 ### 2.4 Phase C — content surface (weeks, compounding)
 

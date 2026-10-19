@@ -37,7 +37,10 @@ const STORAGE_KEY = 'home_page_content'
 export function useHomePageContent(): HomePageContentResult {
   const { i18n } = useTranslation()
   const [rawContent, setRawContent] = useState<string>('')
-  const [isLoaded, setIsLoaded] = useState(false)
+  // Server/prerender (no window) renders the default landing immediately: the
+  // async fetch below never runs during renderToString, so without this the
+  // prerendered shell would only ever contain the "Loading..." branch.
+  const [isLoaded, setIsLoaded] = useState(() => typeof window === 'undefined')
 
   const language = i18n.resolvedLanguage || i18n.language
   const content = selectHomePageContent(rawContent, language)

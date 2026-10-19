@@ -1,9 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <!-- English is the default (unprefixed) landing; the 11 localized shells live
+       at /<locale>/ and are cross-linked with hreflang on the homepage. -->
   <url>
     <loc>https://vantyr.xyz/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://vantyr.xyz/" />
+    <xhtml:link rel="alternate" hreflang="fr" href="https://vantyr.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="ru" href="https://vantyr.xyz/ru/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://vantyr.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://vantyr.xyz/zh-TW/" />
+    <xhtml:link rel="alternate" hreflang="vi" href="https://vantyr.xyz/vi/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://vantyr.xyz/ja/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://vantyr.xyz/de/" />
+    <xhtml:link rel="alternate" hreflang="nl" href="https://vantyr.xyz/nl/" />
+    <xhtml:link rel="alternate" hreflang="tr" href="https://vantyr.xyz/tr/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://vantyr.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://vantyr.xyz/ar/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://vantyr.xyz/" />
   </url>
   <url>
     <loc>https://vantyr.xyz/pricing</loc>
