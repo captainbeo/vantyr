@@ -6,6 +6,14 @@ it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 For commercial licensing, please contact support@quantumnous.com
 */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -30,6 +38,17 @@ describe('HeroVideo', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('video' as never, { hidden: true })).toBeNull()
     expect(document.querySelector('video')).toBeNull()
+  })
+
+  it('keeps a 16:9 box via aspect-video so the poster is never height-collapsed', () => {
+    const { container } = render(<HeroVideo />)
+
+    // Regression: the poster button is absolutely positioned; without an
+    // aspect ratio on the wrapper the box collapsed to ~2px and the video
+    // was invisible on the live homepage.
+    const box = container.querySelector("[data-slot='hero-video']")
+    expect(box).not.toBeNull()
+    expect(box?.className).toContain('aspect-video')
   })
 
   it('mounts the localized video element after clicking play', () => {

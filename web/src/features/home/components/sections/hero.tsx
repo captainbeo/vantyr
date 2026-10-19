@@ -118,6 +118,10 @@ export function Hero(props: HeroProps) {
           </pre>
         </div>
 
+        {/* Right column: relay map with the sign-up explainer video
+         * under it. One grid cell — the map and video stack vertically
+         * instead of the video wrapping to a new grid row. */}
+        <div className='flex flex-col items-center'>
         {/* Relay map: the map itself, frameless — no panel box, no
          * header, no region latency strip. Sized like the old panel
          * (max-w ~26rem, 4/3) so it doesn't stretch the full column. */}
@@ -232,10 +236,11 @@ export function Hero(props: HeroProps) {
           />
         </div>
 
-        {/* Sign-up explainer video, one render per interface language,
-         * below the relay map. Click-to-play keeps the landing bundle
-         * light: the poster is pure CSS until the user opts in. */}
-        <HeroVideo className='mx-auto mt-8 w-full max-w-[26rem]' />
+          {/* Sign-up explainer video, one render per interface language,
+           * below the relay map. Click-to-play keeps the landing bundle
+           * light: the poster is pure CSS until the user opts in. */}
+          <HeroVideo className='mt-8 w-full max-w-[26rem]' />
+        </div>
       </div>
     </section>
   )

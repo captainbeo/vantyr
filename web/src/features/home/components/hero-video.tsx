@@ -6,6 +6,14 @@ it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
@@ -48,7 +56,7 @@ export function HeroVideo(props: HeroVideoProps) {
     <div
       data-slot='hero-video'
       className={cn(
-        'border-foreground/10 relative overflow-hidden rounded-sm border',
+        'border-foreground/10 relative aspect-video overflow-hidden rounded-sm border',
         props.className
       )}
       aria-label={t('How to sign up with Vantyr')}
@@ -66,7 +74,7 @@ export function HeroVideo(props: HeroVideoProps) {
         <button
           type='button'
           onClick={() => setIsPlaying(true)}
-          className='group absolute inset-0 flex aspect-video w-full items-center justify-center bg-black'
+          className='group absolute inset-0 flex items-center justify-center bg-black'
           aria-label={t('Play the sign-up video')}
         >
           {/* Poster frame: brand gradient + mark + play affordance. */}
