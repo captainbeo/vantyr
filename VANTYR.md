@@ -3339,3 +3339,52 @@ video not visible on the homepage despite pinned-next41 serving it.
   Visual/layout changes need a geometry assertion (aspect-ratio class)
   or a real preview check before shipping.
 - Rollback: pinned-next41 (a6c6487c9d86) via compose repoint.
+
+## 2026-10-19 — SEO Phase A (pinned-next43, LIVE)
+
+`feat(seo): Phase A — meta/og/twitter/JSON-LD head, sitemap, robots,
+og-image` (7cff54408, tag deploy/2026-10-19-seo-phase-a). Owner-approved
+("Go ahead with the deploy"). First slice of the growth plan
+(docs/plans/2026-10-19-growth-strategy.md).
+
+- Scope: SEO groundwork only, no user-visible UI change — index.html
+  head (descriptive title, description, canonical, Open Graph + Twitter
+  summary_large_image, WebSite JSON-LD with SearchAction on /pricing),
+  web/public/{robots.txt,sitemap.xml,og-image.png} (og-image 1200×630
+  brand card, Remotion still `OgImageCard` from the video repo), and the
+  runtime title-clobber fix: main.tsx initSystemBranding previously set
+  document.title to the bare system name on EVERY route once /api/status
+  answered — would have destroyed the static SEO title for rendered
+  crawls. New `applyDocumentTitleToDom`/`buildDocumentTitle`
+  (web/src/lib/dom-utils.ts): marketing routes keep the static title,
+  app routes get "<system_name> — Console". 8 unit tests (8/8 pass).
+- Deploy: web tree rsynced from the tag archive via staging (backup
+  /opt/vantyr-backup-web-pre-seo-phase-a; /bin/bash verified post-sync);
+  image `pinned-next43` (9b6fdfbc53a7) built on-server from /opt/vantyr
+  context, binary grep-verified (og:image ×8, "fraction of official
+  prices" ×6, "Sitemap: https://vantyr.xyz" ×1); compose repointed
+  (backup compose.yaml.bak-next42-seo-phase-a); source archive
+  sha256 7767fc69081ff52abb302cb5eba2a2f6e1772c4490786db464dff2983026c745
+  + source-notice.txt updated, both serving 200.
+- **Compose tag drift found and fixed during this deploy:** the compose
+  file's gateway image line said `vantyr/new-api:pinned` (floating tag
+  → the 2026-10-18 pinned-next38 image), NOT pinned-next42 as the
+  next42 record assumed. The running container had been started on
+  next42 by a previous session without repointing compose; my first
+  `compose up -d` reconciled the drift and briefly reverted the live
+  gateway to the Oct-18 image. Fixed within minutes: compose now
+  explicitly says `pinned-next43`. **Rule going forward: after every
+  gateway deploy, verify the RUNNING container's image id matches the
+  image you just built** — compose config and `docker ps` can disagree
+  when a session edits one and not the other.
+- Live verification (all pass): / title = "Vantyr — Claude, GPT &
+  Codex API at a fraction of official prices" with og:title/JSON-LD
+  present in served HTML; /robots.txt 200 text/plain (allow-all +
+  Disallow /api/ etc); /sitemap.xml 200 text/xml 6 URLs; /og-image.png
+  200 image/png 340453 bytes; /docs 200; hero video 206 video/mp4
+  (regression); /api/status healthy. Gateway healthy on next43.
+- Owner follow-ups (from the growth plan): Search Console + Bing
+  Webmaster verification via Namecheap DNS TXT, sitemap submission,
+  analytics choice (umami vs GA4 — placeholders already in index.html).
+- Rollback: pinned-next42 (c55067d806b7) via compose repoint + compose
+  up -d --no-deps gateway.
