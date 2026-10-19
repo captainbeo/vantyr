@@ -3297,3 +3297,17 @@ swapped pin) / uncertain sol variants — the exact states the cards
 will show; real relay claude-fable-5 → OK; Verify action live
 attr_match via public URL. Rollback: pinned-next41 (c018dff44f8f
 image retained) — repoint compose + recreate.
+
+Post-deploy review (same day): fixed and redeployed as the same image
+tag pinned-next42 (commit c3e2e7e55, tag moved, archive sha256
+ca2be2ac34e3b641f9bfd500c0941bcfd32491f4e00c74bd4451c0ede1b4fe58) —
+ladder status labels switched to the canonical existing keys
+(Enabled/Disabled/Auto Disabled; the bespoke 'Auto disabled' key
+existed in no locale and 'Standby' mislabeled non-pin disabled
+channels), Monitor KPI tile reflects the enforce flag (Enforcing /
+Enforcement paused / Down), standby pool shows cooldown expiry again,
+chevron is a proper aria-hidden lucide icon. AGPL headers restored
+tree-wide after a teammate's format-script crash stripped ~676 files
+(`bun run copyright` repaired; HEAD was clean — only the working
+tree was affected). 25 vitest tests; bundle grep-verified live
+('Enforcement paused' present); verify action live attr_match.
