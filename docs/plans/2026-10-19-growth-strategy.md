@@ -121,7 +121,7 @@ indexable) and Search Console remains the authoritative source either
 way; a free month of rank tracking is still nice to have once pages are
 indexed.
 
-### 2.3 Phase B — locale URLs + prerendering (implemented 2026-10-19, deploy pending)
+### 2.3 Phase B — locale URLs + prerendering (DEPLOYED LIVE 2026-10-20, pinned-next44)
 
 Approach shipped: prerendered marketing shells served per-locale, SPA
 untouched. Verified end-to-end in the browser (French LTR + Arabic RTL
@@ -155,8 +155,13 @@ both render translated hero/title).
 - Verification: 11/11 shells written; titles translated and concise;
   hreflang ×13 per shell; fr/ar serve 200 with translated hero;
   `oxlint` clean on new files; home tests 22/22; production build OK.
-- **Deploy is the remaining step** (image build + swap, then the locale
-  URLs go live and Google can index them).
+- **Deployed live 2026-10-20 (pinned-next44, tag
+  deploy/2026-10-19-seo-phase-b).** Deploy note: the gateway's
+  `static.Serve` does NOT serve /<locale>/ as a directory index (it
+  301-loops); the shells are shipped to `static/locale/<locale>/` and
+  served by a Caddy `@locales` handle instead. All 11 locale URLs,
+  the bare-locale 308 redirects, the unchanged apex, and the intact SPA
+  fallback verified live. Google can now index each locale separately.
 
 ### 2.4 Phase C — content surface (weeks, compounding)
 
