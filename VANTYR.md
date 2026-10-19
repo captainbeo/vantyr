@@ -3255,3 +3255,45 @@ group: ch40 pin → ch1 Selora (P5 failover) → ch5 A6 general (P5);
 unlimited group unchanged (ch4 Selora P30 first, pins P20 below —
 pins serve PAYG only, same as every other Claude model).
 Temp root PAT (channel-create) SQL-inserted, used, deleted.
+
+## 2026-10-19 — Model Routing dashboard redesign (pinned-next42, LIVE)
+
+Owner feedback after the first deploy: the two-table page was hard to
+read and it was unclear what actions exist. Owner chose the cards +
+drill-down shape. Deployed as pinned-next42 (commit ede729ed3, tag
+deploy/2026-10-19-model-routing-dashboard, archive sha256
+1ead90586deeed57dbad3e320bb2a314203467e76e85cf0d5eb38f2e913739ac,
+footer + source-notice updated; server tree md5-verified before build).
+
+Page now reads top-down like an operations dashboard:
+- KPI row: Healthy N/total · Needs attention N · Standby pool (ready/
+  cooldown split) · Monitor (Enforcing/Down + last cycle time).
+- Needs-attention strip (only when non-empty): model + plain-language
+  reason (quarantined active pin / no active channel / failed
+  verification / every standby cooling down); click jumps into the
+  detail drawer.
+- Per-model health cards (responsive grid): health dot + Serving/
+  Needs attention/Uncertain label, active pin channel + merchant,
+  verdict chip, standby dot row (green ready / amber cooldown / red
+  quarantined) + count. Click opens the drawer.
+- Detail drawer (Sheet, pricing-details idiom): full ordered ladder
+  (active row highlighted: rank, channel, provider · merchant ·
+  priority, status + verdict badges), standby pool with per-pin state
+  and last verdict, and the actions — Verify now (active pin) and
+  Promote standby (ConfirmDialog inside the drawer).
+- Health model lives in lib/routing-rows.ts buildModelSummaries — one
+  classification feeds KPIs, strip and cards; the old
+  routing-table.tsx is deleted (the drawer ladder replaces it).
+
+Verification: 23 vitest tests (health classification incl.
+quarantined/bad-verdict/all-cooling cases; page behavior: KPI counts,
+attention strip appears for quarantined and hidden when healthy, card
+click opens drawer with ladder + standby pool, verify/promote POST
+fire through the drawer, monitor-down shows the routing-only
+degraded view). Typecheck/oxlint/oxfmt clean, 12 locales synced.
+Live: bundle contains the page; all routes 200; health model over
+live data returns 6 healthy / 1 attention (gpt-6-astra, quarantined
+swapped pin) / uncertain sol variants — the exact states the cards
+will show; real relay claude-fable-5 → OK; Verify action live
+attr_match via public URL. Rollback: pinned-next41 (c018dff44f8f
+image retained) — repoint compose + recreate.
