@@ -30,6 +30,7 @@ import {
   MessageSquare,
   PlugZap,
   Radio,
+  Route,
   ServerCog,
   Settings,
   ShieldCheck,
@@ -147,6 +148,11 @@ export function useSidebarData(): SidebarData {
             title: t('Models'),
             url: '/models/metadata',
             icon: Box,
+          },
+          {
+            title: t('Model Routing'),
+            url: '/model-routing',
+            icon: Route,
           },
           {
             title: t('Users'),
