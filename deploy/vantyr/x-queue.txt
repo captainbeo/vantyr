@@ -1,0 +1,22 @@
+# X posting queue for @vantyr — one item per line, in chronological order.
+# Format:  ISO8601-datetime | post text | optional-link-for-self-reply
+# The bot posts the oldest due, unposted item per run and logs it to
+# data/x-poster/posted.log. A link (3rd field) is posted as a SELF-REPLY,
+# never in the main post — $0.015 vs $0.20 per post, and better reach.
+# Edit this file in git; the server pulls it on each deploy.
+
+2026-10-20T09:00 | Your Claude API bill doesn't have to scale with every token. Vantyr gives you the genuine models at up to 98% below official rates — no caps, no monthly lock-in. One base URL change and your tools keep working. | https://vantyr.xyz
+
+2026-10-20T17:00 | Most cheap API resellers quietly swap in a weaker model and bill you for the real one. Vantyr tests every channel daily and auto-quarantines any that stop serving the genuine model. That's the whole point of the relay.
+
+2026-10-21T09:00 | Switching to Vantyr is one line: base_url = https://vantyr.xyz. Same request format, same response format, same SDK. You just pay a fraction of the official rate. | https://vantyr.xyz/docs
+
+2026-10-21T17:00 | "Is this reseller actually giving me Claude, or a distilled copy?" is the right question to ask before you wire up any cheap API. We built the authenticity check into the product because we got tired of guessing.
+
+2026-10-22T09:00 | Claude, GPT and Codex behind a single key. Change the model name per request — no juggling provider accounts, no separate billing. | https://vantyr.xyz/pricing
+
+2026-10-22T17:00 | Heavy user? There's a flat $180/month unlimited tier — all models, no meter watching. For everyone else, pay-as-you-go at a fraction of official prices.
+
+2026-10-23T09:00 | Every request on Vantyr is logged with model, status, latency and token cost — nothing beyond what billing needs. Transparency is the product.
+
+2026-10-23T17:00 | New here? The setup guide walks Claude Code, Codex and the raw SDKs from zero to first request in a few minutes. | https://vantyr.xyz/docs
