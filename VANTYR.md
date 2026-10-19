@@ -3174,3 +3174,44 @@ model-list-visibility deploy; merge prevents reverting it), then:
   `docker compose up -d --no-deps gateway`; remove the Caddy
   /api/cctest/* handle + restart Caddy; monitor: `docker rm -f
   vantyr-cctest-monitor` + rebuild from monitor.py.bak-pre-model-routing.
+
+## 2026-10-19 — Sign-up explainer video, 12 locales (pinned-next41, LIVE)
+
+`feat(home): 12-locale sign-up video embedded under the hero relay map`
+(c25f693cb, tag deploy/2026-10-19-hero-video-12-locales). Owner-approved
+("Go ahead please").
+
+- Scope: the Remotion explainer video (D:\worktrees\vantyr-video, own
+  repo) embedded on the homepage hero **under the relay map** (Pool 1/2/3
+  diagram), one MP4 per interface language. HeroVideo component:
+  click-to-play — CSS-only poster (play triangle + "HOW TO SIGN UP · 60
+  SECONDS" label) until opt-in, then mounts the localized `<video>` with
+  controls. Locale → file via `i18n.resolvedLanguage`, English fallback.
+  Poster labels i18n-keyed in all 12 locales ("How to sign up with
+  Vantyr", "Play the sign-up video", "How to sign up · 60 seconds").
+- Videos: 12 × MP4 (~8.7–8.9 MB, 40.7 s, 1920×1080@30, 101 MB total),
+  copy grounded in the localized docs' terminology; NotoSansJP/SC/TC/
+  Arabic for non-Latin scripts. Served by new Caddy `handle
+  /static/video/*` (same strip_prefix pattern as brand).
+- Deploy: 12 MP4s + source archive
+  sha256 31ce1bb3f7f22769ea58b00724bf047dc3b39a8ad99f66a4eeb8c0649ce82838
+  scp'd to /tmp; web tree rsynced from the archive (backup
+  /opt/vantyr-backup-web-pre-next41); image `pinned-next41` (a6c6487c9d86)
+  built on-server, binary grep-verified ("Play the sign-up video" ×2,
+  "static/video" ×1 in the embedded SPA); compose repointed (backup
+  compose.yaml.bak-next40-hero-video); Caddyfile replaced from the
+  archive (backup Caddyfile.bak-next40-hero-video) + **full `docker
+  restart vantyr-caddy-1`** (the reload-doesn't-apply gotcha, confirmed
+  again); source-notice.txt updated; Footer option updated via DB
+  (options table) + gateway restart to flush the cache.
+- Live verification: **12/12 videos serve 206 with content-type
+  video/mp4** (range requests — streaming-ready); live bundle
+  index.a03c77d353.js carries the component; homepage/docs/login 200;
+  source archive 200 (8,375,089 B, sha256 match); footer serves the
+  new tag + archive links; gateway healthy after restart. Pre-deploy:
+  home test suite 21/21 (hero-video + landing click-to-play
+  regressions), typecheck + oxlint clean on touched files.
+- Rollback: `pinned-next40` (04681829ab13) — repoint compose.yaml +
+  `docker compose up -d --no-deps gateway`; remove the Caddy
+  /static/video/* handle + restart Caddy; videos are inert files (safe
+  to leave or delete static/video/).
