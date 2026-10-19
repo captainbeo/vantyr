@@ -3174,3 +3174,41 @@ model-list-visibility deploy; merge prevents reverting it), then:
   `docker compose up -d --no-deps gateway`; remove the Caddy
   /api/cctest/* handle + restart Caddy; monitor: `docker rm -f
   vantyr-cctest-monitor` + rebuild from monitor.py.bak-pre-model-routing.
+## 2026-10-19 — Fable 5.1 fully pinned (4 merchants, all dash-pool)
+
+Owner decision: wire ALL four Fable 5.1 merchants including 2000.
+Created four pin channels (type 60, P20, group default, SKU
+claude-fable-5-1 native dash — no mapping; the dot mapping was
+removed earlier today):
+
+- ch40 a6pin-fable-5-1-3825 — ACTIVE (status 1). A6 token 138732.
+  Cheapest auth-guaranteed ($0.108/$0.54), ~2.3×/2.8× margin.
+- ch41 a6pin-fable-5-1-5052 — standby (status 2). A6 token 138735.
+- ch42 a6pin-fable-5-1-5630 — standby. A6 token 138739.
+- ch43 a6pin-fable-5-1-2000 — standby (LAST in line, owner choice
+  despite the flag). A6 token 138738. Direct probes billed
+  9,193/12,122/11,915 prompt tokens for a ~4-token request
+  (~12,000-token hidden prompt, cache_creation reported — phantom
+  billing flows into customer bills via upstream usage). No
+  auth-guaranteed flag. Monitor will catch it on first check: if
+  cctest attr-swaps it, normal demotion+rotation applies; if
+  attr_match, its standby slot stays but phantom-billing risk
+  remains while serving.
+
+Each channel key = the per-merchant A6 token (token-to-merchant
+binding verified by probe signatures). Monitor .env
+CCTEST_SELLER_CHANNELS extended 32→36 entries (gateway-routed via
+relay token; exact-name matching keeps a6pin-fable-5-1169 (Fable 5)
+separate from the new fable-5-1 pins). NOTE: compose restart does
+NOT re-read env — `docker compose up -d cctest-monitor` (recreate)
+does. First cycle verified: ch40 check → attr_match (genuine);
+standbys skipped as designed; zero errors.
+
+Live verification: fable-5-1 request through the gateway served by
+ch40 (pin, P20 above general tier), billing reconciled exactly
+(13+34 tokens, ratio 0.125/completion 6/cache 0.2 → 27 quota =
+computed 27.125 truncated; $0.000054). Routing order for default
+group: ch40 pin → ch1 Selora (P5 failover) → ch5 A6 general (P5);
+unlimited group unchanged (ch4 Selora P30 first, pins P20 below —
+pins serve PAYG only, same as every other Claude model).
+Temp root PAT (channel-create) SQL-inserted, used, deleted.
