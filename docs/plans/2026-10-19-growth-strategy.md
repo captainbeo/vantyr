@@ -284,26 +284,26 @@ X API pricing changed to **pay-per-usage with no subscriptions**
   charge lines up with what everyone already does for reach reasons:
   put the link in the reply, not the post.
 
-### The build (small, self-contained)
+### The build (implemented 2026-10-20, awaiting owner account)
 
-- A poster script (TS/Bun or Go) + a **git-tracked queue file**
-  (`date, text, optional media path, reply-to`), run by VPS cron or a
-  scheduled GitHub Action. Auth: OAuth 1.0a user context (long-lived,
-  no refresh dance) on the @vantyr account. Media: still frames rendered
-  from the Remotion brand kit (1200×675) or price-chart images.
-- **Content engine (queue themes)**:
-  - Daily: one API tip, one price/competitor fact, one build snippet.
-  - Reactive: when a new model lands on our pricing, an automated
-    "new model live on Vantyr — $X/M tokens vs $Y official" post within
-    hours (trigger from the pricing-change path or a daily diff of the
-    public model list).
-  - Weekly: short thread (authenticity story, cost breakdown).
-- **Engagement stays human**: 15 minutes/day **[owner]** replying to
-  indie-hacker and AI-builder threads. Automated reads to *find* reply
-  targets are possible ($0.005/read) but not worth it at V1; manual
-  browsing is free.
-- X automation rules: official API only (this plan), no automated
-  follows/DMs — posting from the brand account is fully compliant.
+- **Poster**: `deploy/vantyr/x-poster.mjs` — pure-Node (no deps), X API
+  v2. Reads the git-tracked `deploy/vantyr/x-queue.txt`, posts the oldest
+  due unposted item per cron run, logs to `data/x-poster/posted.log`.
+  OAuth 1.0a implemented by hand. Links go in a self-reply (never the
+  main post — $0.015 vs $0.20, and better reach). Credentials come from
+  `X_*` env vars only (never in files); `--dry-run` for testing. Tested:
+  queue parse, due detection, dry-run, missing-creds exit.
+- **Queue**: `x-queue.txt` seeds 8 posts (price, authenticity, one-URL
+  setup, unlimited tier, transparency, docs).
+- **Remaining owner steps** (the account, below) + server-side: drop the
+  4 credentials into a root-only `.env` on the VPS, add a twice-daily cron
+  entry. Not done until the owner creates the account and hands over the
+  keys.
+- **Content engine** (later): reactive "new model live" post triggered by
+  a daily diff of the public pricing; weekly thread.
+- **Engagement stays human**: 15 min/day **[owner]** replying to
+  indie-hacker / AI-builder threads; automated reads not worth it at V1.
+- X automation rules: official API only, no automated follows/DMs.
 
 ---
 
