@@ -1156,11 +1156,35 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     # exactly the fake path. Inconclusive cctest verdicts alone never
     # rotate (fail-open), but the gateway's own error log is hard evidence.
     if enforce:
-        for model, pin in active_pins.items():
+        for model, pin in list(active_pins.items()):
             sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes)
             if sick is not True:
                 continue
             pin_name = pin.get("name")
+            # Re-list live: process_channel (fake-verdict path) may have
+            # already rotated this model this cycle, and the snapshot this
+            # loop captured is pre-rotation — promoting against it re-enables
+            # the very pin we rotated away from (observed live 2026-10-19).
+            try:
+                live = gateway.list_channels()
+            except Exception as e:
+                LOG.warning("[sick] live channel list failed (%s); skipping rotation for %s", e, pin_name)
+                continue
+            live_active = next(
+                (ch for ch in live
+                 if is_pinned_channel(ch.get("name") or "")
+                 and int(ch.get("status") or 0) == CHANNEL_ENABLED
+                 and model in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]),
+                None,
+            )
+            if live_active is not None and live_active.get("name") != pin_name:
+                # A different pin is serving now (rotated earlier this cycle).
+                LOG.info("[sick] %s already rotated this cycle — %s is active now", pin_name, live_active.get("name"))
+                continue
+            if live_active is not None and live_active.get("name") == pin_name:
+                # Still the active pin — confirm it is genuinely the one we
+                # quarantined (status may have flipped while we iterate).
+                pin = live_active
             LOG.warning("[sick] active pin %s (ch %s) failing with no successes — rotating", pin_name, pin.get("id"))
             ch_state = state.setdefault(pin_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
             ch_state.update({
@@ -1173,11 +1197,12 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 gateway.set_status(int(pin["id"]), CHANNEL_MANUALLY_DISABLED)
                 gateway.fix_abilities()
                 discord_alert(discord, f"cctest: active pin {pin_name} for {model} is failing with no successes — rotating to next standby")
-                entry = find_seller_entry(sellers, channels, pin_name)
+                fresh = gateway.list_channels()  # post-disable, pre-promotion
+                entry = find_seller_entry(sellers, fresh, pin_name)
                 if entry:
                     promote_next_standby(
                         gateway, cctest, pin, entry[0], entry[1], model,
-                        enforce, discord, state, channels, seller_registry,
+                        enforce, discord, state, fresh, seller_registry,
                     )
                 else:
                     LOG.error("[sick] %s not covered by any SELLER_CHANNELS entry; quarantined without promotion", pin_name)
