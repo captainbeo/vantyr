@@ -649,7 +649,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             return
         bad_marks[standby_name] = time.time()
         state["bad_standbys"][model] = bad_marks
-        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (24h cooldown); next in line next cycle", standby_name, model)
+        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (cooldown re-verifies after %sh); next in line next cycle", standby_name, model, os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))
         discord_alert(discord, f"cctest: standby {standby_name} for {model} failed verification — demoted, trying the next one")
         return
     LOG.info("[pin] standby %s inconclusive — stays active, watched by the cycle", standby_name)
