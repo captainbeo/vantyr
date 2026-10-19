@@ -1075,10 +1075,15 @@ def main():
     else:
         LOG.info("A6 key sync disabled (A6_MANAGE_TOKEN/A6_MANAGE_USER not set)")
     sick_window_minutes = max(1, int(os.environ.get("SICK_WINDOW_MINUTES", "60")))
+    # The owner adds keys daily and wants them in the pool fast (owner rule
+    # 2026-10-19: as close to real-time as possible). Sync is cheap (token
+    # list + ≤5 reveals); the expensive part (cctest checks) stays on the
+    # 60-min cycle. Run sync on its own shorter interval.
+    sync_interval_minutes = max(1, int(os.environ.get("SYNC_INTERVAL_MINUTES", "5")))
 
     LOG.info(
-        "cctest-monitor starting: enforce=%s cycle=%dm prefixes=%s sellers=%s thresholds(prefix)=%s a6sync=%s",
-        enforce, cycle_minutes, model_prefixes,
+        "cctest-monitor starting: enforce=%s cycle=%dm sync=%dm prefixes=%s sellers=%s thresholds(prefix)=%s a6sync=%s",
+        enforce, cycle_minutes, sync_interval_minutes, model_prefixes,
         [s[0] for s in sellers], fail_threshold_prefixes, a6m is not None,
     )
 
@@ -1095,16 +1100,43 @@ def main():
         "state": state,
         "seller_registry": {},
     }
+    # Key sync runs on its own fast loop — new A6 keys join the pool within
+    # minutes, independent of the (expensive) per-cycle cctest checks.
+    if a6m is not None:
+        start_sync_loop(a6m, sync_interval_minutes)
     while True:
         try:
             run_cycle(
                 gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 threshold_for, permanent_fails, enforce, discord, state,
-                seller_model_filter, a6m, sick_window_minutes,
+                seller_model_filter, None, sick_window_minutes,
             )
         except Exception:
             LOG.exception("cycle failed")
         time.sleep(cycle_minutes * 60)
+
+
+def sync_loop(a6m, interval_minutes):
+    """Background key-sync loop (daemon thread): pulls the owner's A6 keys
+    into the pin pool every `interval_minutes`, independent of the cctest
+    cycle so new keys join in minutes, not hours. Best-effort: a failed
+    sync retries on the next tick and never blocks the check cycle."""
+    while True:
+        try:
+            if RUNTIME is not None:
+                channels = RUNTIME["gateway"].list_channels()
+                sync_a6_keys(RUNTIME["gateway"], a6m, channels, RUNTIME["state"], RUNTIME["discord"])
+        except Exception:
+            LOG.exception("[sync] sync-loop tick failed")
+        time.sleep(interval_minutes * 60)
+
+
+def start_sync_loop(a6m, interval_minutes):
+    threading.Thread(
+        target=sync_loop, args=(a6m, interval_minutes),
+        daemon=True, name="cctest-a6-sync",
+    ).start()
+    LOG.info("A6 key sync loop started (every %dm)", interval_minutes)
 
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
@@ -1122,12 +1154,6 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     # A6 key sync (best effort, never fatal): pulls the owner's daily
     # "<MODEL> | <merchant>" keys into the pool as standby channels before
     # the registry is built, so new pins get coverage this same cycle.
-    if a6m is not None:
-        try:
-            sync_a6_keys(gateway, a6m, channels, state, discord)
-            channels = gateway.list_channels()  # re-list: sync may have created
-        except Exception:
-            LOG.exception("[sync] unexpected failure; continuing cycle")
     # channel name → seller key, built from ALL seller entries BEFORE any
     # processing: standby promotion must check a standby with the standby's
     # OWN key (each pin is a different per-merchant key), and a promotion
