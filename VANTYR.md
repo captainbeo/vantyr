@@ -3388,3 +3388,47 @@ og-image` (7cff54408, tag deploy/2026-10-19-seo-phase-a). Owner-approved
   analytics choice (umami vs GA4 — placeholders already in index.html).
 - Rollback: pinned-next42 (c55067d806b7) via compose repoint + compose
   up -d --no-deps gateway.
+
+## 2026-10-19 — Pin-only A6 routing (pinned-next43, LIVE)
+
+Owner decision: retire the general/lottery A6 tier (a6-default-primary,
+a6-default-fallback, a6-unlimited — status 2, rows kept for rollback);
+verified one-merchant-per-key only. Daily A6 keys sync automatically.
+Sick pins rotate. Unlimited keeps A6 via pins in both groups.
+
+- **A6 key sync**: monitor's new A6Management client (A6_MANAGE_TOKEN/
+  A6_MANAGE_USER envs; A6 token list + reveal, New-Api-User 34611) parses
+  the owner's "<MODEL> | <merchant>" names (map incl. 'ASTRA 6'), reveals
+  ≤5 keys/cycle (A6 rate limit), creates missing pin channels as
+  standbys (type 60, P20, group default,unlimited, one model). Live
+  first run created 7 standbys (sonnet-5-5 2863/5828/3825, opus-5-5
+  6484/5828/5881, fable-5 5630) from real owner keys.
+- **Pool auto-discovery**: single SELLER_CHANNELS entry
+  "a6pin|https://vantyr.xyz|<relay>" covers every a6pin-* channel —
+  .env no longer enumerates 32 pins; new keys get cycle coverage
+  automatically.
+- **Sick-pin rotation**: pin_is_sick = type-5 errors > 0 AND type-2
+  successes = 0 in SICK_WINDOW_MINUTES (60) → quarantine + promote, same
+  as a fake. Inconclusive verdicts still fail open. Live proof: sick
+  merchant 4756 rotated off fable-5 (→3825, verified attr_match).
+  First-deploy race (stale snapshot double-promotion) found live and
+  fixed (sick phase re-lists channels; c3788c8f0).
+- **Migration (backup channels-abilities-pre-pinonly.sql)**: 3 legacy
+  plain pins renamed to suffixed (a6pin-opus-5-851, a6pin-sonnet-5-5-
+  1204, a6pin-6-1-sol-5950 — merchants now always visible on the
+  dashboard); 6.1-sol pin carries both spellings with mapping
+  gpt-6-1-sol→gpt-6.1-sol (dash and dot both relay through the pin);
+  all 36 pins group=default,unlimited; general tier status 2.
+- **Permissions**: sidecar PAT extended with channel:sensitive_write
+  (DB scopes + casbin user:29 channel sensitive_write allow — the
+  role:admin baseline does NOT include it; policy reload takes ~20s).
+- **Web**: drawer group selector (default/unlimited) — the unlimited
+  ladder was previously unreachable.
+- **gpt-6-sol is unroutable now** (was general-tier only; the owner has
+  no SOL pins on A6 — 49 keys listed, none for 6-sol). Owner action:
+  create "SOL | <merchant>" keys if the SKU should stay sellable.
+- Verification: monitor 40/40; live battery — fable/opus/sonnet relays
+  through pins with usage-log attribution, dot+dash sol relay, one
+  active pin per model, sync creating standbys, sick rotation live.
+  Rollback: restore SQL backup, re-enable general channels, monitor
+  image monitor.py.bak-pre-pinonly, compose pin back to next42.
