@@ -436,6 +436,7 @@ A6_KEY_NAME_TO_SKU = {
     "astra": "gpt-6-astra",
     "astra 6": "gpt-6-astra",
     "sol": "gpt-6-sol",
+    "6 sol": "gpt-6-sol",
     "6.1 sol": "gpt-6-1-sol",
 }
 
