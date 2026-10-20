@@ -3524,3 +3524,25 @@ invisible to search engines because the SPA's i18n is localStorage-based.
 - Rollback: pinned-next43 (c55067d806b7 — the other session's merged image)
   via compose repoint + `compose up -d --no-deps gateway`; remove the two
   @locales Caddy handles + restart Caddy.
+
+## 2026-10-20 — X posting bot live (@Vantyrcode, first post sent)
+
+X channel automation from the growth plan (§5), now live.
+
+- **Bot:** deploy/vantyr/x-poster.mjs — pure-Node (no deps) poster for X API v2.
+  Reads git-tracked x-queue.txt, posts the oldest due item per cron run, logs to
+  data/x-poster/posted.log. OAuth 1.0a signed by hand. Links go in a self-reply
+  (never the main post — $0.015 vs $0.20/post, better reach).
+- **On the server:** /opt/vantyr/deploy/vantyr/x-bot/ holds x-poster.mjs,
+  x-queue.txt, .env (X_API_KEY/SECRET + ACCESS_TOKEN/SECRET, root-only 600),
+  and data/. Runs via the oven/bun:1.4.0 image already on the host (no host
+  Node). Cron: /etc/cron.d/vantyr-x-poster, twice daily 09:00 + 17:00 UTC.
+- **Verified live:** first post HTTP 201 (tweet id 2112353352046535074) on
+  @Vantyrcode. Auth resolved after regenerating the OAuth 1.0 Access Token
+  WITH Read-and-write permissions set (the earlier token's secret was
+  never exposed — the console only shows it once at generation; regenerated
+  pair works). 402 credits-depleted resolved by the owner's first credit
+  purchase ($20 free-credit bonus applies).
+- Queue cadence: 8 seeded posts 2026-10-20 → 10-23 (price, authenticity,
+  one-URL setup, unlimited tier, transparency, docs). Edit x-queue.txt in
+  the repo; deploy rsyncs it to the server.
