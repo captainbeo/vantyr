@@ -18,24 +18,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /**
- * Vantyr topic radar — finds early AI/dev topics worth posting about, scores
- * them for Vantyr relevance, and writes DRAFT queue lines to a staging file
- * for human approval. Nothing is posted by this script; a human promotes a
- * draft into x-queue.txt (the poster picks it up from there).
+ * Vantyr auto-content pipeline (fully hands-off):
+ *   scout (HN + AI blogs) -> score for AI/vibecoding relevance -> write the
+ *   post with an LLM (via our own Vantyr relay) -> append to x-queue.txt,
+ *   which x-poster.mjs ships on its schedule. No human step.
  *
- * Sources (all read-only, no auth):
- *   - Hacker News: front page + new stories matching our keyword set
- *     (Algolia API — verified working from datacenter IPs).
- *   - OpenAI news RSS (verified working).
- * Reddit JSON/RSS is bot-blocked from datacenter IPs (verified 2026-10-20) and
- * Anthropic has no RSS; f5bot covers Reddit keyword alerts separately (free).
+ * Scope (per owner): broad AI + vibecoding — model releases, market updates,
+ * news, rumors, Chinese models, agentic coding, dev tools. NOT only
+ * Vantyr-adjacent stories; the account posts about the whole space. The brand
+ * link goes in the self-reply, so a post about someone else's model still
+ * points back to us without the main text reading as an ad.
  *
- * Relevance scoring: each source item is scored against topic buckets. Items
- * above the threshold become drafts with a suggested angle, ranked by score.
+ * Human work (per owner) lives on X itself: replying to posts and answering
+ * questions in the community — never writing the feed.
  *
- * Runs from cron before the poster, so a morning draft is waiting to approve.
- * Files: reads nothing from env secrets; writes data/x-radar/drafts.txt and
- * remembers seen items in data/x-radar/seen.txt so drafts never repeat.
+ * Sources (read-only, verified reachable from the VPS): HN Algolia API,
+ * OpenAI news RSS. Reddit is bot-blocked from datacenter IPs; f5bot emails
+ * cover Reddit keyword alerts.
+ *
+ * Env: VANTYR_API_KEY (a relay sk- key) + VANTYR_BASE_URL enable the writer;
+ * without them the radar logs a warning and writes nothing. X_STATE_DIR /
+ * X_QUEUE_FILE override the default paths. --dry-run prints instead of writing.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -44,29 +47,52 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const STATE_DIR = process.env.X_STATE_DIR || path.join(here, 'data', 'x-radar')
 const SEEN_FILE = path.join(STATE_DIR, 'seen.txt')
-const DRAFTS_FILE = process.env.X_DRAFTS_FILE || path.join(STATE_DIR, 'drafts.txt')
+const QUEUE_FILE = process.env.X_QUEUE_FILE || path.join(here, 'x-queue.txt')
+const DRY_RUN = process.argv.includes('--dry-run')
 
-// ---- Topic buckets: bucket name -> keywords that raise the score. ----
-// Weighted so a model-release or pricing-swap story outranks generic AI news.
+const VANTYR_API_KEY = process.env.VANTYR_API_KEY
+const VANTYR_BASE_URL = (process.env.VANTYR_BASE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '')
+// Override the drafting model; otherwise auto-discovered from the relay.
+const WRITER_MODEL = process.env.X_WRITER_MODEL || null
+
+// Ask the relay which models exist and pick a cheap one for drafting. The
+// model list is public on the gateway, so this works without hardcoding a
+// slug that may not be live. Cached per process run.
+let cachedModel = null
+async function pickModel() {
+  if (WRITER_MODEL) return WRITER_MODEL
+  if (cachedModel) return cachedModel
+  const res = await fetch(`${VANTYR_BASE_URL}/v1/models`, {
+    headers: { Authorization: `Bearer ${VANTYR_API_KEY}` },
+  })
+  const data = await res.json().catch(() => ({}))
+  const ids = (data.data || []).map((m) => m.id).filter(Boolean)
+  // Prefer a small/cheap model for throwaway drafting; fall back to the first.
+  const cheap = ids.find((id) => /mini|haiku|nano|astra|flash|lite/i.test(id))
+  cachedModel = cheap || ids[0]
+  if (!cachedModel) throw new Error('relay returned no models')
+  console.log(`[x-radar] drafting with relay model: ${cachedModel}`)
+  return cachedModel
+}
+
+// ---- Topic buckets: broad AI + vibecoding. weight = how post-worthy. ----
 const BUCKETS = [
-  { name: 'model-release', weight: 3, words: ['new model', 'released', 'launch', 'gpt-5', 'gpt-6', 'sonnet', 'opus', 'haiku', ' o1', ' o3', ' o4', 'gemini', 'llama', 'deepseek', 'qwen', 'mistral', 'kimi', 'fable'] },
-  { name: 'api-pricing', weight: 3, words: ['api price', 'pricing', 'cost per token', 'per million', 'cheaper', 'expensive', 'rate limit', 'billing', 'usage-based', 'token cost'] },
-  { name: 'reseller-swap', weight: 4, words: ['reseller', 'model swap', 'swapped', 'downgrad', 'distill', 'not the real', 'fake model', 'wrong model'] },
-  // vibecoding checked BEFORE model-release in angle selection: 'claude code'
-  // and 'codex' are tools, not model releases — they get the builder angle.
-  { name: 'vibecoding', weight: 2, words: ['vibecod', 'vibe cod', 'claude code', 'codex cli', 'cursor', 'copilot', 'windsurf', 'ai agent', 'coding agent', 'agentic', 'codex'] },
-  { name: 'dev-tools', weight: 1, words: ['sdk', 'openai-compatible', 'openai compatible', 'api key', 'endpoint', 'base url', 'self-host', 'open source llm'] },
+  { name: 'model-release', weight: 3, words: ['new model', 'released', 'launch', 'gpt-5', 'gpt-6', 'sonnet', 'opus', 'haiku', ' o1', ' o3', ' o4', 'gemini', 'llama', 'deepseek', 'qwen', 'mistral', 'kimi', 'fable', 'glm', 'ernest', 'hunyuan', 'doubao'] },
+  { name: 'chinese-models', weight: 3, words: ['deepseek', 'qwen', 'kimi', 'moonshot', 'zhipu', 'glm', 'hunyuan', 'doubao', 'bytedance', 'alibaba', 'baidu', 'minimax', 'yi-'] },
+  { name: 'api-pricing', weight: 3, words: ['api price', 'pricing', 'cost per token', 'per million', 'cheaper', 'expensive', 'rate limit', 'billing', 'usage-based', 'token cost', 'price cut', 'price hike'] },
+  { name: 'reseller-swap', weight: 4, words: ['reseller', 'model swap', 'swapped', 'downgrad', 'distill', 'not the real', 'fake model', 'wrong model', 'benchmark gaming'] },
+  { name: 'vibecoding', weight: 2, words: ['vibecod', 'vibe cod', 'claude code', 'codex cli', 'cursor', 'copilot', 'windsurf', 'ai agent', 'coding agent', 'agentic', 'codex', 'devin', 'aider', 'cline', 'agent mode'] },
+  { name: 'ai-news', weight: 2, words: ['openai', 'anthropic', 'google deepmind', 'meta ai', 'xai', 'grok', 'microsoft', 'nvidia', 'funding', 'acquisition', 'rumor', 'leak', 'reportedly', 'agi', 'safety', 'regulation', 'open source', 'open-weight'] },
+  { name: 'dev-tools', weight: 1, words: ['sdk', 'openai-compatible', 'openai compatible', 'api key', 'endpoint', 'base url', 'self-host', 'open source llm', 'mcp'] },
 ]
 const RELEVANCE_THRESHOLD = 3
 
-// ---- Source fetchers. Each returns [{title, url, source, snippet}]. ----
+// ---- Source fetchers: [{title, url, source, points}]. ----
 async function fetchHN() {
   const out = []
-  // Front page (what's big right now)
   const front = await fetch('https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=40').then((r) => r.json())
   for (const h of front.hits || []) out.push({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, source: 'hn-front', points: h.points })
-  // New stories matching our keywords (early signal — low points, fresh)
-  const kw = ['claude', 'gpt', 'openai', 'anthropic', 'llm', 'api pricing', 'ai coding', 'vibecod', 'model']
+  const kw = ['claude', 'gpt', 'openai', 'anthropic', 'llm', 'ai coding', 'vibecod', 'deepseek', 'qwen', 'gemini', 'ai agent', 'open source llm']
   for (const k of kw) {
     const res = await fetch(`https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(k)}&tags=story&hitsPerPage=8`).then((r) => r.json()).catch(() => ({ hits: [] }))
     for (const h of res.hits || []) out.push({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, source: 'hn-new', points: h.points })
@@ -96,26 +122,46 @@ function score(item) {
       hits.push(b.name)
     }
   }
-  // Front-page HN items with big point counts get a boost (proven interest).
   if (item.source === 'hn-front' && (item.points || 0) > 200) total += 1
   return { score: total, buckets: hits }
 }
 
-// ---- Draft angles: map bucket -> a suggested post angle. ----
-const ANGLES = {
-  'model-release': 'React to the release: what it means for API users, and the price angle (official vs relay).',
-  'api-pricing': 'Price comparison post: official rate vs Vantyr rate for the model in the news.',
-  'reseller-swap': 'Authenticity post: how buyers get burned by swapped models, and how daily verification prevents it.',
-  'vibecoding': 'Builder post: vibecoding workflow that stays cheap because the API bill doesn\'t scale.',
-  'dev-tools': 'Integration post: the one-line base_url change, drop-in compatibility.',
+// ---- The writer: call the Vantyr relay to draft the post. ----
+async function writePost(item) {
+  const model = await pickModel()
+  const system = `You write X (Twitter) posts for Vantyr, an AI API gateway selling genuine Claude/GPT/Codex access at a fraction of official prices, with daily model-authenticity verification. Voice: sharp, builder-to-builder, a little wry, zero hype, zero hashtags, no emojis. You comment on the AI/vibecoding space like a peer who's deep in it — you are NOT writing an ad. Keep it under 260 characters. One clear idea. If a price/relay angle fits naturally, take it; if not, just say the smart thing about the topic. Never fabricate numbers.`
+  const user = `Topic (${item.source}${item.points ? `, ${item.points} HN points` : ''}): "${item.title}"
+URL: ${item.url}
+Matched themes: ${item.buckets.join(', ') || 'general AI'}
+
+Write one X post reacting to this. Output ONLY the post text, no quotes, no preamble.`
+  const res = await fetch(`${VANTYR_BASE_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${VANTYR_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      max_completion_tokens: 120,
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`relay ${res.status}: ${JSON.stringify(data).slice(0, 200)}`)
+  const text = (data.choices?.[0]?.message?.content || '').trim().replace(/^["']|["']$/g, '')
+  if (text.length < 20) throw new Error('writer returned empty post')
+  return text.slice(0, 280)
 }
 
+// ---- Main ----
 function loadSeen() {
   if (!fs.existsSync(SEEN_FILE)) return new Set()
   return new Set(fs.readFileSync(SEEN_FILE, 'utf8').split('\n').filter(Boolean))
 }
 
-function main(items) {
+async function main() {
+  const items = [...(await fetchHN()), ...(await fetchRSS('https://openai.com/news/rss.xml', 'openai-blog'))]
   const seen = loadSeen()
   const fresh = []
   for (const item of items) {
@@ -126,7 +172,6 @@ function main(items) {
     seen.add(key)
   }
   fresh.sort((a, b) => b.score - a.score)
-
   fs.mkdirSync(STATE_DIR, { recursive: true })
   fs.writeFileSync(SEEN_FILE, [...seen].join('\n'))
 
@@ -135,29 +180,36 @@ function main(items) {
     return
   }
 
-  const lines = fresh.slice(0, 8).map((it) => {
-    // Pick the angle from the most specific bucket hit: reseller-swap and
-    // api-pricing are the strongest Vantyr stories, vibecoding/dev-tools are
-    // builder content, model-release is generic news. Order by priority, not
-    // by which matched first.
-    const priority = ['reseller-swap', 'api-pricing', 'vibecoding', 'dev-tools', 'model-release']
-    const best = priority.find((b) => it.buckets.includes(b))
-    const angle = best ? ANGLES[best] : 'Comment with a Vantyr angle.'
-    return [
-      `# [score ${it.score}] ${it.source}${it.points ? ` ${it.points}pts` : ''} — ${it.title}`,
-      `#   ${it.url}`,
-      `#   angle: ${angle}`,
-      `#   draft a post, then promote to x-queue.txt as:`,
-      `#   YYYY-MM-DDTHH:MM | <post text> | ${it.url}`,
-      '',
-    ].join('\n')
-  })
-  fs.appendFileSync(DRAFTS_FILE, lines.join('\n'))
-  console.log(`[x-radar] ${fresh.length} new topics -> ${DRAFTS_FILE} (top: "${fresh[0].title.slice(0, 60)}")`)
+  if (!VANTYR_API_KEY) {
+    console.warn(`[x-radar] ${fresh.length} topics found but VANTYR_API_KEY unset — set a relay sk- key to enable auto-writing. Top: "${fresh[0].title.slice(0, 60)}"`)
+    return
+  }
+
+  // Write posts for the top few topics, queue them for the next posting slots.
+  const toWrite = fresh.slice(0, 4)
+  const lines = []
+  for (const it of toWrite) {
+    try {
+      const text = await writePost(it)
+      // Next run of the poster picks this up; timestamp = now (due immediately,
+      // the poster paces it). Link goes in the self-reply (cheaper + reach).
+      lines.push(`${new Date().toISOString().slice(0, 16)} | ${text} | ${it.url}`)
+      console.log(`[x-radar] wrote post for "${it.title.slice(0, 50)}..."`)
+    } catch (err) {
+      console.error(`[x-radar] writer failed for "${it.title.slice(0, 40)}": ${err.message}`)
+    }
+  }
+
+  if (lines.length === 0) return
+  if (DRY_RUN) {
+    console.log('[x-radar] DRY RUN — would append:\n' + lines.join('\n'))
+    return
+  }
+  fs.appendFileSync(QUEUE_FILE, lines.join('\n') + '\n')
+  console.log(`[x-radar] queued ${lines.length} posts -> ${QUEUE_FILE}`)
 }
 
-const items = [
-  ...(await fetchHN()),
-  ...(await fetchRSS('https://openai.com/news/rss.xml', 'openai-blog')),
-]
-main(items)
+main().catch((e) => {
+  console.error('[x-radar] fatal:', e.message)
+  process.exit(1)
+})
