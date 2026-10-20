@@ -3546,3 +3546,22 @@ X channel automation from the growth plan (§5), now live.
 - Queue cadence: 8 seeded posts 2026-10-20 → 10-23 (price, authenticity,
   one-URL setup, unlimited tier, transparency, docs). Edit x-queue.txt in
   the repo; deploy rsyncs it to the server.
+
+## 2026-10-20 — X topic radar (early-topic discovery) live
+
+Content pipeline for the @Vantyrcode account: discovery → draft → approve → post.
+
+- **x-radar.mjs** (deploy/vantyr/, committed): read-only scout. Pulls HN
+  (front page + new stories via Algolia) + OpenAI news RSS, scores items
+  against Vantyr topic buckets (model-release, api-pricing, reseller-swap,
+  vibecoding, dev-tools), writes DRAFT queue lines + a suggested angle to
+  data/x-radar/drafts.txt. seen.txt dedupes. NO posting — a human promotes a
+  draft into x-queue.txt, and the poster ships it.
+- Reddit JSON/RSS is bot-blocked from datacenter IPs (verified); radar uses
+  HN + blogs. f5bot (free) covers Reddit keyword alerts separately.
+- Cron: /etc/cron.d/vantyr-x-radar, 08:30 + 16:30 UTC (30 min before the
+  poster's 09:00/17:00 slots).
+- Workflow: read drafts.txt → copy the angle into a real post → append to
+  x-queue.txt (repo) → poster ships it at the next slot. Angle priority is
+  reseller-swap > api-pricing > vibecoding > dev-tools > model-release so a
+  Claude Code tool story gets the builder angle, not the model-release one.
