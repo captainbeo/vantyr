@@ -270,7 +270,11 @@ the 12-locale per-language render pipeline. Reuse it:
 
 ---
 
-## 5. X — fully automatable today, and nearly free
+## 5. X — fully automatable today, and nearly free (LIVE 2026-10-20)
+
+Account @Vantyrcode created, credentials live, first post sent (HTTP 201),
+twice-daily cron installed (09:00/17:00 UTC). Bot + queue in
+`deploy/vantyr/`. See VANTYR.md "X posting bot live" for the ops detail.
 
 X API pricing changed to **pay-per-usage with no subscriptions**
 (verified 2026-10-19, [docs.x.com](https://docs.x.com/x-api/getting-started/pricing)):
