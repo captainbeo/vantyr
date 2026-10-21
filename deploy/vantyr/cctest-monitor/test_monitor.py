@@ -761,6 +761,11 @@ def test_action_promote():
     chs = [dict(c) for c in PIN_CHANNELS]
     chs[0]["status"] = 1  # active pin enabled
     state = {}
+    # Stub the marketplace health so the auto path has a healthy candidate.
+    m.A6Market.health_for = lambda self, model, ids: {
+        "1169": {"healthy": True, "success_rate": 10000, "price_micros": 1},
+        "3825": {"healthy": True, "success_rate": 9000, "price_micros": 2},
+    }
     m.RUNTIME = {
         "gateway": FakeGW(chs),
         "cctest": VerdictCC(),
@@ -790,6 +795,48 @@ def test_action_promote():
         m.RUNTIME["enforce"] = False
         status, _ = m.run_action_promote({"model": "claude-fable-5"})
         assert status == 409, status
+    finally:
+        m.RUNTIME = None
+
+
+def test_action_promote_manual_pick():
+    # POST promote {merchant}: promotes THAT specific standby, not the next
+    # in channel order — the owner's manual merchant pick.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1  # a6pin-fable-5 active; 1169 + 3825 standbys
+    state = {}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    m.A6Market.health_for = lambda self, model, ids: {}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": PassCC(),
+        "sellers": [("a6pin-fable-5", "https://api.a6api.com", "sk-pin"),
+                    ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-1169"),
+                    ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-3825")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        status, payload = m.run_action_promote({"model": "claude-fable-5", "merchant": "3825"})
+        assert status == 200, payload
+        # 3825 specifically promoted + verified (not 1169, which is first)
+        assert (22, 1) in m.RUNTIME["gateway"].writes, m.RUNTIME["gateway"].writes
+        assert (21, 1) not in m.RUNTIME["gateway"].writes, m.RUNTIME["gateway"].writes
+        assert payload["data"]["promoted"] == "a6pin-fable-5-3825", payload
+        assert chs[2]["status"] == 1, chs[2]
+        # unknown merchant refused
+        m.RUNTIME["gateway"] = FakeGW([dict(c) for c in PIN_CHANNELS] + [{"id": 30, "name": "a6pin-fable-5-XXXX", "status": 2, "models": "claude-fable-5"}])
+        status, payload = m.run_action_promote({"model": "claude-fable-5", "merchant": "9999"})
+        assert status == 409, (status, payload)
     finally:
         m.RUNTIME = None
 

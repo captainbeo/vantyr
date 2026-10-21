@@ -68,11 +68,24 @@ export type CctestStatus = {
   permanent_fails: number
   thresholds: Record<string, number>
   last_cycle_at: string | null
+  last_sync_at?: string | null
   channels: Record<string, CctestChannelState>
   /** Marks per model → standby channel → unix timestamp. Legacy state
    * written by older monitor versions stores `[]` for a cleared model —
    * reads must tolerate non-object values. */
   bad_standbys: Record<string, Record<string, number> | unknown[] | null>
+  /** Live A6 merchant health per model → merchant id. Advisory: drives the
+   * manual pick's health hints and the auto-promote ranking. */
+  merchant_health?: Record<string, Record<string, MerchantHealth>>
+}
+
+export type MerchantHealth = {
+  healthy: boolean
+  success_rate: number | null
+  sample_count: number
+  available: boolean
+  price_micros: number | null
+  supplier: string | null
 }
 
 /** Per-model health classification driving the dashboard. */

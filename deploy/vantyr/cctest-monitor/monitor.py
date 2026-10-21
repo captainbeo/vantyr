@@ -458,6 +458,63 @@ def parse_a6_key_name(raw):
     return sku, parts[1], channel_name
 
 
+class A6Market:
+    """A6's public marketplace listings (no auth): per-model merchant
+    availability, price and success telemetry. Used to (a) surface merchant
+    health on the dashboard so a manual pick never lands on a dead merchant,
+    and (b) rank standby promotion toward healthy cheap merchants instead of
+    a blind channel-id order."""
+
+    BASE = "https://a6api.com"
+
+    def search(self, model):
+        """[{channel_id, supplier_name, listing_availability,
+        recent_success_rate, sample_count, input_price_micros, ...}] for one
+        model. Returns [] on any error (health data is advisory)."""
+        try:
+            payload, status = http_json(
+                "GET",
+                f"{self.BASE}/api/marketplace/public/channels/search?{urllib.parse.urlencode({'model': model})}",
+            )
+            if status != 200:
+                return []
+            items = (payload.get("data") or {}).get("items") or []
+            if not isinstance(items, list):
+                return []
+            return items
+        except Exception as e:
+            LOG.warning("[market] A6 listing fetch failed for %s: %s", model, e)
+            return []
+
+    def health_for(self, model, our_merchant_ids):
+        """{merchant_id: {healthy, success_rate, sample_count, available,
+        price_micros, supplier}} restricted to our pins. A merchant not on
+        the listing (not currently eligible for the model) is unhealthy."""
+        out = {}
+        for item in self.search(model):
+            cid = item.get("channel_id")
+            if cid in our_merchant_ids:
+                success = item.get("recent_success_rate")
+                samples = item.get("sample_count") or 0
+                avail = item.get("listing_availability")
+                disabled = item.get("supplier_channel_disabled") or item.get("user_channel_disabled")
+                healthy = (
+                    avail == 1
+                    and not disabled
+                    and (success is None or success >= 9500)
+                    and samples >= 10
+                )
+                out[str(cid)] = {
+                    "healthy": bool(healthy),
+                    "success_rate": success,
+                    "sample_count": samples,
+                    "available": avail == 1,
+                    "price_micros": item.get("input_price_micros"),
+                    "supplier": item.get("supplier_name"),
+                }
+        return out
+
+
 class A6Management:
     """A6 dashboard management API client (A6 is a New API fork; the owner's
     dedicated account token list). Key reveal is rate-limited (~5 per batch,
@@ -525,6 +582,52 @@ class A6Management:
         if not key:
             raise RuntimeError(f"A6 key reveal returned empty key for token {token_id}")
         return key
+
+
+# ---------------------------------------------------------------------------
+# Direct merchant probing (pin verify + promote candidates)
+#
+# A pin's authenticity question is "does THIS merchant serve the real model",
+# which only a check against that merchant's own key can answer. The gateway
+# router skips disabled channels, so a gateway-routed check of a standby (or
+# of a pin we just rotated off) would land on a different provider and report
+# THAT provider's verdict — the 2026-10-21 "verification failed after
+# promote" incident. Direct checks use the pin's own A6 key (revealed on
+# demand via the management API, cached in memory for the process lifetime).
+# ---------------------------------------------------------------------------
+
+# process-local cache: A6 token id (from the channel name's merchant, matched
+# to a "<MODEL> | <merchant>" token) → revealed sk- key. Reveals are
+# rate-limited (~5/batch); a cache means a standby picked twice in a row (or
+# re-checked by the cycle) costs one reveal total, not one per check.
+_PIN_KEY_CACHE = {}
+
+
+def _pin_reveal_key(a6m, channel_name):
+    """Resolve a pin channel name to its A6 key via the management API.
+    Merchant id = trailing numeric suffix of the channel name; the key is the
+    A6 token whose name ends in '| <merchant>' for the pin's model. Cached.
+    Returns the sk- key, or None when A6_MANAGE_* is unset / no token
+    matches / reveal is rate-limited (None → caller falls back)."""
+    if a6m is None:
+        return None
+    merchant = channel_name.rsplit("-", 1)[-1]
+    if not merchant.isdigit():
+        return None  # plain-named pin (pre-suffix convention); no direct path
+    if channel_name in _PIN_KEY_CACHE:
+        return _PIN_KEY_CACHE[channel_name]
+    try:
+        for token in a6m.list_tokens():
+            name = (token.get("name") or "").strip()
+            _sku, tok_merchant, _channel = parse_a6_key_name(name)
+            if _channel == channel_name or (tok_merchant == merchant and channel_name.endswith("-" + merchant)):
+                key = a6m.reveal_key(token.get("id"))
+                if key:
+                    _PIN_KEY_CACHE[channel_name] = key
+                    return key
+    except Exception as e:
+        LOG.warning("[pin] key reveal for %s failed (%s); cannot direct-check", channel_name, e)
+    return None
 
 
 def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a6api.com", group="default,unlimited"):
@@ -695,12 +798,37 @@ def status_payload(state, config):
         for name, entry in state.items()
         if name not in RESERVED_STATE_KEYS and isinstance(entry, dict)
     }
+    # Live A6 merchant health per model's pins (advisory for the dashboard's
+    # manual pick + promote ranking). Fetched per request — the marketplace
+    # listing is public and page loads are low-frequency. Merchant id is the
+    # channel name's trailing numeric suffix; only a6pin channels with a
+    # numeric suffix have a marketplace identity. Model comes from the
+    # channel's rotation (its own model list), which is the pin's single SKU.
+    market = A6Market()
+    merchant_health = {}
+    pin_models = {}
+    for name, entry in channels.items():
+        if not (name.startswith("a6pin") and "-" in name):
+            continue
+        merchant = name.rsplit("-", 1)[-1]
+        if not merchant.isdigit():
+            continue
+        rotation = entry.get("rotation") or ([entry["model"]] if entry.get("model") else [])
+        for m in rotation:
+            if m:
+                pin_models.setdefault(m, set()).add(merchant)
+    for model, merchant_ids in pin_models.items():
+        try:
+            merchant_health[model] = market.health_for(model, set(merchant_ids))
+        except Exception:
+            continue
     return {
         **config,
         "last_cycle_at": (state.get("_meta") or {}).get("last_cycle_at"),
         "last_sync_at": (state.get("_sync") or {}).get("last_sync_at"),
         "channels": channels,
         "bad_standbys": state.get("bad_standbys") or {},
+        "merchant_health": merchant_health,
     }
 
 
@@ -747,10 +875,19 @@ def find_seller_entry(sellers, channels, channel_name):
 
 
 def run_action_verify(body):
-    """POST /api/cctest/verify {channel, model}: run the exact cycle check
-    path on demand — find the seller entry covering the channel, do the
-    model_mapping-aware check, run process_verdict (which records
-    last_verdicts and may trigger the same failover policy as the cycle)."""
+    """POST /api/cctest/verify {channel, model}: run one authenticity check
+    for a specific pin, on demand.
+
+    Direct-check first: a pin whose merchant cannot serve (or a standby we
+    are about to trust) must be checkable WITHOUT routing customer-shaped
+    traffic through the gateway ladder — a disabled channel is skipped by
+    the router, so a gateway-routed check would land on a different
+    provider and its verdict would describe THAT provider (the live
+    2026-10-21 "verification failed after promote" bug: the check was
+    attributed to mia-failover). The pin's own A6 key is a direct check
+    against the merchant, which is exactly what "is this merchant good"
+    means. Gateway routing stays for selora-style fingerprint-gated keys,
+    whose checks must ride the Go client."""
     channel_name = body.get("channel")
     model = body.get("model")
     if not channel_name or not model:
@@ -765,49 +902,61 @@ def run_action_verify(body):
     channel = next((c for c in channels if (c.get("name") or "") == channel_name), None)
     if channel is None:
         return 404, {"error": f"channel {channel_name!r} not found"}
-    entry = find_seller_entry(rt["sellers"], channels, channel_name)
-    if entry is None:
-        return 400, {"error": f"channel {channel_name!r} is not in SELLER_CHANNELS"}
-    base_url, seller_key = entry
-    # Same name logic as the cycle: gateway-routed checks send the SKU (the
-    # gateway applies model_mapping itself); direct checks send the upstream
-    # name (A6 registers gpt-6.1-sol, not our gpt-6-1-sol SKU).
     mapping = parse_model_mapping(channel.get("model_mapping"))
     upstream = mapping.get(model, model)
-    check_name = model if is_gateway_routed(base_url) else upstream
-    verdict = do_check(rt["cctest"], base_url, seller_key, check_name)
-    # Gateway-routed attribution: credit the verdict to the channel that
-    # actually served the check, exactly like the cycle does.
-    actual = None
-    if is_gateway_routed(base_url):
-        try:
-            actual = rt["gateway"].last_channel_for_model(check_name, window_minutes=15)
-        except Exception:
-            actual = None
-    target = channel
-    if actual is not None and actual != int(channel["id"]):
-        target = next((c for c in channels if int(c.get("id") or 0) == actual), channel)
-        LOG.info("[action] verify %s served by %s — attributing there", channel_name, target.get("name"))
-    ch_state = rt["state"].setdefault(target.get("name") or channel_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+
+    verdict = None
+    checked_direct = False
+    # Pinned channels: check the merchant's OWN A6 key directly. The channel
+    # list omits keys (controller Omit("key")), so the key comes from the A6
+    # management API (revealed on demand, cached). This works for enabled AND
+    # standby/disabled pins — the fix for "verification failed after promote".
+    if is_pinned_channel(channel_name):
+        pin_key = _pin_reveal_key(rt.get("a6m"), channel_name)
+        if pin_key:
+            pin_base = channel.get("base_url") or "https://api.a6api.com"
+            verdict = do_check(rt["cctest"], pin_base, pin_key, upstream)
+            checked_direct = True
+            LOG.info("[action] verify %s direct against %s -> %s", channel_name, pin_base, verdict)
+
+    if verdict is None:
+        # Non-pin, or pin key unavailable: fall back to the cycle's
+        # seller-entry path (gateway-routed for fingerprint-gated keys).
+        entry = find_seller_entry(rt["sellers"], channels, channel_name)
+        if entry is None:
+            return 400, {"error": f"channel {channel_name!r} has no usable key and is not in SELLER_CHANNELS"}
+        base_url, seller_key = entry
+        check_name = model if is_gateway_routed(base_url) else upstream
+        verdict = do_check(rt["cctest"], base_url, seller_key, check_name)
+
+    # Record + apply the verdict against the channel we actually checked.
+    # Direct checks need no gateway-attribution hop: the point is that the
+    # verdict describes THIS pin, not whatever the ladder picked.
+    ch_state = rt["state"].setdefault(channel_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
     record_verdict(ch_state, model, verdict)
-    process_verdict(
-        rt["gateway"], rt["cctest"], target, base_url, seller_key, model,
-        verdict, rt["threshold_for"], rt["enforce"], rt["discord"], rt["state"],
-        channels, rt["seller_registry"],
-    )
+    if not checked_direct:
+        # Only run the failover policy for gateway-attributed checks; a
+        # direct advisory check of a standby must not itself trigger a
+        # quarantine (the operator is inspecting, not routing).
+        process_verdict(
+            rt["gateway"], rt["cctest"], channel, "", "", model,
+            verdict, rt["threshold_for"], rt["enforce"], rt["discord"], rt["state"],
+            channels, rt["seller_registry"],
+        )
     save_state(rt["state"])
-    return 200, {"success": True, "data": {"verdict": verdict or "inconclusive", "channel": target.get("name") or channel_name}}
+    return 200, {"success": True, "data": {"verdict": verdict or "inconclusive", "channel": channel_name}}
 
 
 def run_action_promote(body):
-    """POST /api/cctest/promote {model}: owner-triggered merchant rotation.
-    Quarantines the model's current active pin, then promotes the next
-    standby (enable-first, verify, demote-on-fail) via the same
-    promote_next_standby path a bad verdict takes. Enforce-only — in
-    observe mode there is nothing to rotate."""
+    """POST /api/cctest/promote {model, merchant?}: owner-triggered merchant
+    rotation. With `merchant` set, promotes THAT specific standby (manual
+    pick); without it, promotes the healthiest cheap standby (never a blind
+    channel-id order). Quarantines the model's current active pin first,
+    then runs the enable-first-verify promote path. Enforce-only."""
     model = body.get("model")
+    target_merchant = (body.get("merchant") or "").strip() or None
     if not model:
-        return 400, {"error": "body must be {\"model\": ...}"}
+        return 400, {"error": "body must be {\"model\": ..., \"merchant\": optional}"}
     if RUNTIME is None:
         return 503, {"error": "monitor not initialized (parked?)"}
     if not RUNTIME["enforce"]:
@@ -817,48 +966,106 @@ def run_action_promote(body):
         channels = rt["gateway"].list_channels()
     except Exception as e:
         return 503, {"error": f"channel list failed: {e}"}
-    active = next(
-        (c for c in channels
-         if is_pinned_channel(c.get("name") or "")
-         and int(c.get("status") or 0) == CHANNEL_ENABLED
-         and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]),
-        None,
-    )
+    pins = [
+        c for c in channels
+        if is_pinned_channel(c.get("name") or "")
+        and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]
+    ]
+    active = next((c for c in pins if int(c.get("status") or 0) == CHANNEL_ENABLED), None)
     if active is None:
-        return 409, {"error": f"no enabled pin channel serves {model!r}"}
-    active_name = active["name"]
-    entry = find_seller_entry(rt["sellers"], channels, active_name)
-    if entry is None:
-        return 400, {"error": f"channel {active_name!r} is not in SELLER_CHANNELS"}
-    base_url, seller_key = entry
-    # Quarantine the active pin first — promote_next_standby refuses to act
-    # while any pin for the model is enabled (idempotence guard), and the
-    # rotate intent is exactly "stop serving from this merchant now".
-    ch_state = rt["state"].setdefault(active_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
-    ch_state.update({
-        "quarantined": True,
-        "quarantined_since": datetime.now(timezone.utc).isoformat(),
-        "permanent": True,
-        "model": model,
-    })
+        # No active pin (fresh pool or a previous rotation left it dead):
+        # promote directly without a quarantine step.
+        active = None
+    active_name = active["name"] if active else None
+
+    # Candidate standbys (disabled), minus the active pin.
+    standbys = [c for c in pins if int(c.get("status") or 0) != CHANNEL_ENABLED]
+    if target_merchant:
+        standbys = [
+            c for c in standbys
+            if (c.get("name") or "").endswith(f"-{target_merchant}")
+        ]
+        if not standbys:
+            return 409, {"error": f"no standby pin for {model!r} with merchant {target_merchant!r}"}
+    if not standbys:
+        return 409, {"error": f"no standby pin available for {model!r}"}
+
+    # Rank candidates by A6 live health (healthy + cheap first) so an
+    # automatic promote never lands on a dead/disabled merchant. With an
+    # explicit merchant pick the operator's choice wins, but we still flag
+    # the health so the page can warn.
+    market = A6Market()
+    health = market.health_for(model, {c.get("name", "").rsplit("-", 1)[-1] for c in standbys})
+    def rank(ch):
+        # Higher is better (sorted with reverse=True): healthy first, then
+        # highest success rate, then cheapest (negated price).
+        merchant = (ch.get("name") or "").rsplit("-", 1)[-1]
+        h = health.get(merchant) or {}
+        return (
+            1 if h.get("healthy") else 0,
+            h.get("success_rate") or 0,
+            -(h.get("price_micros") or 10**9),
+        )
+    if not target_merchant:
+        standbys.sort(key=rank, reverse=True)
+        if not (health.get((standbys[0].get("name") or "").rsplit("-", 1)[-1]) or {}).get("healthy"):
+            # Every candidate looks unhealthy on A6's listing — refuse the
+            # automatic rotation rather than promote into a dead merchant.
+            return 409, {"error": f"no A6-healthy standby for {model!r} (checked {len(standbys)}); pick one manually if you know better"}
+
+    chosen = standbys[0]  # manual pick, or health-ranked top
+    chosen_name = chosen.get("name")
+
+    base_url, seller_key = "https://vantyr.xyz", rt.get("relay_token", "")
+    if active is not None:
+        entry = find_seller_entry(rt["sellers"], channels, active_name)
+        if entry is None:
+            return 400, {"error": f"channel {active_name!r} is not in SELLER_CHANNELS"}
+        base_url, seller_key = entry
+        # Quarantine the active pin first — promote_next_standby refuses to
+        # act while any pin for the model is enabled (idempotence guard), and
+        # the rotate intent is exactly "stop serving from this merchant now".
+        ch_state = rt["state"].setdefault(active_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+        ch_state.update({
+            "quarantined": True,
+            "quarantined_since": datetime.now(timezone.utc).isoformat(),
+            "permanent": True,
+            "model": model,
+        })
+        try:
+            rt["gateway"].set_status(int(active["id"]), CHANNEL_MANUALLY_DISABLED)
+            rt["gateway"].fix_abilities()
+        except Exception as e:
+            ch_state.update({"quarantined": False, "permanent": False, "model": ""})
+            return 503, {"error": f"quarantining {active_name} failed: {e}"}
+        LOG.warning("[action] owner rotation: quarantined active pin %s for %s → promoting %s", active_name, model, chosen_name)
+        discord_alert(rt["discord"], f"cctest: manual rotation for {model}: {active_name} quarantined → promoting {chosen_name}")
+    else:
+        LOG.warning("[action] owner rotation: no active pin for %s — promoting %s directly", model, chosen_name)
+
+    # CRITICAL: promote against a POST-quarantine live list. Passing the
+    # pre-quarantine snapshot made promote_next_standby's idempotence guard
+    # see the pin we just disabled as still-enabled and refuse to promote —
+    # leaving the model with zero active pins (live incident 2026-10-21
+    # 00:49, fable-5-1 dead until manual repair).
     try:
-        rt["gateway"].set_status(int(active["id"]), CHANNEL_MANUALLY_DISABLED)
-        rt["gateway"].fix_abilities()
-    except Exception as e:
-        ch_state.update({"quarantined": False, "permanent": False, "model": ""})
-        return 503, {"error": f"quarantining {active_name} failed: {e}"}
-    LOG.warning("[action] owner-promoted rotation: quarantined active pin %s for %s", active_name, model)
-    discord_alert(rt["discord"], f"cctest: manual rotation for {model}: active pin {active_name} quarantined, promoting next standby")
+        fresh = rt["gateway"].list_channels()
+    except Exception:
+        fresh = channels
     promote_next_standby(
-        rt["gateway"], rt["cctest"], active, base_url, seller_key, model,
-        rt["enforce"], rt["discord"], rt["state"], channels,
-        rt["seller_registry"],
+        rt["gateway"], rt["cctest"], active or chosen, base_url, seller_key, model,
+        rt["enforce"], rt["discord"], rt["state"], fresh,
+        rt["seller_registry"], preferred_name=chosen_name,
     )
     save_state(rt["state"])
     # Report what happened: the promoted standby (if any) is now the enabled
     # pin for the model.
+    try:
+        after = rt["gateway"].list_channels()
+    except Exception:
+        after = fresh
     new_active = next(
-        (c for c in channels
+        (c for c in after
          if is_pinned_channel(c.get("name") or "")
          and int(c.get("status") or 0) == CHANNEL_ENABLED
          and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]
@@ -1100,6 +1307,7 @@ def main():
         "discord": discord,
         "state": state,
         "seller_registry": {},
+        "a6m": a6m,
     }
     # Key sync runs on its own fast loop — new A6 keys join the pool within
     # minutes, independent of the (expensive) per-cycle cctest checks.
@@ -1262,7 +1470,7 @@ def is_pinned_channel(name):
 
 def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                          model, enforce, discord, state, channels_snapshot,
-                         seller_registry=None):
+                         seller_registry=None, preferred_name=None):
     """Pinned-channel failover (owner rule 2026-10-18): when the active pin
     for a model is caught fake, promote the next standby pin for that
     model.
@@ -1338,7 +1546,22 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         )
         LOG.warning("[pin] ALL standbys bad for %s (in cooldown)", model)
         return
-    standby = candidates[0]
+    if preferred_name:
+        chosen = next((ch for ch in candidates if ch.get("name") == preferred_name), None)
+        if chosen is None:
+            # The operator's pick exists but is not in the eligible candidate
+            # set (bad-marked and still cooling down). Refuse rather than
+            # silently promote a different merchant than they chose.
+            discord_alert(
+                discord,
+                f"cctest: requested standby {preferred_name} for {model} is not "
+                f"eligible (bad-marked / cooling down) — no promotion",
+            )
+            LOG.warning("[pin] requested standby %s for %s not eligible; skipping", preferred_name, model)
+            return
+        standby = chosen
+    else:
+        standby = candidates[0]
     standby_name = standby["name"]
     if not enforce:
         LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)

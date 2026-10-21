@@ -39,7 +39,7 @@ import { KpiTiles } from './components/kpi-tiles'
 import { ModelDetailDrawer } from './components/model-detail-drawer'
 import { ModelRoutingCard } from './components/model-routing-card'
 import { buildModelSummaries, buildRoutingRows } from './lib/routing-rows'
-import type { ModelSummary, RoutingRow } from './types'
+import type { ModelSummary } from './types'
 
 // ============================================================================
 // Model Routing dashboard — KPI tiles, needs-attention strip, per-model
@@ -80,9 +80,9 @@ function ModelCardGrid(props: {
 export function ModelRouting() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [verifyingChannelId, setVerifyingChannelId] = useState<number | null>(
-    null
-  )
+  const [verifyingChannelName, setVerifyingChannelName] = useState<
+    string | null
+  >(null)
   const [openModel, setOpenModel] = useState<string | null>(null)
 
   const channelsQuery = useQuery({
@@ -117,13 +117,14 @@ export function ModelRouting() {
   )
 
   const verifyMutation = useMutation({
-    mutationFn: (row: RoutingRow) => verifyNow(row.channelName, row.model),
-    onMutate: (row) => setVerifyingChannelId(row.channelId),
-    onSuccess: (result, row) => {
+    mutationFn: (args: { channelName: string; model: string }) =>
+      verifyNow(args.channelName, args.model),
+    onMutate: (args) => setVerifyingChannelName(args.channelName),
+    onSuccess: (result, args) => {
       toast.success(
         t('{{model}} on {{channel}}: {{verdict}}', {
-          model: row.model,
-          channel: result.channel ?? row.channelName,
+          model: args.model,
+          channel: result.channel ?? args.channelName,
           verdict: result.verdict,
         })
       )
@@ -133,13 +134,14 @@ export function ModelRouting() {
       void error
     },
     onSettled: () => {
-      setVerifyingChannelId(null)
+      setVerifyingChannelName(null)
       void queryClient.invalidateQueries({ queryKey: ['model-routing'] })
     },
   })
 
   const promoteMutation = useMutation({
-    mutationFn: (model: string) => promoteStandby(model),
+    mutationFn: (args: { model: string; merchant?: string }) =>
+      promoteStandby(args.model, args.merchant),
     onSuccess: (result) => {
       if (result.promoted) {
         toast.success(
@@ -224,12 +226,28 @@ export function ModelRouting() {
             summary={openSummary}
             rows={rows}
             canVerify={!monitorDown}
-            onVerify={(row) => verifyMutation.mutate(row)}
-            onPromote={(model) => promoteMutation.mutate(model)}
-            verifyPending={
-              verifyMutation.isPending && verifyingChannelId !== null
+            onVerify={(row) =>
+              verifyMutation.mutate({
+                channelName: row.channelName,
+                model: row.model,
+              })
             }
+            onVerifyChannel={(channelName, model) =>
+              verifyMutation.mutate({ channelName, model })
+            }
+            onPromote={(model, merchant) =>
+              promoteMutation.mutate({ model, merchant })
+            }
+            verifyPending={
+              verifyMutation.isPending && verifyingChannelName !== null
+            }
+            verifyPendingChannel={verifyingChannelName}
             promotePending={promoteMutation.isPending}
+            merchantHealth={
+              openModel
+                ? (cctestQuery.data?.merchant_health?.[openModel] ?? null)
+                : null
+            }
             onOpenChange={(next) => {
               if (!next) setOpenModel(null)
             }}

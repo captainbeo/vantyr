@@ -482,4 +482,46 @@ describe('Model Routing dashboard', () => {
       .filter((el) => el.closest('ol') !== null)
     expect(ladderPinRows).toHaveLength(0)
   })
+
+  it('promotes a SPECIFIC merchant via Use this merchant (manual pick)', async () => {
+    const { post } = await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
+    // each standby row offers a per-merchant action
+    const useButtons = await screen.findAllByRole('button', {
+      name: 'Use this merchant',
+    })
+    expect(useButtons.length).toBeGreaterThan(0)
+    await userEvent.click(useButtons[0]!)
+    const confirmButton = await screen.findByRole('button', { name: 'Promote' })
+    await userEvent.click(confirmButton)
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith(
+        '/api/cctest/promote',
+        { model: 'claude-fable-5', merchant: '1169' },
+        expect.anything()
+      )
+    })
+  })
+
+  it('verifies a specific standby merchant from its row', async () => {
+    const { post } = await renderPage()
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
+    const verifyButtons = await screen.findAllByRole('button', {
+      name: 'Verify this merchant',
+    })
+    await userEvent.click(verifyButtons[0]!)
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith(
+        '/api/cctest/verify',
+        { channel: 'a6pin-fable-5-1169', model: 'claude-fable-5' },
+        expect.anything()
+      )
+    })
+  })
 })

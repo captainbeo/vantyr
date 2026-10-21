@@ -84,10 +84,13 @@ export type PromoteResponse = {
   demoted: string
 }
 
-export async function promoteStandby(model: string): Promise<PromoteResponse> {
+export async function promoteStandby(
+  model: string,
+  merchant?: string
+): Promise<PromoteResponse> {
   const res = await api.post(
     '/api/cctest/promote',
-    { model },
+    merchant ? { model, merchant } : { model },
     // Promotion runs a synchronous standby verification after the swap.
     { timeout: 120_000, skipBusinessError: true } satisfies ApiRequestConfig
   )

@@ -53,7 +53,12 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import type { ModelSummary, RoutingRow } from '../types'
+import type {
+  MerchantHealth,
+  ModelSummary,
+  RoutingRow,
+  StandbyEntry,
+} from '../types'
 
 // ============================================================================
 // Model detail drawer — the drill-down: full routing ladder (ordered,
@@ -105,13 +110,17 @@ export function ModelDetailDrawer(props: {
   rows: RoutingRow[]
   canVerify: boolean
   onVerify: (row: RoutingRow) => void
-  onPromote: (model: string) => void
+  onPromote: (model: string, merchant?: string) => void
+  onVerifyChannel: (channelName: string, model: string) => void
   verifyPending: boolean
+  verifyPendingChannel: string | null
   promotePending: boolean
+  merchantHealth: Record<string, MerchantHealth> | null
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pickedMerchant, setPickedMerchant] = useState<string | null>(null)
   const [groupFilter, setGroupFilter] = useState<string>('default')
 
   const open = props.model !== null && props.summary !== null
@@ -271,63 +280,41 @@ export function ModelDetailDrawer(props: {
                   <SideDrawerSectionHeader
                     title={t('Standby pool')}
                     description={t(
-                      'Pinned merchant keys kept disabled. Promote swaps to the next one; a failed verification benches it for the cooldown.'
+                      'Pinned merchant keys kept disabled. Verify a merchant, then use it to swap the active pin. A failed verification benches it for the cooldown.'
                     )}
                     icon={<BadgeCheck className='size-4' />}
                   />
                   <div className='flex flex-col gap-2'>
                     {props.summary.standbys.map((entry) => (
-                      <div
+                      <StandbyRow
                         key={entry.channelId}
-                        className='bg-muted/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5'
-                      >
-                        <div className='min-w-0'>
-                          <div className='text-foreground truncate font-mono text-xs font-medium'>
-                            {entry.channelName}
-                          </div>
-                          <div className='text-muted-foreground mt-0.5 text-[11px]'>
-                            {entry.merchant
-                              ? t('merchant {{id}}', { id: entry.merchant })
-                              : t('standby pin')}
-                          </div>
-                        </div>
-                        <div className='flex shrink-0 items-center gap-2'>
-                          {entry.verdict != null && (
-                            <StatusBadge
-                              variant={verdictVariant(entry.verdict)}
-                              label={entry.verdict}
-                              copyable={false}
-                            />
-                          )}
-                          {entry.state === 'ready' && (
-                            <StatusBadge
-                              variant='success'
-                              label={t('Ready')}
-                              copyable={false}
-                            />
-                          )}
-                          {entry.state === 'cooldown' && (
-                            <StatusBadge
-                              variant='warning'
-                              label={t('expires in {{hours}}', {
-                                hours: formatRemaining(
-                                  (entry.cooldownExpiresAt ?? 0) -
-                                    Date.now() / 1000
-                                ),
-                              })}
-                              copyable={false}
-                            />
-                          )}
-                          {entry.state === 'quarantined' && (
-                            <StatusBadge
-                              variant='danger'
-                              icon={ShieldAlert}
-                              label={t('Quarantined')}
-                              copyable={false}
-                            />
-                          )}
-                        </div>
-                      </div>
+                        entry={entry}
+                        merchantHealth={
+                          entry.merchant != null
+                            ? props.merchantHealth?.[entry.merchant]
+                            : undefined
+                        }
+                        canAct={props.canVerify}
+                        verifyingThis={
+                          props.verifyPendingChannel === entry.channelName
+                        }
+                        pickingThis={
+                          props.promotePending &&
+                          pickedMerchant === entry.merchant
+                        }
+                        onVerify={() =>
+                          props.onVerifyChannel(
+                            entry.channelName,
+                            props.model ?? ''
+                          )
+                        }
+                        onUse={() => {
+                          if (entry.merchant) {
+                            setPickedMerchant(entry.merchant)
+                            setConfirmOpen(true)
+                          }
+                        }}
+                      />
                     ))}
                   </div>
                 </SideDrawerSection>
@@ -335,16 +322,30 @@ export function ModelDetailDrawer(props: {
 
               <ConfirmDialog
                 open={confirmOpen && props.model !== null}
-                onOpenChange={setConfirmOpen}
-                title={t('Promote standby')}
-                desc={t(
-                  'Rotate {{model}} to a different merchant: the active pin is disabled immediately, the next standby is enabled and verified. Live routing changes now.',
-                  { model: props.model ?? '' }
-                )}
+                onOpenChange={(open) => {
+                  if (!open) setPickedMerchant(null)
+                  setConfirmOpen(open)
+                }}
+                title={
+                  pickedMerchant
+                    ? t('Promote this merchant')
+                    : t('Promote standby')
+                }
+                desc={
+                  pickedMerchant
+                    ? t(
+                        'Rotate {{model}} to merchant {{merchant}}: the active pin is disabled immediately, this standby is enabled and verified. Live routing changes now.',
+                        { model: props.model ?? '', merchant: pickedMerchant }
+                      )
+                    : t(
+                        'Rotate {{model}} to a different merchant: the active pin is disabled immediately, the healthiest standby is enabled and verified. Live routing changes now.',
+                        { model: props.model ?? '' }
+                      )
+                }
                 confirmText={t('Promote')}
                 handleConfirm={() => {
                   if (props.model) {
-                    props.onPromote(props.model)
+                    props.onPromote(props.model, pickedMerchant ?? undefined)
                   }
                 }}
                 isLoading={props.promotePending}
@@ -427,5 +428,124 @@ function LadderRows(props: {
         )
       })}
     </ol>
+  )
+}
+
+function StandbyRow(props: {
+  entry: StandbyEntry
+  merchantHealth: MerchantHealth | undefined
+  canAct: boolean
+  verifyingThis: boolean
+  pickingThis: boolean
+  onVerify: () => void
+  onUse: () => void
+}) {
+  const { t } = useTranslation()
+  const e = props.entry
+  const h = props.merchantHealth
+  const usable = e.state !== 'cooldown' && e.merchant != null
+
+  return (
+    <div className='bg-muted/40 flex flex-col gap-2 rounded-lg border px-3 py-2.5'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='min-w-0'>
+          <div className='text-foreground truncate font-mono text-xs font-medium'>
+            {e.channelName}
+          </div>
+          <div className='text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]'>
+            <span>
+              {e.merchant
+                ? t('merchant {{id}}', { id: e.merchant })
+                : t('standby pin')}
+            </span>
+            {h?.supplier && (
+              <span className='text-muted-foreground/70'>· {h.supplier}</span>
+            )}
+            {h?.success_rate != null && (
+              <span
+                className={cn(h.healthy ? 'text-success' : 'text-destructive')}
+              >
+                ·{' '}
+                {t('{{rate}}% success', {
+                  rate: Math.round((h.success_rate ?? 0) / 100),
+                })}
+              </span>
+            )}
+            {h?.price_micros != null && (
+              <span className='text-muted-foreground/70'>
+                ·{' '}
+                {t('${{price}}/1M in', {
+                  price: (h.price_micros / 1_000_000).toFixed(2),
+                })}
+              </span>
+            )}
+            {h && !h.healthy && (
+              <span className='text-warning'>
+                · {t('A6: not currently eligible')}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className='flex shrink-0 items-center gap-2'>
+          {e.verdict != null && (
+            <StatusBadge
+              variant={verdictVariant(e.verdict)}
+              label={e.verdict}
+              copyable={false}
+            />
+          )}
+          {e.state === 'ready' && (
+            <StatusBadge
+              variant='success'
+              label={t('Ready')}
+              copyable={false}
+            />
+          )}
+          {e.state === 'cooldown' && (
+            <StatusBadge
+              variant='warning'
+              label={t('expires in {{hours}}', {
+                hours: formatRemaining(
+                  (e.cooldownExpiresAt ?? 0) - Date.now() / 1000
+                ),
+              })}
+              copyable={false}
+            />
+          )}
+          {e.state === 'quarantined' && (
+            <StatusBadge
+              variant='danger'
+              icon={ShieldAlert}
+              label={t('Quarantined')}
+              copyable={false}
+            />
+          )}
+        </div>
+      </div>
+      {props.canAct && (
+        <div className='flex items-center gap-2 border-t pt-2'>
+          <Button
+            variant='ghost'
+            size='sm'
+            className='h-7'
+            disabled={props.verifyingThis}
+            onClick={props.onVerify}
+          >
+            <RefreshCw />
+            {props.verifyingThis ? t('Verifying…') : t('Verify this merchant')}
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            className='h-7'
+            disabled={!usable || props.pickingThis}
+            onClick={props.onUse}
+          >
+            <ArrowUpRight />
+            {props.pickingThis ? t('Promoting…') : t('Use this merchant')}
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }

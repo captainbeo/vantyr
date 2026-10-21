@@ -45,6 +45,12 @@
     "Rate-limit windows and weekly caps interrupt long coding sessions exactly when you need throughput.": "Rate-Limit-Fenster und wöchentliche Caps unterbrechen lange Coding-Sessions genau dann, wenn du Durchsatz brauchst.",
     "Ready to build without subscription limits?": "Bereit, ohne Abo-Limits zu bauen?",
     "Real models, transparent service": "Echte Modelle, transparenter Service",
+    "Community": "Community",
+    "Community links": "Community links",
+    "Close community links": "Close community links",
+    "Open community links": "Open community links",
+    "Join Discord": "Join Discord",
+    "Join Telegram": "Join Telegram",
     "Regional restrictions": "Regionale Einschränkungen",
     "Sign up and create your personal Vantyr API key.": "Registriere dich und erstelle deinen persönlichen Vantyr-API-Schlüssel.",
     "Subscriptions are convenient until your work depends on them.": "Abos sind praktisch — bis deine Arbeit von ihnen abhängt.",
@@ -7086,6 +7092,15 @@
     "standby pin": "standby pin",
     "Standby": "Standby",
     "No active channel — traffic fails over": "No active channel — traffic fails over",
-    "Enforcement paused": "Enforcement paused"
+    "Enforcement paused": "Enforcement paused",
+    "Promote this merchant": "Promote this merchant",
+    "Rotate {{model}} to merchant {{merchant}}: the active pin is disabled immediately, this standby is enabled and verified. Live routing changes now.": "Rotate {{model}} to merchant {{merchant}}: the active pin is disabled immediately, this standby is enabled and verified. Live routing changes now.",
+    "Rotate {{model}} to a different merchant: the active pin is disabled immediately, the healthiest standby is enabled and verified. Live routing changes now.": "Rotate {{model}} to a different merchant: the active pin is disabled immediately, the healthiest standby is enabled and verified. Live routing changes now.",
+    "Verify this merchant": "Verify this merchant",
+    "Use this merchant": "Use this merchant",
+    "{{rate}}% success": "{{rate}}% success",
+    "${{price}}/1M in": "${{price}}/1M in",
+    "A6: not currently eligible": "A6: not currently eligible",
+    "Pinned merchant keys kept disabled. Verify a merchant, then use it to swap the active pin. A failed verification benches it for the cooldown.": "Pinned merchant keys kept disabled. Verify a merchant, then use it to swap the active pin. A failed verification benches it for the cooldown."
   }
 }
