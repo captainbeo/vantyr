@@ -3663,3 +3663,24 @@ attr_match, fable-5-1 relays + attributed to 5630. Monitor 41/41, web 28.
 - **Rollback:** repoint compose to vantyr/new-api:pinned-next44 and
   `docker compose up -d --no-deps gateway` (old image id 5f31c93e6513 if the
   tag points at the new build); web backup at the -pre-community dir above.
+
+## 2026-10-21 — Quarantine release on re-verify + verdict-colored toasts (pinned-next46, LIVE)
+
+Owner reports: re-verified merchants stayed quarantined; a FAILED verify
+toast rendered green.
+
+1. **Release on re-verify**: a passing direct re-check of a pin we
+   quarantined now RELEASES it (release_quarantine — the monitor's recovery
+   action) instead of leaving the merchant benched until the next cycle's
+   recovery loop noticed. A failing re-check still does NOT release. The
+   drawer's standby row explains the state ("Passes re-check but stays
+   quarantined — click Verify to release").
+2. **Verdict-colored toasts**: the verify toast was an unconditional
+   toast.success. Color now follows the verdict — pass green, soft amber,
+   failed/inconclusive red — so a `attr_swapped` re-check reads as the
+   failure it is.
+3. **Price clarity**: per-standby price ($/1M from A6 health) promoted to
+   foreground ink (was muted).
+
+Live proof: quarantined a6pin-fable-5-3825 (stored attr_match) verified ->
+attr_match -> status 2→1 (released). Monitor 43/43, web 29/29.
