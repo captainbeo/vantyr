@@ -937,7 +937,13 @@ def run_action_verify(body):
     # verdict describes THIS pin, not whatever the ladder picked.
     ch_state = rt["state"].setdefault(channel_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
     record_verdict(ch_state, model, verdict)
-    if not checked_direct:
+    if checked_direct and verdict in PASS_VERDICTS and ch_state.get("quarantined"):
+        # The operator re-verified a pin we quarantined and it now passes —
+        # release it (merchant recovered, exactly the recovery loop's job).
+        # Only on a passing direct check: an advisory standby verify that
+        # fails does not release anything.
+        release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
+    elif not checked_direct:
         # Only run the failover policy for gateway-attributed checks; a
         # direct advisory check of a standby must not itself trigger a
         # quarantine (the operator is inspecting, not routing).

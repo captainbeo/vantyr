@@ -116,18 +116,29 @@ export function ModelRouting() {
     [summaries, openModel]
   )
 
+  const PASS_VERDICTS = new Set(['official', 'attr_match'])
+  const SOFT_VERDICTS = new Set(['official_flawed', 'reversed'])
+
   const verifyMutation = useMutation({
     mutationFn: (args: { channelName: string; model: string }) =>
       verifyNow(args.channelName, args.model),
     onMutate: (args) => setVerifyingChannelName(args.channelName),
     onSuccess: (result, args) => {
-      toast.success(
-        t('{{model}} on {{channel}}: {{verdict}}', {
-          model: args.model,
-          channel: result.channel ?? args.channelName,
-          verdict: result.verdict,
-        })
-      )
+      const message = t('{{model}} on {{channel}}: {{verdict}}', {
+        model: args.model,
+        channel: result.channel ?? args.channelName,
+        verdict: result.verdict,
+      })
+      // Color follows the verdict, never a flat success: a verified-genuine
+      // merchant is green, a soft verdict amber, a failed/inconclusive one
+      // red — the badge color is the verdict, not the HTTP outcome.
+      if (result.verdict != null && PASS_VERDICTS.has(result.verdict)) {
+        toast.success(message)
+      } else if (result.verdict != null && SOFT_VERDICTS.has(result.verdict)) {
+        toast.warning(message)
+      } else {
+        toast.error(message)
+      }
     },
     onError: (error) => {
       toast.error(t('Verification failed'))

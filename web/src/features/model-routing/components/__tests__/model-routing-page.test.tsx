@@ -21,6 +21,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
+import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
@@ -268,6 +269,58 @@ describe('Model Routing dashboard', () => {
     })
   })
 
+  it('toasts a FAILED verify verdict in red (not green)', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/api/channel') {
+        return {
+          data: {
+            success: true,
+            data: { items: CHANNELS, total: 2, page: 1, page_size: 100 },
+          },
+        }
+      }
+      if (url === '/api/cctest/status') {
+        return { data: { success: true, data: CC_OK } }
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.spyOn(api, 'post').mockImplementation(async (url: string) => {
+      if (url === '/api/cctest/verify') {
+        return {
+          data: {
+            success: true,
+            data: { verdict: 'attr_swapped', channel: 'a6pin-fable-5' },
+          },
+        }
+      }
+      throw new Error(`Unexpected POST: ${url}`)
+    })
+    const successSpy = vi.spyOn(toast, 'success')
+    const errorSpy = vi.spyOn(toast, 'error')
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ModelRouting />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+    const card = await screen.findByRole('button', {
+      name: /claude-fable-5: Serving/,
+    })
+    await userEvent.click(card)
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Verify now' })
+    )
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalled()
+    })
+    expect(successSpy).not.toHaveBeenCalled()
+  })
+
   it('fires a promote POST after the confirm dialog inside the drawer', async () => {
     const { post } = await renderPage()
     const card = await screen.findByRole('button', {
@@ -494,7 +547,9 @@ describe('Model Routing dashboard', () => {
       name: 'Use this merchant',
     })
     expect(useButtons.length).toBeGreaterThan(0)
-    await userEvent.click(useButtons[0]!)
+    const firstUse = useButtons[0]
+    if (!firstUse) throw new Error('no Use this merchant button')
+    await userEvent.click(firstUse)
     const confirmButton = await screen.findByRole('button', { name: 'Promote' })
     await userEvent.click(confirmButton)
     await waitFor(() => {
@@ -515,7 +570,9 @@ describe('Model Routing dashboard', () => {
     const verifyButtons = await screen.findAllByRole('button', {
       name: 'Verify this merchant',
     })
-    await userEvent.click(verifyButtons[0]!)
+    const firstVerify = verifyButtons[0]
+    if (!firstVerify) throw new Error('no Verify this merchant button')
+    await userEvent.click(firstVerify)
     await waitFor(() => {
       expect(post).toHaveBeenCalledWith(
         '/api/cctest/verify',

@@ -472,7 +472,7 @@ function StandbyRow(props: {
               </span>
             )}
             {h?.price_micros != null && (
-              <span className='text-muted-foreground/70'>
+              <span className='text-foreground/80'>
                 ·{' '}
                 {t('${{price}}/1M in', {
                   price: (h.price_micros / 1_000_000).toFixed(2),
@@ -522,6 +522,15 @@ function StandbyRow(props: {
           )}
         </div>
       </div>
+      {e.state === 'quarantined' &&
+        e.verdict != null &&
+        PASS_VERDICTS.has(e.verdict) && (
+          <p className='text-muted-foreground border-t pt-2 text-[11px]'>
+            {t(
+              'Passes re-check but stays quarantined — click "Verify this merchant" to release it (a passing check lifts the quarantine).'
+            )}
+          </p>
+        )}
       {props.canAct && (
         <div className='flex items-center gap-2 border-t pt-2'>
           <Button

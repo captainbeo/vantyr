@@ -1035,6 +1035,94 @@ def test_status_payload_includes_sync():
     assert "_sync" not in payload["channels"]
 
 
+def test_action_verify_releases_quarantine_on_pass():
+    # Re-verifying a quarantined pin that now passes must RELEASE it (the
+    # merchant recovered) — the live 2026-10-21 complaint "re-verify still
+    # quarantined".
+    chs = [{"id": 20, "name": "a6pin-fable-5-4756", "status": 2, "group": "default",
+            "models": "claude-fable-5"}]
+    gw = FakeGW(chs)
+    state = {"a6pin-fable-5-4756": {"rotation": ["claude-fable-5"], "idx": 0,
+                                    "fails": 1, "quarantined": True, "model": "claude-fable-5"}}
+
+    class DirectPass:
+        # A direct pin check calls check(base=pin base, key=<revealed>, model)
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    class FakeA6:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 4756"}]
+
+        def reveal_key(self, tid):
+            return "sk-pin"
+
+    m._PIN_KEY_CACHE.clear()
+    m.RUNTIME = {
+        "gateway": gw, "cctest": DirectPass(),
+        "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {}, "a6m": FakeA6(),
+    }
+    try:
+        status, payload = m.run_action_verify({"channel": "a6pin-fable-5-4756", "model": "claude-fable-5"})
+        assert status == 200, payload
+        assert payload["data"]["verdict"] == "official", payload
+        # released: enabled + state cleared
+        assert (20, 1) in gw.writes, gw.writes
+        assert state["a6pin-fable-5-4756"]["quarantined"] is False, state
+    finally:
+        m.RUNTIME = None
+        m._PIN_KEY_CACHE.clear()
+
+
+def test_action_verify_fail_keeps_quarantine():
+    # A failing re-check of a quarantined pin does NOT release it.
+    chs = [{"id": 20, "name": "a6pin-fable-5-4756", "status": 2, "group": "default",
+            "models": "claude-fable-5"}]
+    gw = FakeGW(chs)
+    state = {"a6pin-fable-5-4756": {"rotation": ["claude-fable-5"], "idx": 0,
+                                    "fails": 1, "quarantined": True, "model": "claude-fable-5"}}
+
+    class DirectBad:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "attr_swapped"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    class FakeA6:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 4756"}]
+
+        def reveal_key(self, tid):
+            return "sk-pin"
+
+    m._PIN_KEY_CACHE.clear()
+    m.RUNTIME = {
+        "gateway": gw, "cctest": DirectBad(),
+        "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {}, "a6m": FakeA6(),
+    }
+    try:
+        status, payload = m.run_action_verify({"channel": "a6pin-fable-5-4756", "model": "claude-fable-5"})
+        assert status == 200, payload
+        assert payload["data"]["verdict"] == "attr_swapped", payload
+        assert (20, 1) not in gw.writes, gw.writes  # no release
+        assert state["a6pin-fable-5-4756"]["quarantined"] is True, state
+    finally:
+        m.RUNTIME = None
+        m._PIN_KEY_CACHE.clear()
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
