@@ -3623,3 +3623,43 @@ samples, 5052/5630 attr_swapped, 2000 pool-inactive).
 Live verification: standby 5052 verify -> attr_swapped (correct: it IS
 fake); manual promote 5630 over active 3825 -> promoted 5630, verified
 attr_match, fable-5-1 relays + attributed to 5630. Monitor 41/41, web 28.
+
+## 2026-10-21 — Discord/Telegram community buttons + floating widget (pinned-next45, LIVE)
+
+`feat(home): Discord + Telegram community buttons and floating widget`
+(64bc2a931, tag deploy/2026-10-21-community-buttons). Owner-approved.
+
+- **What ships:** two glass-button entries (Discord blurple, Telegram blue)
+  under the hero sign-up video, plus a floating bottom-right Community widget
+  on every public page (collapsed by default, expands on tap, closes on
+  Escape, links aria-hidden while collapsed so they don't duplicate in the
+  a11y tree). New filled brand marks (icon-discord-solid / icon-telegram-solid)
+  replace the thin stroke glyphs — they read as the real mascots at button
+  size. Shared invite config in components/community-links.ts (permanent
+  discord.gg/BNBdHZqGFb + t.me/vantyrapi). Header social icons swapped to the
+  same solid marks. Glass surface via data-slot='glass-box'; verified
+  backdrop-blur/sheen/edge in light + dark + mobile.
+- **Scope:** web-only. 12 files; i18n keys (Join Discord/Telegram, Community,
+  Open/Close community links) already present in HEAD locales (synced earlier,
+  verified all 12 locales). build/lint/format clean; 6/6 community tests pass;
+  production rsbuild + prerender 11/11 locales.
+- **Deploy (safe protocol):** pre-deploy backup
+  /opt/vantyr-backup-web-pre-community-2026-10-21 (6 modified files); web file
+  delta rsynced from staging (no tar -C into live paths; /bin/bash verified
+  after). Image vantyr/new-api:pinned-next45 (266e0861cf5a) built on-server;
+  code embedded verified (Join Discord ×47, discord.gg ×59 in the binary).
+  compose repointed next44->next45 (backup compose.yaml.bak-next44-community);
+  gateway recreated --no-deps, healthy. NOTE: `compose build` retagged
+  pinned-next44 in place during the build (gotcha) — the pre-deploy next44
+  image id is 5f31c93e6513 for tag-based rollback reference.
+- **AGPL:** source archive vantyr-source-2026-10-21-community-buttons.tar.gz
+  (sha256 5f89c81c…96ecb) uploaded to static/source/, source-notice.txt
+  updated (backup source-notice-pre-next45.txt), both serving 200.
+- **Live verification:** gateway healthy on pinned-next45; / /pricing /about
+  /rankings /nl/ /ar/ all 200; zero gateway errors in 3 min; live bundle
+  index.4980f8ab22.js contains Join Discord / Open community links / Telegram
+  (community section markup is in the code-split home route chunk, loaded at
+  runtime — confirmed present in the served bundle).
+- **Rollback:** repoint compose to vantyr/new-api:pinned-next44 and
+  `docker compose up -d --no-deps gateway` (old image id 5f31c93e6513 if the
+  tag points at the new build); web backup at the -pre-community dir above.
