@@ -108,3 +108,10 @@ Production proof after deploy: Telegram-register a test account via the live wid
 - Discord bind → trial credit (symmetric to Telegram verification): undecided; the OAuth bind path exists, a bind grant would mirror `BindTelegramForSessionWithTx`. Decide when Discord adoption is observed.
 - `TransferAffQuotaToQuota` does not check `MaxWalletQuota` (pre-existing upstream behavior) — recorded for hardening, not blocking.
 - Updating the wallet card's referral copy to mention the top-up bonus (i18n strings) — cosmetic, can ride the same deploy.
+
+---
+
+## Owner rule updates (config-only, applied live)
+
+- **2026-10-08 (post-launch):** simplified from "$3 at registration + $3 at first ≥$20 top-up" to a flat **$7** to the inviter at the referred user's first top-up ≥$20. Applied live by setting `QuotaForInviter = 0` and `QuotaForInviterTopUp = 3500000` in the options table (gateway SyncOptions reloads within ~60 s; no restart needed). Part 2.2's registration-side grant left disabled.
+- **2026-10-21:** flat bonus reduced from $7 to **$5**. `QuotaForInviterTopUp = 2500000` (DB update, auto-synced). `AffTopUpMinAmount = 20` unchanged. The Telegram trial ($5, `QuotaForNewUser = 2500000`, group-gated on @vantyrapi membership) is unchanged and separate.
