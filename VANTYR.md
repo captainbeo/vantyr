@@ -3729,3 +3729,18 @@ pay2.vantyr.xyz site block reverse-proxies to bepusdt:8080. Verified
 live: pay.vantyr.xyz 200 (GMPay cashier), pay2.vantyr.xyz 200
 (BEpusdt cashier), /api/cctest/* still works. GM Pay on postgres from
 the previous fix (SQLite lock).
+
+## 2026-10-21 — GM Pay signature fix (EpayId 1001 → 1000)
+
+Owner: GM Pay payment link returned "signature verification failed" on a
+new tab.
+
+Root cause: New API's EpayId option was `1001`; GM Pay's only api_keys row
+is pid `1000` with secret_key 4643e80f... . GM Pay signs/verifies with the
+pid in the request, so the signed submit form 401'd before any order was
+created. (EpayKey was also stale — updated to the current GM Pay secret.)
+
+Fixed live (options sync in ~60s, no restart): EpayId=1000, EpayKey=
+<current secret>. PayAddress path also corrected to GM Pay's actual
+create endpoint (/order/create-transaction). Verified: POST
+/order/create-transaction returns 200 (not 401).
