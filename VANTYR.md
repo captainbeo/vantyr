@@ -3711,3 +3711,21 @@ User feedback (owner): USDT deposits need manual tx-hash entry; BASE channels er
    applyAuthBundle and stops on clearAuthentication. Tests: 3 new in
    web/src/lib/__tests__/auth-session-refresh.test.ts (refreshes before
    expiry, stops on logout, no timer without a token).
+
+## 2026-10-21 — Crypto payment links fixed (Caddy regression)
+
+Owner: crypto links broken for both GM Pay and BEpusdt.
+
+Root cause (my deploy): the `handle /api/cctest/*` block I added for the
+Model Routing page sat inside the vantyr.xyz site block but was malformed
+(a broken comment + orphaned reverse_proxy), which Caddy tolerated as
+valid config but that block swallowed the /api/* paths on the GM Pay
+site block below it. Separately, pay2.vantyr.xyz had NO Caddy route at
+all — BEpusdt's public URL was never wired.
+
+Fix: rebuilt the Caddyfile — the cctest handle moved cleanly into the
+vantyr.xyz block (before the gateway catch-all), and a new
+pay2.vantyr.xyz site block reverse-proxies to bepusdt:8080. Verified
+live: pay.vantyr.xyz 200 (GMPay cashier), pay2.vantyr.xyz 200
+(BEpusdt cashier), /api/cctest/* still works. GM Pay on postgres from
+the previous fix (SQLite lock).
