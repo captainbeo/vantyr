@@ -3590,3 +3590,36 @@ x-queue.txt; the poster ships it on schedule. No human step on the feed.
 - Reddit stays human: the /prefs/apps create form was broken for the owner
   (both accounts), and Reddit blocks datacenter IPs for the JSON/RSS feeds
   anyway — f5bot emails cover Reddit keyword alerts, owner replies in-thread.
+
+## 2026-10-21 — Manual merchant pick + health-ranked promote + standby verify (pinned-next44, LIVE)
+
+Owner asks: manual merchant selection (not auto-next), and a live bug —
+"verify now" after promote reported failed.
+
+Two live bugs fixed:
+1. **Promote could leave a model dead**: run_action_promote quarantined the
+   active pin then called promote_next_standby with the pre-quarantine
+   snapshot; the idempotence guard saw the pin as still-enabled and refused
+   — zero active pins (live: fable-5-1 unroutable ~00:49 until manual
+   repair). Fixed: promote against a post-quarantine live list.
+2. **Verify after promote described the wrong channel**: a standby (or
+   just-rotated pin) check went through the gateway ladder, which skips
+   disabled channels, so the verdict was attributed to whatever provider
+   actually served (mia-failover). Pins are now checked DIRECTLY against
+   their own A6 key (revealed on demand via the management API, cached) —
+   works for enabled AND standby pins, and answers the right question:
+   is THIS merchant real.
+
+New capability: manual merchant pick. POST /api/cctest/promote {model,
+merchant} promotes exactly that standby; the drawer lists every standby
+with live A6 health (success rate, sample count, price, eligibility) +
+per-merchant "Verify this merchant" / "Use this merchant" actions. Auto
+promote (no merchant) ranks candidates by A6 health (healthy+cheap) and
+refuses rather than promoting into a dead merchant. A6Market client reads
+the public marketplace listings; health surfaces on /api/cctest/status as
+merchant_health (verified live: fable-5-1 pins 3825 healthy/99%/100
+samples, 5052/5630 attr_swapped, 2000 pool-inactive).
+
+Live verification: standby 5052 verify -> attr_swapped (correct: it IS
+fake); manual promote 5630 over active 3825 -> promoted 5630, verified
+attr_match, fable-5-1 relays + attributed to 5630. Monitor 41/41, web 28.
