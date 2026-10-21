@@ -3212,3 +3212,41 @@ group: ch40 pin → ch1 Selora (P5 failover) → ch5 A6 general (P5);
 unlimited group unchanged (ch4 Selora P30 first, pins P20 below —
 pins serve PAYG only, same as every other Claude model).
 Temp root PAT (channel-create) SQL-inserted, used, deleted.
+
+## 2026-10-15/21 — GM Pay Solana RPC fix + /bin symlink incident aftermath
+
+**Solana chain fixed (no code, config only):** the cashier could create
+Solana orders but GM Pay's scanner never detected payments —
+`solana rpc error code=-32019` on every scan loop (public
+api.mainnet-beta.solana.com rate-limits under the 5s poll) + earlier
+"no enabled solana http RPC node configured" while the node's
+status was `ok`. Fixed by adding a second Solana RPC node as
+fallback: `https://solana-rpc.publicnode.com` (free, public, health +
+real `getSignaturesForAddress` calls both clean from the server) —
+row added to GM Pay's `rpc_nodes` table, container restarted. Both
+nodes now serve the Solana scanner; zero scan errors since. All 8
+GM Pay chains (tron/ethereum/bsc/polygon/plasma/aptos USDT+USDC,
+plus Solana USDT/USDC) are enabled and detecting payments; TON stays
+disabled (BEpusdt owns TON). New Vantyr checkout URL pattern
+confirmed working (the /payments/epay/... submit path, no 404).
+
+**/bin symlink incident (2026-10-14 21:23Z, full recovery):** a next34
+deploy tree-sync ran `tar -xf /tmp/vantyr-next34.tar -C /` — an
+empty/unguarded path variable in a compound command — which extracted
+the repo's `bin/` directory over the system's `/bin` symlink. That
+orphaned every /bin binary (bash, login, dash, ...) in one shot: all
+SSH publickey auth denied ("shell /bin/bash does not exist"), the
+console couldn't exec /bin/login (login prompts looped), and
+rsyslog/apparmor/ufw/chrony all failed at boot while Docker kept
+serving the site. One.com rescue mode (SystemRescue, owner-executed at
+the VNC console) mounted vda1: moved the three stray files to
+/root/bin-evidence/ (kept as evidence), rmdir /mnt/bin, relinked
+`ln -s usr/bin /mnt/bin`, rebooted — SSH + all containers healthy on
+first boot. Data loss: none. **Deploy protocol change (now
+standard):** tree syncs extract to a staging dir and rsync into the
+deploy tree with explicit exclusions (data/, static/, Caddyfile,
+compose.yaml, .env, home-content/), never `tar -C` into a live path
+with a variable target; after any sync, `ls -la /bin/bash` is the
+sanity check. The one.com panel password reset (used during the
+incident) changes root's password only — administrator console login
+was never affected (and is SSH-key-only anyway).
