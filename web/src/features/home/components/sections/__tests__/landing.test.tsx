@@ -127,6 +127,21 @@ describe('Control Room landing sections', () => {
     expect(document.querySelector('video')).toBeNull()
   })
 
+  it('renders Discord and Telegram buttons under the hero video', async () => {
+    await renderLanding()
+
+    const discord = await screen.findByRole('link', {
+      name: 'Join Discord',
+    })
+    expect(discord).toHaveAttribute('href', 'https://discord.gg/BNBdHZqGFb')
+    expect(discord).toHaveAttribute('target', '_blank')
+    expect(discord).toHaveAttribute('rel', expect.stringContaining('noopener'))
+
+    const telegram = screen.getByRole('link', { name: 'Join Telegram' })
+    expect(telegram).toHaveAttribute('href', 'https://t.me/vantyrapi')
+    expect(telegram).toHaveAttribute('target', '_blank')
+  })
+
   it('switches the hero action and hides the final CTA when authenticated', async () => {
     useAuthStore.getState().auth.setUser({
       id: 1,

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 export { IconDiscord } from './icon-discord'
+export { IconDiscordSolid } from './icon-discord-solid'
 export { IconDocker } from './icon-docker'
 export { IconFacebook } from './icon-facebook'
 export { IconFigma } from './icon-figma'
@@ -30,6 +31,7 @@ export { IconSkype } from './icon-skype'
 export { IconSlack } from './icon-slack'
 export { IconStripe } from './icon-stripe'
 export { IconTelegram } from './icon-telegram'
+export { IconTelegramSolid } from './icon-telegram-solid'
 export { IconTrello } from './icon-trello'
 export { IconWeChat } from './icon-wechat'
 export { IconWhatsapp } from './icon-whatsapp'

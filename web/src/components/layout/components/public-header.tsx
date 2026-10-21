@@ -20,8 +20,8 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { IconDiscord } from '@/assets/brand-icons/icon-discord'
-import { IconTelegram } from '@/assets/brand-icons/icon-telegram'
+import { IconDiscordSolid } from '@/assets/brand-icons/icon-discord-solid'
+import { IconTelegramSolid } from '@/assets/brand-icons/icon-telegram-solid'
 import brandIcon from '@/assets/vantyr-mark.png'
 import wordmarkDark from '@/assets/vantyr-wordmark-dark.png'
 import wordmarkWhite from '@/assets/vantyr-wordmark-white.png'
@@ -48,13 +48,13 @@ const SOCIAL_LINKS = [
     key: 'discord',
     label: 'Discord community',
     href: 'https://discord.gg/BNBdHZqGFb',
-    icon: IconDiscord,
+    icon: IconDiscordSolid,
   },
   {
     key: 'telegram',
     label: 'Telegram',
     href: 'https://t.me/vantyrapi',
-    icon: IconTelegram,
+    icon: IconTelegramSolid,
   },
 ] as const
 

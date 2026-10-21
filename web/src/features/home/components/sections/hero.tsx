@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
 
 import { HeroVideo } from '../hero-video'
+import { Community } from './community'
 import { LiveDot, SectionCode, StatTileGrid } from './vantyr-sections'
 
 interface HeroProps {
@@ -240,6 +241,10 @@ export function Hero(props: HeroProps) {
            * below the relay map. Click-to-play keeps the landing bundle
            * light: the poster is pure CSS until the user opts in. */}
           <HeroVideo className='mt-8 w-full max-w-[26rem]' />
+
+          {/* Community buttons: two glass pills for the Discord/Telegram
+           * groups, sized to the video above so the column stays flush. */}
+          <Community className='mt-3 w-full max-w-[26rem]' />
         </div>
       </div>
     </section>

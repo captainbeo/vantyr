@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { AmbientBackground } from '@/features/home/components/ambient-background'
 
 import type { TopNavLink } from '../types'
+import { CommunityFloat } from './community-float'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
 type PublicLayoutProps = {
@@ -60,6 +61,10 @@ export function PublicLayout(props: PublicLayoutProps) {
       ) : (
         props.children
       )}
+
+      {/* Floating Discord/Telegram entry — closed by default, expands on
+       * tap so it never covers content the visitor is reading. */}
+      <CommunityFloat />
     </div>
   )
 }
