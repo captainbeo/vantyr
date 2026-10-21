@@ -489,11 +489,14 @@ class A6Market:
     def health_for(self, model, our_merchant_ids):
         """{merchant_id: {healthy, success_rate, sample_count, available,
         price_micros, supplier}} restricted to our pins. A merchant not on
-        the listing (not currently eligible for the model) is unhealthy."""
+        the listing (not currently eligible for the model) is unhealthy.
+        Merchant ids arrive as strings (channel-name suffixes) but the
+        listing's channel_id is an int — compare as strings."""
+        our = {str(x) for x in our_merchant_ids}
         out = {}
         for item in self.search(model):
-            cid = item.get("channel_id")
-            if cid in our_merchant_ids:
+            cid = str(item.get("channel_id"))
+            if cid in our:
                 success = item.get("recent_success_rate")
                 samples = item.get("sample_count") or 0
                 avail = item.get("listing_availability")
@@ -504,7 +507,7 @@ class A6Market:
                     and (success is None or success >= 9500)
                     and samples >= 10
                 )
-                out[str(cid)] = {
+                out[cid] = {
                     "healthy": bool(healthy),
                     "success_rate": success,
                     "sample_count": samples,
