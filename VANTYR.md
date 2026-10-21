@@ -3684,3 +3684,30 @@ toast rendered green.
 
 Live proof: quarantined a6pin-fable-5-3825 (stored attr_match) verified ->
 attr_match -> status 2→1 (released). Monitor 43/43, web 29/29.
+
+## 2026-10-21 — Wallet/crypto fixes: USDT auto-credit, BASE channels, session timeout
+
+User feedback (owner): USDT deposits need manual tx-hash entry; BASE channels error; sessions expire on idle.
+
+1. **USDT auto-credit** — root cause: GM Pay (epusdt) ran on SQLite, whose
+   database is a continuous SQLITE_BUSY write-lock under concurrent scan
+   + order + cleanup load; the on-chain scanner could not persist a match,
+   so the auto-credit callback never fired and users had to enter the hash.
+   Fix: moved GM Pay's store to the existing Postgres container (new `epusdt`
+   database, `db_type=postgres` + postgres_host/user/passwd/database keys
+   in /data/.env). Live: gateway + pay.vantyr.xyz healthy, GM Pay serving.
+   Backup: /opt/vantyr/deploy/vantyr/data/gmpay/.env.bak-pre-postgres.
+2. **BASE channels** — GM Pay's scanner does not support the Base chain
+   (its supported set is TRC-20, BSC, Polygon, Plasma, Arbitrum — confirmed
+   by its own binary strings). The BASE entries in GM Pay's dashboard were
+   listed but could never credit. Owner action: remove/disable those
+   channel rows in the GM Pay admin UI (a console delete, not code).
+3. **Session timeout on idle** — the access token expires after 15 min
+   (AccessTokenTTL, service/auth_token.go:20). The frontend refreshed only
+   reactively (on 401) or via getFreshAuthHeaders, so an idle page let the
+   token lapse and the next interaction presented as "logged out". Fix:
+   a proactive refresh scheduler in web/src/lib/auth-session.ts —
+   scheduleTokenRefresh (REFRESH_LEAD_MS 90s before expiry) runs after
+   applyAuthBundle and stops on clearAuthentication. Tests: 3 new in
+   web/src/lib/__tests__/auth-session-refresh.test.ts (refreshes before
+   expiry, stops on logout, no timer without a token).

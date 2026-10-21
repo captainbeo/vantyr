@@ -154,6 +154,7 @@ export function applyAuthBundle(
   const previousSID = useAuthStore.getState().auth.session?.sid
   authEpoch += 1
   useAuthStore.getState().auth.setBundle(bundle)
+  scheduleTokenRefresh()
   if (synchronizeTabs && previousSID !== bundle.session.sid) {
     publishAuthSessionEvent('authenticated', bundle.session.sid)
   }
@@ -190,6 +191,7 @@ export function clearAuthentication(
 ): void {
   const sid = useAuthStore.getState().auth.session?.sid
   authEpoch += 1
+  stopTokenRefreshTimer()
   useAuthStore.getState().auth.reset(bootstrapState)
   if (synchronizeTabs && sid) {
     publishAuthSessionEvent('signed_out', sid)
@@ -405,6 +407,50 @@ export async function bootstrapAuthentication(): Promise<RefreshOutcome> {
     }
   }
   return resolveAuthentication()
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled access-token refresh
+//
+// The access token is short-lived (AccessTokenTTL, 15 min server-side). The
+// frontend previously refreshed only on a 401 (reactive) or via
+// getFreshAuthHeaders — so a page left idle with no API traffic let the
+// token expire silently, and the next interaction presented as "the session
+// timed out, log in again". A timer that refreshes shortly before expiry
+// keeps the session warm through idle periods. This is a frontend concern:
+// the server's session (Refresh Cookie) is unchanged.
+// ---------------------------------------------------------------------------
+
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+// Refresh a little before the access token expires (never before 30s out).
+const REFRESH_LEAD_MS = 90 * 1000
+const REFRESH_MIN_DELAY_MS = 30 * 1000
+
+export function scheduleTokenRefresh(): void {
+  if (refreshTimer !== null) {
+    clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
+  const auth = useAuthStore.getState().auth
+  const expiryMs = auth.accessExpiresAt ? auth.accessExpiresAt * 1000 : 0
+  if (!auth.accessToken || !expiryMs) {
+    return
+  }
+  const delay = Math.max(
+    expiryMs - Date.now() - REFRESH_LEAD_MS,
+    REFRESH_MIN_DELAY_MS
+  )
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    void refreshAuthentication().finally(scheduleTokenRefresh)
+  }, delay)
+}
+
+export function stopTokenRefreshTimer(): void {
+  if (refreshTimer !== null) {
+    clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
 }
 
 export function getCommonHeaders(): Record<string, string> {
