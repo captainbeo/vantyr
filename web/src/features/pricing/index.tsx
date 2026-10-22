@@ -242,6 +242,8 @@ export function Pricing() {
                 models={models || []}
                 hasActiveFilters={hasActiveFilters}
                 activeFilterCount={activeFilterCount}
+                priceRate={priceRate}
+                usdExchangeRate={usdExchangeRate}
                 onClearFilters={clearFilters}
               />
 

@@ -57,6 +57,8 @@ function toolbarProps(): PricingToolbarProps {
     hasActiveFilters: false,
     activeFilterCount: 0,
     onClearFilters: vi.fn(),
+    priceRate: 1,
+    usdExchangeRate: 1,
   }
 }
 
@@ -153,8 +155,9 @@ describe('pricing controls', () => {
     expect(props.onTokenUnitChange).toHaveBeenCalledTimes(1)
   })
 
-  it('changes the recharge display mode with an accessible selected state', async () => {
-    const props = toolbarProps()
+  it('changes the recharge display mode with an accessible selected state when a markup exists', async () => {
+    // The toggle only renders when recharge pricing is meaningful (rates differ).
+    const props = { ...toolbarProps(), priceRate: 1.1, usdExchangeRate: 1 }
     const user = userEvent.setup()
     const { rerender } = render(<PricingToolbar {...props} />)
     await user.click(screen.getByRole('button', { name: 'Recharge' }))
@@ -168,6 +171,21 @@ describe('pricing controls', () => {
       'aria-pressed',
       'false'
     )
+  })
+
+  it('hides the recharge toggle when top-ups are 1:1 and re-shows it with a markup', () => {
+    const props = toolbarProps() // priceRate 1, usdExchangeRate 1
+    const { rerender } = render(<PricingToolbar {...props} />)
+    expect(screen.queryByRole('button', { name: 'Recharge' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Standard' })).toBeNull()
+    // The token-unit control is unaffected by the gate.
+    expect(screen.getByRole('button', { name: '/1M' })).toBeVisible()
+
+    rerender(
+      <PricingToolbar {...props} priceRate={1.1} usdExchangeRate={1} />
+    )
+    expect(screen.getByRole('button', { name: 'Recharge' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Standard' })).toBeVisible()
   })
 
   it('switches to table view with the keyboard and exposes the selected view', async () => {

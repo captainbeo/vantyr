@@ -107,3 +107,25 @@ export function replaceModelInPath(path: string, modelName: string): string {
 export function isTokenBasedModel(model: PricingModel): boolean {
   return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
 }
+
+/**
+ * The Recharge view multiplies the listed price by
+ * priceRate / usdExchangeRate; when those are equal the multiplier is 1 and
+ * the view shows the same numbers as Standard, so the toggle is hidden. Any
+ * genuine top-up markup/discount or a custom display currency keeps the two
+ * rates distinct, and the toggle stays visible automatically.
+ */
+export function isRechargePriceMeaningful(
+  priceRate: number,
+  usdExchangeRate: number
+): boolean {
+  if (
+    !Number.isFinite(priceRate) ||
+    !Number.isFinite(usdExchangeRate) ||
+    priceRate <= 0 ||
+    usdExchangeRate <= 0
+  ) {
+    return false
+  }
+  return Math.abs(priceRate - usdExchangeRate) > 1e-9
+}
