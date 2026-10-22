@@ -3964,3 +3964,105 @@ main pushed. cctest-monitor rebuilt + recreated (rm -f + up -d --no-deps);
 new code grep-verified in the running container; monitor enforcing, logs
 clean. No gateway rebuild (monitor-only change). Backups:
 monitor.py.bak-pre-pick-fix, test_monitor.py.bak-pre-pick-fix.
+
+## 2026-10-22 — Selora/Mia fully disabled + sick sonnet-5 pin quarantined
+
+Trigger: bazaarlink.ai reported "the other party is limiting traffic
+(~10/min)" while probing us. Gateway logs showed the real cause was NOT
+our limiter (PAYG unlimited since the 2026-10-21 revert) but the stale
+fallback ladder: claude-sonnet-5 pin ch13 (merchant 1204) was returning
+69× 503 "个人智能路由池没有活跃候选" (merchant pool empty) in 6h while
+still serving intermittently (189 OK in the same window), so New API kept
+selecting it at P20. Its failures cascaded to selora-default-fallback
+(429, ~30/min key) and mia-failover (429) before a slow 200 — the exact
+seller-429s bazaarlink saw.
+
+Changes applied (SQL, backups at /opt/vantyr/backups/2026-10-22-*.csv):
+- Channels 1 (selora-default-primary), 3 (selora-default-fallback),
+  4 (selora-unlimited), 7 (mia-failover) → status=2 (disabled). Selora
+  and Mia now serve NO group — the "temporarily not used" decision is
+  finally reflected in routing. (Note: this also removes unlimited
+  group's Selora/Mia rails; re-enable from the CSV backup if unlimited
+  comes back.)
+- Channel 13 (a6pin-sonnet-5-1204) → status=2 quarantined, remark set.
+  Monitor's own 01:20 probe still found it attr_match — this is pool
+  instability, not attr fraud; the monitor skips disabled channels and
+  can re-promote when the merchant recovers.
+- All abilities for channels 1/3/4/7/13 disabled (24 rows).
+
+Verified live after the 60s channel-cache sync: claude-sonnet-5 → ch15
+(a6pin-sonnet-5-851) single-hop 200; claude-fable-5-1 → ch40
+(a6pin-fable-5-1-3825) single-hop 200. Zero ch1/3/4/7/13 activity
+post-change. cctest monitor continues normally.
+
+Caveats: channels table has NO status_reason column on this fork (the
+monitor's status_reason lives in its own tracking) — use remark. fable-5-1
+now rides exactly two active pins (ch40 3825 + ch42 5630) — still thin;
+worth promoting another standby pin next A6 pass.
+
+## 2026-10-22 — Selora/Mia DELETED from the deployment entirely
+
+Owner follow-up to the disable earlier today: remove Selora and Mia
+completely so they no longer appear anywhere (channels list, routing
+ladder, standby pool).
+
+Deleted (full data-only pg_dump of channels+abilities first at
+/opt/vantyr/backups/2026-10-22-pre-selora-mia-delete.sql):
+- channels 1 (selora-default-primary), 3 (selora-default-fallback),
+  4 (selora-unlimited), 7 (mia-failover) — DELETE removed all 4 rows.
+- their 22 ability rows (already disabled, now deleted).
+
+References checked clean afterward:
+- cctest monitor needs NO config change: its SELLER_CHANNELS in
+  /opt/vantyr/deploy/vantyr/.env contains only the "a6pin" wildcard entry
+  (pins were migrated to direct gateway-routed probes long ago). The
+  FAIL_THRESHOLD_SELORA/MIA env names in monitor.py are dead defaults.
+- Pricing page (/api/pricing): zero selora/mia references.
+- Relay verified post-sync: sonnet-5 → 200, fable-5-1 → 200, no
+  dangling channel errors in gateway logs.
+- Remaining enabled channels are 100% a6pin-* (15 active pins). The
+  monitor auto-promoted a6pin-fable-5-5630 into the active fable-5 pool
+  during this session's work.
+
+Restore path if ever needed: the pg_dump file re-inserts all rows
+(channels and abilities) with original IDs; Selora/Mia seller keys would
+need re-entry from the owner (keys were recoverable in the channels
+table and are preserved in the dump).
+
+## 2026-10-22 — gpt-6.1-sol pool unified + pickable-after-verify (LIVE)
+
+Three owner asks. (1) Merge the gpt-6-1-sol / gpt-6.1-sol split into one
+pool. (2) Make the standby "Use this merchant" button match the verify
+result. (3) Was the unclickable button a bug?
+
+(3) Answer: NO — the button-disable was intentional (cooldown benching /
+no-merchant-id). The real bug was the BACKEND refusing a marked-merchant
+pick after the click (fixed earlier today, commit dbc6a1555). The
+confusion was the button not matching the verify result or saying why.
+
+(1) Merge: gpt-6-1-sol and gpt-6.1-sol are the same A6 model — legacy
+pins existed under each spelling (a6pin-6.1-sol-* dot, a6pin-6-1-sol-*
+dash), duplicating every merchant and splitting the active pin (both
+a6pin-6.1-sol-1416 and a6pin-6-1-sol-5950 were status=1 for the same
+model — split-brain). Monitor now creates 6.1-sol pins with both aliases
++ upstream mapping (gpt-6-1-sol/gpt-6.1-sol → gpt-6.1-sol) and treats the
+spellings as one pool via MODEL_ALIASES across sync/promote/verify/cycle
+membership. Live data merge (backup pre-61sol-merge-20261022-023929,
+channels+abilities dumped): 5 dash standbys got both aliases + mapping,
+duplicate active a6pin-6.1-sol-1416 demoted, 4 redundant dot pins deleted,
+a6pin-6.1-sol-1416 then deleted. fix_abilities 74/0. Pool 11 → 6 pins (1
+active 5950 + 5 standbys). Both spellings relay HTTP 200 via the single
+active pin 5950.
+
+(2) Button now matches verify: a cooldown merchant that re-verified clean
+(green) is pickable again (the verify is the recovery signal). Quarantined
+pins still need a passing Verify first (releases quarantine). Blocked rows
+show WHY (cooling down / quarantined / no merchant id). 3 i18n strings,
+all 12 locales.
+
+Deploy: commit 4a43afc72, tag deploy/2026-10-22-61sol-pool-merge, public
+main pushed. Monitor rebuilt (0ee965df88dc) + recreated; gateway
+pinned-next47 rebuilt in place (156db0858128, "Cooling down..." in binary)
++ recreated; both healthy; / /model-routing /pricing 200; gpt-6.1-sol
+relay 200 post-restart. Backend 49/49, web 35/35. AGPL: source archive +
+notice + Footer → new tag (sha256 2cac9d86…7512).
