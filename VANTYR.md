@@ -4138,3 +4138,26 @@ while the site runs USD — so setting it to 1 changes only the recharge
 formula. Verified live after the 60s sync: status now reports
 usd_exchange_rate 1, and the recharge view computes identical numbers to
 Standard ($0.050 vs $0.050 on gpt-6-sol).
+
+## Model Overview — Recharge toggle hidden on 1:1 sites (2026-10-22)
+
+Fork change (frontend, documented gap): the pricing toolbar's
+Standard/Recharge toggle is hidden when recharge pricing is a no-op. A
+customer reported the Recharge view showing prices 7.3× below Standard
+(the legacy USDExchangeRate default; fixed separately by setting
+USDExchangeRate=1). With the rate fixed, the toggle changed nothing —
+the Recharge view multiplies the listed price by Price /
+usd_exchange_rate, so it differs from Standard only when those rates
+differ. Added `isRechargePriceMeaningful(priceRate, usdExchangeRate)` in
+web/src/features/pricing/lib/model-helpers.ts and gated the toggle on it
+in pricing-toolbar.tsx (index.tsx passes priceRate/usdExchangeRate from
+usePricingData). It re-appears automatically if a real top-up markup or
+a custom display currency is ever configured (rates no longer equal).
+Tests: lib/__tests__/recharge-toggle.test.ts (gate) +
+pricing-controls.test.tsx (hidden-on-1:1 regression, existing
+interaction test updated to supply a markup). Verified against live
+production data via the deployed-code preview: the toolbar renders only
+token-unit, sort, and view-mode controls; no Standard/Recharge; zero
+console errors. Pre-existing pricing failures (model-cards,
+dynamic-price, task-price-display) are unchanged, stash-verified on the
+pre-change tree. Commit 7d5954f68.
