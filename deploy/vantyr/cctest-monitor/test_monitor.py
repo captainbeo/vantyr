@@ -1049,6 +1049,60 @@ def test_model_pool_names_alias():
     assert m.model_pool_names("claude-fable-5") == {"claude-fable-5"}
 
 
+def test_action_verify_unverifiable_phantom_pin():
+    # A pinned merchant with NO A6 token (phantom) must NOT be verified by
+    # borrowing the active pin's verdict via gateway routing — it returns an
+    # honest "unverifiable" 409 instead (the 2026-10-22 phantom-5312 bug).
+    chs = [{"id": 50, "name": "a6pin-6-astra-5312", "status": 2,
+            "models": "gpt-6-astra", "model_mapping": "", "base_url": "https://api.a6api.com"}]
+
+    class NoMatchA6M:
+        def list_tokens(self):
+            return [{"id": 1, "name": "ASTRA 6 | 5942"}]  # no 5312
+
+        def reveal_key(self, tid):
+            return "sk-other"
+
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": VerdictCC(),
+        "sellers": [("a6pin", "https://api.a6api.com", "sk-active")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": {}, "seller_registry": {}, "a6m": NoMatchA6M(),
+    }
+    try:
+        status, payload = m.run_action_verify({"channel": "a6pin-6-astra-5312", "model": "gpt-6-astra"})
+        assert status == 409, (status, payload)
+        assert payload["verdict"] == "unverifiable", payload
+        assert "5312" in payload["error"], payload
+        # and it did NOT record a borrowed verdict for the phantom
+        assert "a6pin-6-astra-5312" not in m.RUNTIME["state"], m.RUNTIME["state"]
+    finally:
+        m.RUNTIME = None
+
+
+def test_sync_prunes_phantom_pins():
+    # A pin whose merchant has no A6 token is disabled (not deleted) and
+    # recorded; plain-named legacy pins (non-digit suffix) are left alone.
+    chs = [
+        {"id": 60, "name": "a6pin-6-astra-5942", "status": 1, "models": "gpt-6-astra"},   # has token
+        {"id": 61, "name": "a6pin-6-astra-5312", "status": 1, "models": "gpt-6-astra"},   # phantom
+        {"id": 62, "name": "a6pin-fable-5", "status": 1, "models": "claude-fable-5"},      # legacy plain name
+        {"id": 63, "name": "a6pin-6-astra-2757", "status": 2, "models": "gpt-6-astra"},   # phantom but already off
+    ]
+    gw = SyncGW(chs)
+    # A6 account only has merchant 5942.
+    a6m = FakeA6M([{"id": 1, "name": "ASTRA 6 | 5942"}], reveals={1: "sk-x"})
+    state = {}
+    m.sync_a6_keys(gw, a6m, chs, state, None)
+    # 5942 stays enabled; 5312 disabled; legacy a6pin-fable-5 untouched; 2757 untouched
+    assert (61, 2) in gw.writes, gw.writes
+    assert (60, 2) not in gw.writes, gw.writes
+    assert (62, 2) not in gw.writes, gw.writes
+    assert (63, 2) not in gw.writes, gw.writes
+    assert state["_sync"]["pruned_phantoms"] == ["a6pin-6-astra-5312"], state["_sync"]
+
+
 def test_sync_reveal_budget_and_failure():
     # reveal failure or budget (5/cycle) stops creating; never fatal
     chs = [{"id": 1, "name": "a6pin-fable-5", "models": "claude-fable-5"}]

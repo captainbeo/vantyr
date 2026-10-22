@@ -718,11 +718,71 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
         created.append(channel_name)
         existing.add(channel_name)
         LOG.info("[sync] created standby pin %s for %s (merchant %s)", channel_name, sku, merchant)
+    # Reconciliation (owner ask 2026-10-22): a pin whose merchant no longer
+    # has a key on the A6 account can never be direct-verified — it falls
+    # back to a gateway-routed check that reports ANOTHER merchant's verdict
+    # (the 2026-10-22 phantom-5312 confusion). Prune those phantoms so the
+    # pool only holds merchants that actually exist on A6. Conservative:
+    # disable the channel + alert, never hard-delete (a transient A6 list
+    # failure must not wipe the pool — we only prune when the token list
+    # loaded successfully).
+    a6_merchants = set()
+    for token in tokens:
+        _sku, tok_merchant, _ch = parse_a6_key_name(token.get("name") or "")
+        if tok_merchant:
+            a6_merchants.add(tok_merchant)
+    # A pin is a merchant pin only when its name ends in "<model-stem>-<digits>"
+    # for a KNOWN model stem (a6pin-fable-5-4665). Plain-named legacy pins
+    # (a6pin-fable-5) end in a model-name fragment like "5", which is a digit —
+    # a bare isdigit() check would misread them as merchant pins. Build the set
+    # of valid "stem-" prefixes from the SKU map and require the digit suffix
+    # to follow one of them.
+    stems = {
+        sku.replace("claude-", "", 1).replace("gpt-", "", 1)
+        for sku in A6_KEY_NAME_TO_SKU.values()
+    }
+    def _merchant_pin(name):
+        merchant = name.rsplit("-", 1)[-1]
+        if not merchant.isdigit():
+            return None
+        head = name[: -(len(merchant) + 1)]  # strip "-<merchant>"
+        for stem in stems:
+            if head == f"a6pin-{stem}":
+                return merchant
+        return None
+    pruned = []
+    for ch in channels:
+        ch_name = ch.get("name") or ""
+        if not is_pinned_channel(ch_name):
+            continue
+        merchant = _merchant_pin(ch_name)
+        # Legacy plain-named pins have no merchant id — skip (governed by the
+        # cycle, not the A6 key pool).
+        if merchant is None:
+            continue
+        if merchant in a6_merchants:
+            continue
+        if int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED:
+            continue  # already off
+        try:
+            gateway.set_status(int(ch["id"]), CHANNEL_MANUALLY_DISABLED)
+            gateway.fix_abilities()
+        except Exception as e:
+            LOG.error("[sync] prune FAILED for %r: %s", ch_name, e)
+            continue
+        pruned.append(ch_name)
+        LOG.warning("[sync] pruned phantom pin %s — merchant %s has no A6 key", ch_name, merchant)
+    if pruned:
+        discord_alert(
+            discord,
+            f"cctest sync: disabled {len(pruned)} phantom pin(s) with no A6 key: {', '.join(pruned)}",
+        )
     state["_sync"] = {
         "last_sync_at": datetime.now(timezone.utc).isoformat(),
         "created": created,
         "skipped_existing": skipped,
         "unmatched": unmatched,
+        "pruned_phantoms": pruned,
     }
     if created:
         discord_alert(discord, f"cctest sync: created {len(created)} standby pin(s): {', '.join(created)}")
@@ -961,10 +1021,24 @@ def run_action_verify(body):
             verdict = do_check(rt["cctest"], pin_base, pin_key, upstream)
             checked_direct = True
             LOG.info("[action] verify %s direct against %s -> %s", channel_name, pin_base, verdict)
+        else:
+            # The pin's own A6 key could not be revealed (no matching token on
+            # the A6 account, or reveal rate-limited). A gateway-routed check
+            # would land on a DIFFERENT (active) pin and report THAT merchant's
+            # verdict as this one's — the 2026-10-22 phantom-5312 incident, where
+            # a merchant with no A6 key "verified green" by borrowing the active
+            # pin's attr_match. Be honest instead: we cannot verify this merchant.
+            merchant = channel_name.rsplit("-", 1)[-1]
+            return 409, {"error": (
+                f"cannot verify {channel_name!r}: merchant {merchant} has no A6 key "
+                f"on the management account (or reveal is rate-limited). The pin cannot "
+                f"be checked directly, and a gateway-routed check would test a different "
+                f"merchant. Remove this pin or re-add the merchant's key on A6."
+            ), "verdict": "unverifiable"}
 
     if verdict is None:
-        # Non-pin, or pin key unavailable: fall back to the cycle's
-        # seller-entry path (gateway-routed for fingerprint-gated keys).
+        # Non-pin (legacy plain-named, or a non-pin channel): fall back to the
+        # cycle's seller-entry path (gateway-routed for fingerprint-gated keys).
         entry = find_seller_entry(rt["sellers"], channels, channel_name)
         if entry is None:
             return 400, {"error": f"channel {channel_name!r} has no usable key and is not in SELLER_CHANNELS"}
