@@ -4107,3 +4107,16 @@ Deploy: commit 46b715698, tag deploy/2026-10-22-phantom-reconcile, monitor
 rebuilt (ec910a175c00) + recreated; first sync pass clean (pruned 0,
 65 pins synced); honest-verify live. 51/51 tests. Monitor-only — no
 gateway rebuild. Backups: monitor.py.bak-pre-phantom, channels-full-bak.
+
+## 2026-10-22 — Discord alerts wired (cctest-monitor)
+
+Owner provided a Discord webhook URL. Added CCTEST_DISCORD_WEBHOOK to
+/opt/vantyr/deploy/vantyr/.env (backup .env.bak-pre-discord), monitor
+recreated — DISCORD_WEBHOOK is now live in the container. This webhook's
+channel receives: quarantine/promotion events, phantom-pin prune notices,
+sync summaries (new keys), sick-pin rotations, and cooldown alerts.
+
+Fix shipped alongside: http_json crashed json.loads-ing Discord's empty
+204 No Content success body, so every delivered alert raised a false
+JSONDecodeError. Empty bodies now return {}. Commit 9bf928239, monitor
+rebuilt + recreated, delivery verified twice with no error logs.
