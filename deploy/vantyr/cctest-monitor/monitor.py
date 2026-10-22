@@ -261,26 +261,30 @@ class Gateway:
             raise RuntimeError(f"abilities fix failed: {http_status} {payload}")
         return True
 
-    def create_channel(self, name, key, models, group, base_url, priority=20):
+    def create_channel(self, name, key, models, group, base_url, priority=20,
+                       model_mapping=None):
         """Create a standby pin channel (POST /api/channel/, mode single).
         Requires the channel:sensitive_write PAT scope. Abilities are built
-        automatically on create. Returns True on success."""
+        automatically on create. `models` may be a list (CSV'd) and
+        `model_mapping` a {our-name: upstream-name} dict (JSON'd) — used so a
+        single pin can serve a model under both its spellings (e.g. the
+        gpt-6-1-sol / gpt-6.1-sol alias pair). Returns True on success."""
+        channel = {
+            "type": 60,
+            "name": name,
+            "key": key,
+            "base_url": base_url,
+            "models": ",".join(models) if isinstance(models, list) else models,
+            "group": group,
+            "priority": priority,
+            "weight": 1,
+            "status": 2,  # standby: disabled until promoted
+        }
+        if model_mapping:
+            channel["model_mapping"] = json.dumps(model_mapping)
         payload, http_status = self._request(
             "POST", "/api/channel/",
-            {
-                "mode": "single",
-                "channel": {
-                    "type": 60,
-                    "name": name,
-                    "key": key,
-                    "base_url": base_url,
-                    "models": models,
-                    "group": group,
-                    "priority": priority,
-                    "weight": 1,
-                    "status": 2,  # standby: disabled until promoted
-                },
-            },
+            {"mode": "single", "channel": channel},
         )
         if http_status != 200 or not payload.get("success"):
             raise RuntimeError(f"channel create failed for {name!r}: {http_status} {payload}")
@@ -451,6 +455,20 @@ A6_KEY_NAME_TO_SKU = {
     "6 sol": "gpt-6-sol",
     "6.1 sol": "gpt-6-1-sol",
 }
+
+# Model spellings that name the SAME underlying model — a pin serving any of
+# them is in the same merchant pool. gpt-6-1-sol is the canonical SKU; the
+# cctest.ai dropdown spells it gpt-6.1-sol, and legacy pins were created
+# under each spelling. Pool membership, promote and verify treat them as one.
+MODEL_ALIASES = {
+    "gpt-6-1-sol": {"gpt-6-1-sol", "gpt-6.1-sol"},
+    "gpt-6.1-sol": {"gpt-6-1-sol", "gpt-6.1-sol"},
+}
+
+
+def model_pool_names(model):
+    """The set of spellings that share one merchant pool for `model`."""
+    return MODEL_ALIASES.get(model, {model})
 
 
 def parse_a6_key_name(raw):
@@ -682,8 +700,18 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
             LOG.warning("[sync] reveal failed for %r (%s); will retry next cycle", name, e)
             break
         reveals_this_cycle += 1
+        # gpt-6-1-sol is served under two spellings (the cctest.ai dropdown
+        # uses the dot form gpt-6.1-sol). Create the pin with both aliases +
+        # mapping so ONE pin covers both — keeps the merchant pool unified
+        # (no dash/dot duplicate rows for the same merchant).
+        models = [sku]
+        mapping = None
+        if sku == "gpt-6-1-sol":
+            models = ["gpt-6-1-sol", "gpt-6.1-sol"]
+            mapping = {"gpt-6-1-sol": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6.1-sol"}
         try:
-            gateway.create_channel(channel_name, key, sku, group, base_url)
+            gateway.create_channel(channel_name, key, models, group, base_url,
+                                   model_mapping=mapping)
         except Exception as e:
             LOG.error("[sync] channel create FAILED for %r: %s", channel_name, e)
             continue
@@ -987,10 +1015,11 @@ def run_action_promote(body):
         channels = rt["gateway"].list_channels()
     except Exception as e:
         return 503, {"error": f"channel list failed: {e}"}
+    pool = model_pool_names(model)
     pins = [
         c for c in channels
         if is_pinned_channel(c.get("name") or "")
-        and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]
+        and pool & {m.strip() for m in (c.get("models") or "").split(",") if m.strip()}
     ]
     active = next((c for c in pins if int(c.get("status") or 0) == CHANNEL_ENABLED), None)
     if active is None:
@@ -1089,7 +1118,7 @@ def run_action_promote(body):
         (c for c in after
          if is_pinned_channel(c.get("name") or "")
          and int(c.get("status") or 0) == CHANNEL_ENABLED
-         and model in [m.strip() for m in (c.get("models") or "").split(",") if m.strip()]
+         and model_pool_names(model) & {m.strip() for m in (c.get("models") or "").split(",") if m.strip()}
          and c.get("name") != active_name),
         None,
     )
@@ -1512,18 +1541,22 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     if not model:
         LOG.warning("[pin] quarantined pin has no model; no standby search")
         return
+    pool = model_pool_names(model)
     # stop if a pin for this model is already active again (idempotence)
     for ch in (channels_snapshot or []):
         if is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED \
-                and model in [mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()]:
+                and pool & {mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()}:
             LOG.info("[pin] %s already has an active pin (%s) — no promotion", model, ch.get("name"))
             return
-    # standby set = disabled pins whose model list is EXACTLY this model
+    # standby set = disabled pins serving this model (any alias spelling).
+    # Model-membership, not name prefixes — a6pin-sonnet-5-* and
+    # a6pin-sonnet-5-5-* are different models; gpt-6-1-sol and gpt-6.1-sol
+    # are the SAME model (MODEL_ALIASES).
     standbys = [
         ch for ch in (channels_snapshot or [])
         if is_pinned_channel(ch.get("name") or "")
         and int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED
-        and [mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()] == [model]
+        and pool & {mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()}
         and (ch.get("name") or "") != (failed_channel.get("name") or "")
     ]
     if not standbys:

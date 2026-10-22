@@ -87,6 +87,23 @@ function formatRemaining(seconds: number): string {
   return `${formatNumber(Math.max(1, Math.ceil(seconds / 60)), locale())}m`
 }
 
+function blockedReason(
+  state: StandbyEntry['state'],
+  t: (key: string) => string
+): string {
+  if (state === 'quarantined') {
+    return t(
+      'Quarantined — click "Verify this merchant" first; a passing check releases it and enables picking.'
+    )
+  }
+  if (state === 'cooldown') {
+    return t(
+      'Cooling down after a failed check — verify it; a passing result makes it pickable now.'
+    )
+  }
+  return t('Not pickable — this entry has no merchant id.')
+}
+
 function statusLabel(status: number, t: (key: string) => string): string {
   if (status === 1) return t('Enabled')
   if (status === 2) return t('Disabled')
@@ -428,7 +445,15 @@ function StandbyRow(props: {
   const { t } = useTranslation()
   const e = props.entry
   const h = props.merchantHealth
-  const usable = e.state !== 'cooldown' && e.merchant != null
+  // A merchant is pickable when it has an id and is either ready, or in
+  // cooldown but just re-verified clean (the green check is the operator's
+  // evidence the merchant recovered — let them act on it). Quarantined pins
+  // need a passing "Verify" first (which releases the quarantine) before the
+  // button becomes usable; until then the action is the verify, not the pick.
+  const verifiedPass = e.verdict != null && PASS_VERDICTS.has(e.verdict)
+  const usable =
+    e.merchant != null &&
+    (e.state === 'ready' || (e.state === 'cooldown' && verifiedPass))
 
   return (
     <div className='bg-muted/40 flex flex-col gap-2 rounded-lg border px-3 py-2.5'>
@@ -533,6 +558,11 @@ function StandbyRow(props: {
             {props.pickingThis ? t('Promoting…') : t('Use this merchant')}
           </Button>
         </div>
+      )}
+      {props.canAct && !usable && (
+        <p className='text-muted-foreground border-t pt-2 text-[11px]'>
+          {blockedReason(e.state, t)}
+        </p>
       )}
     </div>
   )

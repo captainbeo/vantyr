@@ -983,10 +983,12 @@ class SyncGW(FakeGW):
         super().__init__(channels)
         self.created = []
 
-    def create_channel(self, name, key, models, group, base_url, priority=20):
+    def create_channel(self, name, key, models, group, base_url, priority=20,
+                       model_mapping=None):
         self.created.append({
             "name": name, "key": key, "models": models, "group": group,
             "base_url": base_url, "priority": priority,
+            "model_mapping": model_mapping,
         })
         return True
 
@@ -1008,7 +1010,8 @@ def test_sync_creates_standby_pins():
     created_names = [c["name"] for c in gw.created]
     assert created_names == ["a6pin-fable-5-4665", "a6pin-opus-5-851"], created_names
     body = gw.created[0]
-    assert body["models"] == "claude-fable-5"
+    assert body["models"] == ["claude-fable-5"]
+    assert body["model_mapping"] is None  # non-6.1-sol pins get no mapping
     assert body["group"] == "default,unlimited"
     assert body["base_url"] == "https://api.a6api.com"
     assert body["priority"] == 20
@@ -1023,6 +1026,27 @@ def test_sync_creates_standby_pins():
     gw2 = SyncGW(chs2)
     m.sync_a6_keys(gw2, a6m, chs2, {}, None)
     assert gw2.created == [], gw2.created
+
+
+def test_sync_creates_61_sol_pin_with_both_aliases():
+    # A "6.1 SOL | <merchant>" key becomes ONE pin serving both spellings
+    # (gpt-6-1-sol + gpt-6.1-sol) with the upstream mapping — the unified pool.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    gw = SyncGW(chs)
+    a6m = FakeA6M([{"id": 9, "name": "6.1 SOL | 7777"}], reveals={9: "sk-x"})
+    m.sync_a6_keys(gw, a6m, chs, {}, None)
+    assert len(gw.created) == 1, gw.created
+    body = gw.created[0]
+    assert body["name"] == "a6pin-6-1-sol-7777"
+    assert body["models"] == ["gpt-6-1-sol", "gpt-6.1-sol"]
+    assert body["model_mapping"] == {"gpt-6-1-sol": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6.1-sol"}
+
+
+def test_model_pool_names_alias():
+    # gpt-6-1-sol and gpt-6.1-sol share one pool; other models are singletons.
+    assert m.model_pool_names("gpt-6-1-sol") == {"gpt-6-1-sol", "gpt-6.1-sol"}
+    assert m.model_pool_names("gpt-6.1-sol") == {"gpt-6-1-sol", "gpt-6.1-sol"}
+    assert m.model_pool_names("claude-fable-5") == {"claude-fable-5"}
 
 
 def test_sync_reveal_budget_and_failure():
