@@ -3928,3 +3928,39 @@ Deploy-protocol hardening (recorded): a scoped "only the files I changed"
 web sync is UNSAFE on this server because the tree already drifts — always
 diff the tag's web/ tree against the server first, and sync web/src +
 web/public in full when building a gateway image.
+
+## 2026-10-22 — Sonnet 5.5 outage: manual promote pick refused (fixed, LIVE)
+
+Owner: "No standby promoted — next standby will be tried next cycle" when
+manually picking a Sonnet 5.5 merchant; the model then went dark.
+
+Root cause (two parts):
+1. Logic gap in promote_next_standby — the eligible-candidate set is
+   `fresh if fresh else expired`, so when any FRESH (never-marked) pin
+   exists, a marked merchant is never in `candidates`. The manual-pick
+   (`preferred_name`) lookup only searched that set, so a manual pick of a
+   marked merchant was refused as "not eligible" even when its mark was 70h
+   old (cooldown is 3h — long expired). Merchant 546 was verified
+   attr_match minutes earlier, yet still refused.
+2. Ordering hazard — run_action_promote quarantines the active pin FIRST,
+   then promotes. A refused pick left sonnet-5-5 with zero enabled pins →
+   503 "No available channel" from 01:03.
+
+Fix (monitor.py): a manual pick now matches against ALL of the model's
+disabled standby pins regardless of bad marks or fresh alternatives — an
+operator override. Safety kept: the enable-first-verify path still checks
+the pin before serving, and a passing check clears the stale mark.
+Automatic (no-pick) promotion keeps fresh-first/expired behavior.
+Regression test added (marked merchant picked while a fresh pin exists).
+47/47 dry-run tests.
+
+Immediate remediation: enabled the owner's verified pick
+a6pin-sonnet-5-5-546 (id 17, attr_match) directly in the DB + fix_abilities
+(74 success/0 fail) — sonnet-5-5 serving again on 546, confirmed HTTP 200
+relay served by channel 17.
+
+Deploy: commit dbc6a1555, tag deploy/2026-10-22-promote-pick-fix, public
+main pushed. cctest-monitor rebuilt + recreated (rm -f + up -d --no-deps);
+new code grep-verified in the running container; monitor enforcing, logs
+clean. No gateway rebuild (monitor-only change). Backups:
+monitor.py.bak-pre-pick-fix, test_monitor.py.bak-pre-pick-fix.
