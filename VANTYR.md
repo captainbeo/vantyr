@@ -3901,3 +3901,30 @@ drops down on click.
 - **Rollback:** repoint compose to vantyr/new-api:pinned-next46
   (id c17cdb0c7d50), `docker compose up -d --no-deps --no-build gateway`;
   monitor rollback = restore the cctest-monitor backup dir + rebuild/recreate.
+
+## 2026-10-22 — Model Routing page missing → server tree was stale (fixed, LIVE)
+
+Owner: Model Routing not visible in the admin dashboard after the next47
+deploy.
+
+Root cause: the deploy synced only cctest-monitor + the model-routing feature
+dir + locales, but the page's *registration* lives elsewhere —
+web/src/hooks/use-sidebar-data.ts (sidebar entry) and
+web/src/routes/_authenticated/model-routing/ + web/src/routeTree.gen.ts
+(the route). A diff of the tag's web/ tree vs the server showed 34 files
+stale — the server web tree predated several shipped features (community
+buttons next45, session-refresh fix, hero video, SEO public/ assets), i.e.
+earlier "web file delta" syncs had silently missed files for multiple
+deploys.
+
+Fix: full web/src sync from the tag (rm -rf + cp -a, LF-normalized), plus
+web root config (package.json/bun.lock/rsbuild.config.ts/tsconfig.json/
+index.html) and web/public (og-image.png, robots.txt, sitemap.xml).
+Post-sync diff = 0. Gateway pinned-next47 rebuilt in place (ad964e47ac5e),
+recreated; /model-routing now 200 and "Model Routing" present in the served
+bundle; all public pages 200; gateway healthy, no errors.
+
+Deploy-protocol hardening (recorded): a scoped "only the files I changed"
+web sync is UNSAFE on this server because the tree already drifts — always
+diff the tag's web/ tree against the server first, and sync web/src +
+web/public in full when building a gateway image.
