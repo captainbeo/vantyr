@@ -1629,12 +1629,18 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     # Model-membership, not name prefixes — a6pin-sonnet-5-* and
     # a6pin-sonnet-5-5-* are different models; gpt-6-1-sol and gpt-6.1-sol
     # are the SAME model (MODEL_ALIASES).
+    # Exclude the failed channel from the standby set — but NOT when it IS
+    # the operator's manual pick. run_action_promote passes (active or
+    # chosen) as failed_channel; when there is no active pin, that is the
+    # chosen standby, and excluding it made a valid manual pick always
+    # report "not a standby" (the 2026-10-22 gpt-6-sol no-active-pin bug).
+    failed_name = (failed_channel.get("name") or "") if failed_channel else ""
     standbys = [
         ch for ch in (channels_snapshot or [])
         if is_pinned_channel(ch.get("name") or "")
         and int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED
         and pool & {mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()}
-        and (ch.get("name") or "") != (failed_channel.get("name") or "")
+        and ((ch.get("name") or "") != failed_name or (ch.get("name") or "") == preferred_name)
     ]
     if not standbys:
         discord_alert(

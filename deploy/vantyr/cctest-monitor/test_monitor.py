@@ -887,6 +887,45 @@ def test_action_promote_manual_pick():
         m.RUNTIME = None
 
 
+def test_action_promote_manual_pick_no_active_pin():
+    # Regression for the 2026-10-22 gpt-6-sol bug: when the model has NO
+    # active pin (all disabled), run_action_promote passes the chosen standby
+    # as failed_channel — which then excluded it from the standby set, so the
+    # preferred pick was "not a standby" and nothing promoted. The pick must
+    # be promoted even when it is the failed_channel fallback.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    for c in chs:
+        c["status"] = 2  # NO active pin — all standby
+    state = {}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    m.A6Market.health_for = lambda self, model, ids: {}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": PassCC(),
+        "sellers": [("a6pin-fable-5", "https://api.a6api.com", "sk-pin"),
+                    ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-1169"),
+                    ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-3825")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        status, payload = m.run_action_promote({"model": "claude-fable-5", "merchant": "1169"})
+        assert status == 200, payload
+        assert payload["data"]["promoted"] == "a6pin-fable-5-1169", payload
+        assert chs[1]["status"] == 1, chs[1]  # 1169 enabled
+    finally:
+        m.RUNTIME = None
+
+
 def test_action_promote_manual_pick_overrides_stale_mark():
     # Regression for the 2026-10-22 sonnet-5-5 incident: a manual pick of a
     # merchant that is bad-marked (even long past cooldown) must be honored
