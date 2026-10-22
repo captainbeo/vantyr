@@ -1560,28 +1560,42 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         LOG.info("[pin] no fresh standbys for %s — re-trying %d after cooldown",
                  model, len(expired))
     else:
-        discord_alert(
-            discord,
-            f"cctest: all standby pins for {model} tested fake (cooldown not "
-            f"expired) — traffic rides the general/lower tiers",
-        )
-        LOG.warning("[pin] ALL standbys bad for %s (in cooldown)", model)
-        return
+        candidates = []
+        if not preferred_name:
+            discord_alert(
+                discord,
+                f"cctest: all standby pins for {model} tested fake (cooldown not "
+                f"expired) — traffic rides the general/lower tiers",
+            )
+            LOG.warning("[pin] ALL standbys bad for %s (in cooldown)", model)
+            return
     if preferred_name:
-        chosen = next((ch for ch in candidates if ch.get("name") == preferred_name), None)
+        # A manual pick is an explicit operator override: honor it even when
+        # the merchant is bad-marked or fresh pins exist. The enable-first-
+        # verify path below still checks the pin before it can serve, so this
+        # cannot put an unverified merchant live. The pick must exist among
+        # the model's disabled standby pins (not some other channel).
+        chosen = next((ch for ch in standbys if ch.get("name") == preferred_name), None)
         if chosen is None:
-            # The operator's pick exists but is not in the eligible candidate
-            # set (bad-marked and still cooling down). Refuse rather than
-            # silently promote a different merchant than they chose.
+            # The pick isn't a disabled standby for this model at all.
             discord_alert(
                 discord,
                 f"cctest: requested standby {preferred_name} for {model} is not "
-                f"eligible (bad-marked / cooling down) — no promotion",
+                f"a standby pin for this model — no promotion",
             )
-            LOG.warning("[pin] requested standby %s for %s not eligible; skipping", preferred_name, model)
+            LOG.warning("[pin] requested standby %s for %s not a standby; skipping", preferred_name, model)
             return
+        if chosen.get("name") in bad_marks:
+            age_h = (now - bad_marks[chosen["name"]]) / 3600
+            LOG.warning(
+                "[pin] manual pick %s for %s overrides a bad mark (%.1fh old) — "
+                "operator override, will verify before serving",
+                preferred_name, model, age_h,
+            )
         standby = chosen
     else:
+        if not candidates:
+            return
         standby = candidates[0]
     standby_name = standby["name"]
     if not enforce:

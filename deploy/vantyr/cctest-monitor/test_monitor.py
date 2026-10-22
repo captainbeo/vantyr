@@ -887,6 +887,51 @@ def test_action_promote_manual_pick():
         m.RUNTIME = None
 
 
+def test_action_promote_manual_pick_overrides_stale_mark():
+    # Regression for the 2026-10-22 sonnet-5-5 incident: a manual pick of a
+    # merchant that is bad-marked (even long past cooldown) must be honored
+    # when fresh pins also exist. Previously fresh pins won the candidate set
+    # and the marked pick was refused, while the active pin had already been
+    # quarantined — leaving the model with zero serving pins.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1  # a6pin-fable-5 active
+    state = {}
+    import time as _time
+    # 1169 marked as bad, 70h ago (well past the 3h cooldown); 3825 is fresh.
+    state["bad_standbys"] = {"claude-fable-5": {"a6pin-fable-5-1169": _time.time() - 70 * 3600}}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    m.A6Market.health_for = lambda self, model, ids: {}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": PassCC(),
+        "sellers": [("a6pin-fable-5", "https://api.a6api.com", "sk-pin"),
+                    ("a6pin-fable-5-1169", "https://api.a6api.com", "sk-1169"),
+                    ("a6pin-fable-5-3825", "https://api.a6api.com", "sk-3825")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        # Manual pick of the MARKED 1169 must promote it (operator override),
+        # not refuse because fresh 3825 exists.
+        status, payload = m.run_action_promote({"model": "claude-fable-5", "merchant": "1169"})
+        assert status == 200, payload
+        assert payload["data"]["promoted"] == "a6pin-fable-5-1169", payload
+        assert chs[1]["status"] == 1, chs[1]  # 1169 enabled
+        # the stale mark is cleared on pass
+        assert "a6pin-fable-5-1169" not in state["bad_standbys"]["claude-fable-5"]
+    finally:
+        m.RUNTIME = None
+
+
 def test_pool_prefix_expansion():
     # The bare "a6pin" seller entry covers EVERY pin channel (pool
     # auto-discovery); exact-name entries still match exactly.
