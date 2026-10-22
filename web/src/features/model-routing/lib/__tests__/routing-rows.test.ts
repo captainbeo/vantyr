@@ -238,6 +238,72 @@ describe('buildRoutingRows', () => {
     )
     expect(rows[0]?.statusReason).toBe('relay timeout')
   })
+
+  it('maps verdict_history into row.history, newest first', () => {
+    const status: CctestStatus = {
+      ...CC_STATUS,
+      channels: {
+        'a6pin-fable-5': {
+          last_verdicts: {
+            'claude-fable-5': { verdict: 'official', at: '2026-10-19T00:05:00' },
+          },
+          verdict_history: {
+            'claude-fable-5': [
+              { verdict: 'official', at: '2026-10-19T00:05:00' },
+              { verdict: 'unofficial', at: '2026-10-18T00:05:00' },
+              { verdict: 'attr_match', at: '2026-10-17T00:05:00' },
+            ],
+          },
+        },
+      },
+    }
+    const rows = buildRoutingRows(
+      [channel({ id: 8, name: 'a6pin-fable-5', models: 'claude-fable-5' })],
+      status
+    )
+    expect(rows[0]?.history).toHaveLength(3)
+    expect(rows[0]?.history[0]?.verdict).toBe('official')
+    expect(rows[0]?.history[1]?.verdict).toBe('unofficial')
+  })
+
+  it('falls back to last_verdicts when verdict_history is absent (older monitor)', () => {
+    const rows = buildRoutingRows(
+      [channel({ id: 8, name: 'a6pin-fable-5', models: 'claude-fable-5' })],
+      CC_STATUS
+    )
+    const row = rows.find((r) => r.channelName === 'a6pin-fable-5')
+    // CC_STATUS has only last_verdicts — the single entry becomes history
+    expect(row?.history).toEqual([
+      { verdict: 'official', at: '2026-10-19T00:05:00' },
+    ])
+  })
+
+  it('drops malformed history entries and yields empty history when no checks ran', () => {
+    const status: CctestStatus = {
+      ...CC_STATUS,
+      channels: {
+        'a6pin-fable-5': {
+          verdict_history: {
+            'claude-fable-5': [
+              { verdict: 'official', at: '2026-10-19T00:05:00' },
+              { verdict: 'x' } as never, // missing `at`
+            ],
+          },
+        },
+      },
+    }
+    const withBad = buildRoutingRows(
+      [channel({ id: 8, name: 'a6pin-fable-5', models: 'claude-fable-5' })],
+      status
+    )
+    expect(withBad[0]?.history).toHaveLength(1)
+
+    const none = buildRoutingRows(
+      [channel({ id: 9, name: 'a6pin-6-sol', models: 'gpt-6-sol' })],
+      CC_STATUS
+    )
+    expect(none[0]?.history).toEqual([])
+  })
 })
 
 describe('pinMerchantFor', () => {

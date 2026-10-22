@@ -24,6 +24,7 @@ import type {
   ModelSummary,
   RoutingRow,
   StandbyEntry,
+  VerdictRecord,
 } from '../types'
 
 // ============================================================================
@@ -92,6 +93,7 @@ export function buildRoutingRows(
     const effectiveGroups = groups.length > 0 ? groups : ['default']
     const chState = cctest?.channels?.[channel.name]
     const lastVerdicts = chState?.last_verdicts ?? {}
+    const verdictHistory = chState?.verdict_history ?? {}
     for (const model of models) {
       for (const group of effectiveGroups) {
         const verdictEntry = lastVerdicts[model]
@@ -103,6 +105,19 @@ export function buildRoutingRows(
           modelMarks != null && typeof modelMarks === 'object'
             ? (modelMarks as Record<string, number>)[channel.name]
             : undefined
+        // Recent checks for this channel×model, newest first. Older state
+        // has no verdict_history — fall back to the single last_verdicts
+        // entry so the "last check" still shows.
+        const rawHistory = verdictHistory[model]
+        const history: VerdictRecord[] = (
+          Array.isArray(rawHistory) ? rawHistory : []
+        )
+          .filter((e): e is { verdict: string; at: string } =>
+            Boolean(e && typeof e.verdict === 'string' && typeof e.at === 'string')
+          )
+        if (history.length === 0 && verdictEntry?.verdict && verdictEntry?.at) {
+          history.push({ verdict: verdictEntry.verdict, at: verdictEntry.at })
+        }
         rows.push({
           model,
           group,
@@ -116,6 +131,7 @@ export function buildRoutingRows(
           statusReason: statusReasonFor(channel),
           verdict: verdictEntry?.verdict ?? null,
           verdictAt: verdictEntry?.at ?? null,
+          history,
           quarantined: chState?.quarantined ?? false,
           fails: chState?.model_fails?.[model] ?? chState?.fails ?? 0,
           cooldownExpiresAt:
@@ -191,6 +207,7 @@ export function buildModelSummaries(
       merchant: row.merchant,
       state: standbyStateFor(row, nowSeconds),
       verdict: row.verdict,
+      history: row.history,
       cooldownExpiresAt: row.cooldownExpiresAt,
     }))
     const inCooldown = standbys.filter((entry) => entry.state === 'cooldown')

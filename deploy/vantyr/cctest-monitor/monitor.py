@@ -173,13 +173,25 @@ def save_state(state):
     os.replace(tmp, STATE_PATH)
 
 
+# How many recent checks we keep per (channel, model) for the Model Routing
+# history dropdown. The latest entry always mirrors last_verdicts.
+HISTORY_DEPTH = 3
+
+
 def record_verdict(ch_state, model, verdict):
     """Remember the latest cctest verdict for (channel, model) — read by
-    the status server for the Model Routing admin page."""
-    ch_state.setdefault("last_verdicts", {})[model] = {
+    the status server for the Model Routing admin page. Also appends to a
+    capped per-model history (newest first) so the page can show the last
+    few checks per merchant, not just the most recent."""
+    entry = {
         "verdict": verdict or "inconclusive",
         "at": datetime.now(timezone.utc).isoformat(),
     }
+    ch_state.setdefault("last_verdicts", {})[model] = entry
+    history = ch_state.setdefault("verdict_history", {}).setdefault(model, [])
+    # Newest first; drop any duplicate of this exact check, then cap.
+    history.insert(0, entry)
+    del history[HISTORY_DEPTH:]
 
 
 class Gateway:

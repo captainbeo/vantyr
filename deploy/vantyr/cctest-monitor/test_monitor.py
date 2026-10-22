@@ -623,6 +623,52 @@ def test_last_verdicts_standby_verification():
     assert entry["verdict"] == "unofficial", entry
 
 
+def test_verdict_history_capped_newest_first():
+    # record_verdict keeps the last HISTORY_DEPTH checks per (channel,
+    # model), newest first, and mirrors the newest into last_verdicts.
+    st = {}
+    for v in ["official", "unofficial", "attr_match", "official"]:
+        m.record_verdict(st, "claude-fable-5", v)
+    hist = st["verdict_history"]["claude-fable-5"]
+    assert len(hist) == m.HISTORY_DEPTH, hist
+    assert [e["verdict"] for e in hist] == ["official", "attr_match", "unofficial"]
+    # newest mirrors into last_verdicts
+    assert st["last_verdicts"]["claude-fable-5"]["verdict"] == "official"
+    for e in hist:
+        assert "T" in e["at"], e  # ISO 8601
+
+
+def test_verdict_history_inconclusive_recorded():
+    # A None verdict (failed/blocked check) is recorded as inconclusive in
+    # history too, so the page shows that a check happened.
+    st = {}
+    m.record_verdict(st, "gpt-6-sol", None)
+    hist = st["verdict_history"]["gpt-6-sol"]
+    assert hist[0]["verdict"] == "inconclusive"
+    assert st["last_verdicts"]["gpt-6-sol"]["verdict"] == "inconclusive"
+
+
+def test_status_payload_includes_history():
+    state = {
+        "a6pin-x-1": {
+            "rotation": ["claude-fable-5"],
+            "last_verdicts": {"claude-fable-5": {"verdict": "official", "at": "2026-10-19T00:00:00"}},
+            "verdict_history": {"claude-fable-5": [
+                {"verdict": "official", "at": "2026-10-19T00:00:00"},
+                {"verdict": "unofficial", "at": "2026-10-18T00:00:00"},
+            ]},
+        },
+        "_meta": {"last_cycle_at": "2026-10-19T00:10:00"},
+    }
+    payload = m.status_payload(state, {"enforce": True, "cycle_minutes": 60,
+                                       "standby_cooldown_hours": 3,
+                                       "permanent_fails": 3,
+                                       "thresholds": {}})
+    ch = payload["channels"]["a6pin-x-1"]
+    assert "verdict_history" in ch, ch
+    assert len(ch["verdict_history"]["claude-fable-5"]) == 2
+
+
 def test_status_payload_projection():
     state = {
         "selora-default-primary": {"fails": 1, "last_verdicts": {"claude-fable-5-1": {"verdict": "official", "at": "2026-10-19T00:00:00"}}},

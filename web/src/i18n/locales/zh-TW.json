@@ -7052,6 +7052,7 @@
     "All groups": "All groups",
     "All statuses": "All statuses",
     "No channels serve this model": "No channels serve this model",
+    "No checks yet": "No checks yet",
     "No active channel": "No active channel",
     "Rotate {{model}} to a different merchant: the active pin is disabled immediately, the next standby is enabled and verified. Live routing changes now.": "Rotate {{model}} to a different merchant: the active pin is disabled immediately, the next standby is enabled and verified. Live routing changes now.",
     "Promoted {{standby}} ({{verdict}})": "Promoted {{standby}} ({{verdict}})",

@@ -53,6 +53,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { CheckHistory } from './check-history'
 import type {
   MerchantHealth,
   ModelSummary,
@@ -73,8 +74,6 @@ const STATUS_VARIANTS: Record<number, 'success' | 'neutral' | 'warning'> = {
 }
 
 const PASS_VERDICTS = new Set(['official', 'attr_match'])
-const SOFT_VERDICTS = new Set(['official_flawed', 'reversed'])
-const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
 
 function locale(): string | undefined {
   return toIntlLocale(i18next.resolvedLanguage || i18next.language)
@@ -86,16 +85,6 @@ function formatRemaining(seconds: number): string {
     return `${formatNumber(Math.ceil(hours), locale())}h`
   }
   return `${formatNumber(Math.max(1, Math.ceil(seconds / 60)), locale())}m`
-}
-
-function verdictVariant(
-  verdict: string | null
-): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (verdict == null) return 'neutral'
-  if (PASS_VERDICTS.has(verdict)) return 'success'
-  if (SOFT_VERDICTS.has(verdict)) return 'warning'
-  if (BAD_VERDICTS.has(verdict)) return 'danger'
-  return 'neutral'
 }
 
 function statusLabel(status: number, t: (key: string) => string): string {
@@ -410,19 +399,15 @@ function LadderRows(props: {
                 </div>
               </div>
             </div>
-            <div className='flex shrink-0 items-center gap-1.5'>
-              {row.verdict != null && (
+            <div className='flex shrink-0 flex-col items-end gap-1'>
+              <div className='flex items-center gap-1.5'>
                 <StatusBadge
-                  variant={verdictVariant(row.verdict)}
-                  label={row.verdict}
+                  variant={STATUS_VARIANTS[row.status] ?? 'neutral'}
+                  label={statusLabel(row.status, t)}
                   copyable={false}
                 />
-              )}
-              <StatusBadge
-                variant={STATUS_VARIANTS[row.status] ?? 'neutral'}
-                label={statusLabel(row.status, t)}
-                copyable={false}
-              />
+              </div>
+              <CheckHistory history={row.history} />
             </div>
           </li>
         )
@@ -487,13 +472,7 @@ function StandbyRow(props: {
           </div>
         </div>
         <div className='flex shrink-0 items-center gap-2'>
-          {e.verdict != null && (
-            <StatusBadge
-              variant={verdictVariant(e.verdict)}
-              label={e.verdict}
-              copyable={false}
-            />
-          )}
+          <CheckHistory history={e.history} />
           {e.state === 'ready' && (
             <StatusBadge
               variant='success'

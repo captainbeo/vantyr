@@ -18,6 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { Channel } from '@/features/channels/types'
 
+/** One recorded authenticity check (newest first within a channel). */
+export type VerdictRecord = {
+  verdict: string
+  at: string
+}
+
 /** One (model × group × channel) routing assignment, joined client-side. */
 export type RoutingRow = {
   model: string
@@ -35,6 +41,8 @@ export type RoutingRow = {
   statusReason: string | null
   verdict: string | null
   verdictAt: string | null
+  /** Recent checks for this channel×model, newest first (up to 3). */
+  history: VerdictRecord[]
   quarantined: boolean
   fails: number
   /** When the standby's bad-mark cooldown ends (epoch seconds). */
@@ -59,6 +67,8 @@ export type CctestChannelState = {
   soft?: number[]
   soft_alerted?: boolean
   last_verdicts?: Record<string, { verdict?: string; at?: string }>
+  /** Recent checks per model, newest first (the monitor caps at 3). */
+  verdict_history?: Record<string, { verdict?: string; at?: string }[]>
 }
 
 export type CctestStatus = {
@@ -99,6 +109,8 @@ export type StandbyEntry = {
   /** 'ready' | 'cooldown' | 'quarantined' — derived state. */
   state: 'ready' | 'cooldown' | 'quarantined'
   verdict: string | null
+  /** Recent checks for this standby, newest first (up to 3). */
+  history: VerdictRecord[]
   cooldownExpiresAt: number | null
 }
 
