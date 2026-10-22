@@ -1500,11 +1500,42 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
         for ch in expand_seller_to_channels(channels, name, base_url, seller_key):
             seller_registry[ch.get("name")] = seller_key
     # Active pins per model, for sick-pin rotation after their checks.
+    # INVARIANT (owner rule 2026-10-22): exactly ONE enabled pin per model.
+    # Manually-enabled extras (via the channels page) create a lottery the
+    # owner explicitly retired — the first-seen pin wins, extras are disabled
+    # back to standby with an alert.
     active_pins = {}
+    extra_actives = []
     for ch in channels:
-        if is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED:
-            for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
-                active_pins.setdefault(m, ch)
+        if not (is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED):
+            continue
+        for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
+            if m in active_pins:
+                extra_actives.append((m, ch))
+            else:
+                active_pins[m] = ch
+    if extra_actives and enforce:
+        for model, extra in extra_actives:
+            extra_name = extra.get("name")
+            keeper = active_pins[model].get("name")
+            LOG.warning("[dedup] %s has %d active pins — disabling extra %s (keeping %s)",
+                        model, len([e for _, e in extra_actives if _ == model]) + 1, extra_name, keeper)
+            try:
+                gateway.set_status(int(extra["id"]), CHANNEL_MANUALLY_DISABLED)
+            except Exception as e:
+                LOG.error("[dedup] failed to disable extra pin %s: %s", extra_name, e)
+                continue
+            discord_alert(discord, f"cctest: {model} had multiple active pins — disabled {extra_name}, keeping {keeper}")
+        if extra_actives:
+            try:
+                gateway.fix_abilities()
+            except Exception:
+                pass
+            # Refresh the channel list so process_channel sees the corrected state.
+            try:
+                channels = gateway.list_channels()
+            except Exception:
+                pass
     for name, base_url, seller_key in sellers:
         allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):

@@ -61,6 +61,10 @@ class FakeGW:
                 ch["models"] = models
         return True
 
+    def count_logs(self, log_type, channel_id, window_minutes):
+        # No traffic in the fake gateway — never sick.
+        return 0
+
 
 class VerdictCC:
     verdict = "unofficial"
@@ -1234,6 +1238,39 @@ def test_sick_pin_rotation_in_cycle():
         ("claude", "gpt"), 168, threshold_for, 3, True, None, state2,
     )
     assert chs2[0]["status"] == 1, chs2[0]  # still active
+
+
+def test_cycle_dedupes_multiple_active_pins():
+    # Owner rule: exactly ONE enabled pin per model. When a second pin is
+    # manually enabled (e.g. via the channels page), the cycle disables it
+    # back to standby and keeps the first-seen pin active.
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1  # a6pin-fable-5 active
+    chs[0]["id"] = 20
+    # Manually enable a second pin for the same model (the bug scenario).
+    chs[1]["status"] = 1
+    chs[1]["id"] = 21
+    chs[1]["name"] = "a6pin-fable-5-1169"
+    gw = FakeGW(chs)
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    state = {}
+    m.run_cycle(
+        gw, PassCC(),
+        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
+    )
+    # The extra pin (1169) is disabled back to standby; the first stays active.
+    assert (21, 2) in gw.writes, gw.writes
+    assert (20, 2) not in gw.writes, gw.writes
 
 
 def test_status_payload_includes_sync():
