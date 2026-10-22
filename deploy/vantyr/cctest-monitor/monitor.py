@@ -146,7 +146,10 @@ def http_json(method, url, token=None, body=None, timeout=30.0):
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode()), resp.status
+            raw = resp.read().decode()
+            # Discord webhooks answer 204 No Content on success — an empty
+            # body is not JSON; return an empty payload instead of raising.
+            return (json.loads(raw) if raw.strip() else {}), resp.status
     except urllib.error.HTTPError as e:
         try:
             payload = json.loads(e.read().decode())
