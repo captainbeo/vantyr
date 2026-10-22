@@ -4066,3 +4066,44 @@ pinned-next47 rebuilt in place (156db0858128, "Cooling down..." in binary)
 + recreated; both healthy; / /model-routing /pricing 200; gpt-6.1-sol
 relay 200 post-restart. Backend 49/49, web 35/35. AGPL: source archive +
 notice + Footer → new tag (sha256 2cac9d86…7512).
+
+## 2026-10-22 — Phantom merchant pins: honest verify + sync reconciliation (LIVE)
+
+Owner: verified gpt-6-astra "merchant 5312" green but couldn't pick it; also
+asked why a removed A6 key's pin stays in the pool.
+
+Root cause: merchant 5312 does not exist in the A6 account (owner has 5132 —
+a different merchant). Its pin a6pin-6-astra-5312 could never be
+direct-verified; the verify endpoint silently fell back to a gateway-routed
+check that lands on the ACTIVE pin (5942) and reports THAT merchant's
+attr_match — a green badge borrowed from a different merchant. Quarantine
+release (direct-check-only) never fired, so the pin stayed unpickable.
+And the 5-min sync is add-only — nothing ever removed pins whose merchant
+lost its A6 key, so phantoms accumulated.
+
+Fixes (A + B, owner-approved):
+- A: deleted the 3 true phantom pins (a6pin-6-astra-5312,
+  a6pin-opus-5-5-1205, a6pin-sonnet-5-5-0 — merchants absent from both the
+  A6 token list AND the A6 marketplace), removed their monitor state + bad
+  marks, fix_abilities 71/0. Legacy plain-named pins (a6pin-fable-5 etc.)
+  deliberately kept — model-name suffix, not a merchant.
+- B1: run_action_verify now returns honest 409 "unverifiable" when a
+  pinned merchant's key can't be revealed (names the merchant, explains the
+  fallback trap) instead of borrowing the active pin's verdict. Quarantine
+  release still requires a passing DIRECT check.
+- B2: sync_a6_keys reconciliation — each 5-min sync disables (never
+  hard-deletes) pin channels whose merchant is not on the A6 account, with
+  a Discord alert; skipped entirely when the token list failed to load.
+  Stem-aware merchant check so legacy plain pins (a6pin-fable-5 — suffix
+  "5" IS a digit) are not mispruned.
+
+DISCORD: alerts go via the DISCORD_WEBHOOK env on the cctest-monitor —
+currently EMPTY (no alerts are being sent anywhere; they only appear in
+container logs). To receive them: create a webhook in any Discord channel
+(Server Settings → Integrations → Webhooks) and set CCTEST_DISCORD_WEBHOOK
+in /opt/vantyr/deploy/vantyr/.env. One webhook = one channel.
+
+Deploy: commit 46b715698, tag deploy/2026-10-22-phantom-reconcile, monitor
+rebuilt (ec910a175c00) + recreated; first sync pass clean (pruned 0,
+65 pins synced); honest-verify live. 51/51 tests. Monitor-only — no
+gateway rebuild. Backups: monitor.py.bak-pre-phantom, channels-full-bak.
