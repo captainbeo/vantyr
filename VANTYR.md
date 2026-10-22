@@ -3744,3 +3744,160 @@ Fixed live (options sync in ~60s, no restart): EpayId=1000, EpayKey=
 <current secret>. PayAddress path also corrected to GM Pay's actual
 create endpoint (/order/create-transaction). Verified: POST
 /order/create-transaction returns 200 (not 401).
+
+## 2026-10-21 — GM Pay 404 fixed: correct epay path + wallets + USD
+
+Owner: GM Pay payment link opened "404 Oops! Page Not Found!".
+
+Root cause: the go-epay client builds the submit URL as `PayAddress +
+"/submit.php"`, and `PayAddress` was `https://pay.vantyr.xyz` — so the
+gateway sent customers to `/submit.php`, which does not exist in GM Pay
+v2; its SPA rendered its own 404 page. GM Pay v2's real epay-compatible
+endpoint (found in its source, route/router.go:98) is
+`/payments/epay/v1/order/create-transaction/submit.php` (POST+GET). It
+verifies the SAME legacy MD5 ksort sign the go-epay client produces
+(`sign` field, `sign_type` excluded, all other params sorted k=v joined
+with &, MD5(that + secret_key)) and 302-redirects to
+`/pay/checkout-counter/<trade_id>`. Its callback posts epay-style
+trade_no/out_trade_no/trade_status and expects plain-text `ok` — exactly
+what our /api/user/epay/notify handler does. No code change needed.
+
+Fixes applied (all config/data, no Go changes):
+1. `PayAddress` option → `https://pay.vantyr.xyz/payments/epay/v1/order/create-transaction`
+   (options sync in ~60s, no restart).
+2. Restored 8 owner receiving wallets into the new Postgres
+   `wallet_address` from the pre-migration SQLite `/data/epusdt.db`
+   (tron/solana/ethereum/polygon/binance/plasma/aptos enabled, ton
+   disabled=status 2; the duplicate soft-deleted `bsc` row not restored —
+   GM Pay's BSC chain is `binance`). GM Pay had ZERO wallets after the
+   SQLite→Postgres move, which caused "no available wallet address".
+3. `epay.default_currency` cny→usd (money is our USD top-up amount; with
+   cny it would multiply by rate(usdt,cny)≈0.14 and undercharge 7x),
+   `epay.default_token`=usdt, `epay.default_network`=tron (so the
+   gateway's `alipay` type maps to a concrete TRON order with an address
+   instead of a placeholder). Restarted `vantyr-gmpay` to reload settings.
+
+Verified live end-to-end with GM Pay's real secret_key: POST
+submit.php + valid sign + type=alipay → 302 to /pay/checkout-counter/<id>;
+checkout-counter-resp shows status 1, amount 5 USD, actual 5 USDT,
+network tron, receive_address = owner TRON wallet. Test orders deleted.
+
+Note: `type=usdt.trc20` 400s (GM Pay wants chain names like `tron`, not
+`trc20`); bare `alipay`/empty type is what our gateway sends and works.
+
+## 2026-10-21 — "everything inconclusive" root cause: monitor quota exhausted
+
+Owner: Model Routing dashboard showed almost every channel/model
+"inconclusive".
+
+Root cause: NOT a channel/merchant problem. The monitor's service account
+`cctest-sidecar` (user id 29) ran out of internal Vantyr quota
+(-$0.0035). Every authenticity check the sidecar fired was rejected by
+the gateway with HTTP 403 "Insufficient quota", so the sidecar recorded
+no verdict — and by design a failed/blocked check = inconclusive
+(fail-open, never assume fake on a failed test). The account had been
+funded ~$5 on 2026-10-12 and burns ~$0.36/day across 643 checks/day, so
+it ran dry after ~9 days.
+
+Fix: owner topped the account up to ~$100 in the admin UI.
+
+Manual verification (this session):
+- Relay path (what was 403ing): fired live /v1/chat/completions as the
+  monitor token for all 9 default-group models — all HTTP 200, each
+  served by its active A6 pin (fable-5->3825, fable-5-1->5630,
+  opus-5->851, opus-5-5->3859, sonnet-5->851, sonnet-5-5->5828,
+  gpt-6-sol->5703, gpt-6-astra->5942, gpt-6-1-sol->1416), no fallback.
+  Quota decremented (spend clearing normally).
+- Authenticity verdicts (the monitor's own direct "verify" action):
+  8/9 pins -> attr_match (pass). a6pin-6.1-sol-1416 -> attr_unknown
+  twice (inconclusive, no state change; its self-id is "GPT-5 Codex" so
+  attribution can't decide — merchant 1416 may be serving a mixed pool;
+  monitored, not quarantined since unknown != bad).
+
+Follow-up worth doing: add a low-balance alert to the sidecar (Discord/log
+at <$3 remaining) so this fails loudly next time instead of silently
+going inconclusive. Not yet implemented.
+
+## 2026-10-21 — PAYG rate limit: briefly 60/min, then REVERTED to unlimited (owner decision)
+
+Context: Selora and Mia are temporarily out of use; PAYG Claude + Codex
+traffic rides A6 pins only. Owner asked to raise PAYG from the documented
+30/min, then — on learning PAYG had effectively been running uncapped —
+decided to keep it uncapped.
+
+Pre-change findings (live state had drifted from the R5 docs):
+- `ModelRequestRateLimitCount` (global/PAYG total) was **0 = unlimited**,
+  `ModelRequestRateLimitSuccessCount` 10000, and
+  `ModelRequestRateLimitGroup` was `{"unlimited":[0,1]}` — i.e. the
+  *unlimited* group was throttled to 1 success/min while PAYG had no
+  working cap. The documented "default 30/min, unlimited 60/min" was not
+  what was running. So PAYG ran effectively unlimited from some point
+  after the 2026-10-04 launch verification until today.
+- Routing: a6pin tier at priority 20 serves all default-group models;
+  Selora/Mia channels still enabled at priority 5 as the failover ladder
+  (fable-5-1 served by exactly one active pin, ch42/merchant 5630; the
+  other three pins standby). Under a higher RPM a single merchant's
+  saturation would cascade onto Selora (~30/min key) — left as-is per
+  owner scope, flagged for the possible default-group ability disable.
+
+Sequence of changes (both DB options only, no restart — gateway re-syncs
+every 60s):
+1. Set `ModelRequestRateLimitGroup = {"default":[60,60],"unlimited":[0,1]}`.
+   Verified live with a temp token burst: 65 requests → first 63 cleared
+   the limiter (403 on quota), 64–65 returned 429 (token-bucket capacity
+   60 + refill during the burst).
+2. REVERTED same session on owner decision back to
+   `{"unlimited":[0,1]}` — the exact prior state: PAYG (default group)
+   falls back to the globals (total 0 = unlimited, success 10000), so
+   **no working PAYG rate limit**. Verified live with a second temp-token
+   burst: 65/65 requests → 403 (quota), zero 429s. Both temp tokens
+   deleted, Redis rate-limit keys flushed.
+
+Standing state: PAYG has no rate limit by owner choice; `unlimited` group
+remains throttled at [0,1]. If PAYG abuse ever becomes a problem, the
+restoration is a one-line options update
+(`{"default":[60,60],"unlimited":[0,1]}`).
+
+Gotcha recorded: a token with remain_quota<=0 is rejected 401
+"Invalid token" at TokenAuth (model/token.go ValidateUserToken) *before*
+any rate-limit or quota check, so zero-quota tokens cannot be used to
+probe the limiter — give the probe token a small quota (2000) on a
+zero-balance user instead; requests then 403 on quota for free.
+
+## 2026-10-22 — Model Routing check history (pinned-next47, LIVE)
+
+Owner ask: per merchant, show when the last check ran + the results of the
+last 3 checks (model + timestamp); latest visible without expanding, history
+drops down on click.
+
+- **Backend (monitor.py):** `record_verdict` now also appends to a capped
+  per-(channel,model) `verdict_history` (HISTORY_DEPTH=3, newest first);
+  `last_verdicts` still mirrors the newest entry. All 5 record paths (cycle
+  + verify + promote) funnel through it. status_payload passes it through
+  (channels entries verbatim). 46/46 dry-run tests.
+- **Frontend:** new `CheckHistory` component — inline latest check (verdict
+  badge + relative time) with a chevron; click expands the last 3 (verdict +
+  relative time, absolute on title). Wired into both the routing ladder and
+  standby pool rows. Falls back to last_verdicts when verdict_history is
+  absent (older state). i18n "No checks yet" synced to all 12 locales.
+  35/35 tests; production build clean.
+- **Deploy:** commit 540e0aad3, tag deploy/2026-10-22-check-history pushed
+  to public main. Server tree: full tag archive → /tmp extract → synced only
+  cctest-monitor + web/src/features/model-routing + web/src/i18n/locales
+  (backup /opt/vantyr/backups/pre-check-history-20261022-000741; md5-verified,
+  LF-normalized). NOTE: server tree flattens the repo — monitor source is
+  /opt/vantyr/deploy/vantyr/cctest-monitor (NOT .../deploy/vantyr/cctest-monitor);
+  an initial mis-copy to the nested path was removed. cctest-monitor image
+  rebuilt + recreated (rm -f + up -d --no-deps); gateway pinned-next47
+  (dfa0f6941f85) built on-server, binary grep-verified ("No checks yet"),
+  compose repointed next46→next47 (backup compose.yaml.bak-next46-check-history),
+  gateway recreated --no-deps --no-build, healthy.
+- **AGPL:** source archive vantyr-source-2026-10-22-check-history.tar.gz
+  (sha256 06d0389c…b748) + source-notice.txt updated (backup
+  source-notice-pre-next47.txt), both serving 200; Footer option → new tag.
+- **Live verification:** / /pricing /about /rankings 200; gateway healthy,
+  zero errors; footer in /api/status; monitor already recording
+  verdict_history (13 entries) and producing real verdicts post-quota-top-up.
+- **Rollback:** repoint compose to vantyr/new-api:pinned-next46
+  (id c17cdb0c7d50), `docker compose up -d --no-deps --no-build gateway`;
+  monitor rollback = restore the cctest-monitor backup dir + rebuild/recreate.
