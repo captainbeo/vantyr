@@ -4120,3 +4120,21 @@ Fix shipped alongside: http_json crashed json.loads-ing Discord's empty
 204 No Content success body, so every delivered alert raised a false
 JSONDecodeError. Empty bodies now return {}. Commit 9bf928239, monitor
 rebuilt + recreated, delivery verified twice with no error logs.
+
+## Recharge-view display fix (2026-10-22, customer-reported)
+
+A customer reported that Model Overview's "Recharge" view showed prices
+7.3× lower than "Standard". Root cause: the recharge display formula is
+`price × Price / usd_exchange_rate`; `Price` was correctly 1 (top-ups
+1:1) but `USDExchangeRate` still carried the upstream default 7.3 (a
+CNY rate irrelevant to our USD-denominated setup), so the Recharge view
+divided by 7.3. Display-only — billing always uses the Standard rates;
+no customer was mischarged. Fixed by setting `USDExchangeRate` = 1 via
+options (the row didn't exist; the 7.3 was the in-code default in
+setting/operation_setting/payment_setting_old.go, INSERT not UPDATE).
+All Go-side consumers of USDExchangeRate (billing.go ×2, logger.go ×2,
+channel-billing.go) are gated on quota_display_type = CNY — unreachable
+while the site runs USD — so setting it to 1 changes only the recharge
+formula. Verified live after the 60s sync: status now reports
+usd_exchange_rate 1, and the recharge view computes identical numbers to
+Standard ($0.050 vs $0.050 on gpt-6-sol).
