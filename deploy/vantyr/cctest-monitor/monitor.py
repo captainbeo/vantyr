@@ -1025,19 +1025,21 @@ def run_action_verify(body):
             checked_direct = True
             LOG.info("[action] verify %s direct against %s -> %s", channel_name, pin_base, verdict)
         else:
-            # The pin's own A6 key could not be revealed (no matching token on
-            # the A6 account, or reveal rate-limited). A gateway-routed check
-            # would land on a DIFFERENT (active) pin and report THAT merchant's
-            # verdict as this one's — the 2026-10-22 phantom-5312 incident, where
-            # a merchant with no A6 key "verified green" by borrowing the active
-            # pin's attr_match. Be honest instead: we cannot verify this merchant.
+            # Merchant-suffixed pin (a6pin-<model>-<digits>) with no A6 key:
+            # a gateway-routed check would land on a DIFFERENT (active) pin
+            # and report THAT merchant's verdict — the 2026-10-22 phantom-5312
+            # incident. Refuse honestly instead of borrowing a green badge.
+            # Plain-named legacy pins (a6pin-sonnet-5) have no merchant id —
+            # they fall through to the gateway path below (they were never
+            # direct-checkable and their verdicts were always gateway-routed).
             merchant = channel_name.rsplit("-", 1)[-1]
-            return 409, {"error": (
-                f"cannot verify {channel_name!r}: merchant {merchant} has no A6 key "
-                f"on the management account (or reveal is rate-limited). The pin cannot "
-                f"be checked directly, and a gateway-routed check would test a different "
-                f"merchant. Remove this pin or re-add the merchant's key on A6."
-            ), "verdict": "unverifiable"}
+            if merchant.isdigit():
+                return 409, {"error": (
+                    f"cannot verify {channel_name!r}: merchant {merchant} has no A6 key "
+                    f"on the management account (or reveal is rate-limited). The pin cannot "
+                    f"be checked directly, and a gateway-routed check would test a different "
+                    f"merchant. Remove this pin or re-add the merchant's key on A6."
+                ), "verdict": "unverifiable"}
 
     if verdict is None:
         # Non-pin (legacy plain-named, or a non-pin channel): fall back to the
@@ -1054,13 +1056,17 @@ def run_action_verify(body):
     # verdict describes THIS pin, not whatever the ladder picked.
     ch_state = rt["state"].setdefault(channel_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
     record_verdict(ch_state, model, verdict)
-    if checked_direct and verdict in PASS_VERDICTS and ch_state.get("quarantined"):
+    if verdict in PASS_VERDICTS and ch_state.get("quarantined"):
         # The operator re-verified a pin we quarantined and it now passes —
         # release it (merchant recovered, exactly the recovery loop's job).
-        # Only on a passing direct check: an advisory standby verify that
-        # fails does not release anything.
+        # For a direct check the pass is this merchant's own; for a
+        # gateway-routed check (plain-named legacy pins, the only
+        # direct-uncheckable kind) the pass proves the model's pool is
+        # serving genuine output, which is what the quarantine guarded
+        # against — either way the quarantine is stale. A failing check
+        # never releases anything.
         release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
-    elif not checked_direct:
+    elif not checked_direct and verdict in BAD_VERDICTS:
         # Only run the failover policy for gateway-attributed checks; a
         # direct advisory check of a standby must not itself trigger a
         # quarantine (the operator is inspecting, not routing).
