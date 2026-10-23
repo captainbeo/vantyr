@@ -4417,3 +4417,17 @@ compose build context is /opt/vantyr/ (repo ROOT), NOT the deploy dir —
 syncing only /opt/vantyr/deploy/vantyr/web/src changes nothing in the
 image. Sync BOTH web trees from the tag, LF-normalize, then build; verify
 with a binary grep on /new-api for the marker string.
+
+## 2026-10-23 — Pinned-image accumulation control (weekly prune cron)
+
+The on-server pinned-next rebuild chain accumulated ~330 MB × ~18 distinct
+images (~5 GB) plus ~12 GB build cache per fresh build. Owner removed the
+tilkie stack (freed 108 GB); the pinned chain is now the main self-inflicted
+growth. Fix: weekly cron /etc/cron.d/vantyr-image-prune (Sundays 04:17 UTC)
+keeps the 2 newest vantyr/new-api tags, rmi's the rest, then image-prunes
+dangling layers. One-time manual prune run the same day removed
+pinned-next30..46 + the bare 'pinned' tag (kept next48 running + next47
+fallback) — disk 68%→13%. Rollback beyond next47 = rebuild from the git
+deploy tag (~20 min); VANTYR.md records every deploy tag. NOTE: the cron
+sorts tags lexicographically, so it breaks at next100 (string "next99" >
+"next100") — revisit the sort when the suffix nears three digits.
