@@ -4378,3 +4378,42 @@ VANTYR.md audit campaign total: 12 confirmed bugs fixed across 4 rounds
 dedup alias-awareness, release routing rebuild, active-pin prune guard,
 no-mutual-exclusion, demotion alert, sync persistence, state-file lock).
 67/67 tests (from 46 at campaign start).
+
+## 2026-10-23 — Accepted-upgrade tier policy (cctest monitor + web, LIVE)
+
+Owner rule: a cctest attr_swapped whose attribution.prediction ranks
+STRICTLY HIGHER than the expected model on the same tier ladder is an
+upgrade (customer got more than they paid for) — a PASS, never quarantined.
+Ladders (low→high): claude sonnet-5 < sonnet-5-5 < opus-5 < opus-5-5 <
+fable-5 < fable-5-1; gpt 6-sol < 6-1-sol < 6-astra. Owner rulings locked in:
+fable-5-1 and gpt-6-astra (ladder tops) accept nothing (exact match only);
+sonnet-5→sonnet-5-5 and the opus-5 row (gaps in the original table) follow
+the higher-is-fine ladder principle, owner confirmed "keep both".
+
+Implementation (monitor.py): TIER_LADDERS + _tier_stem (lowercase, strip
+claude-/gpt-, map cctest's gpt-6.1-sol dot spelling) + _tier_match /
+accepted_upgrade. do_check now returns (verdict, prediction); attr_swapped
+reclassifies to attr_upgraded (strictly higher) or attr_match (same rung —
+the dot-alias false positive the audit caught). attr_upgraded in
+PASS_VERDICTS; all five web/src/features/model-routing PASS_VERDICTS copies
+updated (health badge green, verify toast green, upgraded standby
+pickable). One-time deduped Discord alert per (channel, model) upgrade.
+Tests: 67/67 monitor, 36/36 frontend.
+
+Independent 3-agent audit of this feature (spec-compliance, correctness,
+regression lenses): caught and fixed the dot-spelling false positive
+(same-rung → attr_match), the frontend verdict-set gap, the upgrade-alert
+spam (now deduped), and the "verified genuine" wording for upgrades.
+
+Deploy: deploy/2026-10-23-attr-upgraded-frontend (9f0e061a1), source
+archive vantyr-source-2026-10-23-attr-upgraded-frontend.tar.gz (sha256
+89afb651…). Monitor redeployed by the parallel audit session; gateway
+pinned-next48 (7df36b9039b4) built on-server and recreated. Live-verified:
+gateway healthy, / /pricing /about /rankings /model-routing 200, binary
+grep confirms attr_upgraded ×5 in the embedded bundle.
+
+Deploy gotcha (cost two wasted builds, now recorded in memory): the gateway
+compose build context is /opt/vantyr/ (repo ROOT), NOT the deploy dir —
+syncing only /opt/vantyr/deploy/vantyr/web/src changes nothing in the
+image. Sync BOTH web trees from the tag, LF-normalize, then build; verify
+with a binary grep on /new-api for the marker string.
