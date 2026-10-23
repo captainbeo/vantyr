@@ -1043,7 +1043,7 @@ def read_display_config():
     return {
         "enforce": os.environ.get("ENFORCE", "false").lower() in ("1", "true", "yes"),
         "cycle_minutes": env_int("CYCLE_MINUTES", 10),
-        "standby_cooldown_hours": env_int("STANDBY_COOLDOWN_HOURS", 8),
+        "standby_cooldown_hours": env_int("STANDBY_COOLDOWN_HOURS", 3),
         "permanent_fails": max(2, env_int("PERMANENT_FAILS", 3)),
         "thresholds": {
             "a6pin": env_int("FAIL_THRESHOLD_A6PIN", 1),
@@ -1983,12 +1983,12 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         return
     # Cooldown recovery (owner observation 2026-10-19: merchants that were
     # caught fake come back clean — 1169/5312 both real again within
-    # hours). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 8
+    # hours). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 3
     # per owner rule 2026-10-19): the merchant becomes eligible again and
     # must re-verify via cctest before serving. Fresh (never-tried)
     # standbys are preferred over cooldown-expired ones. Cost bound: at
     # most one re-verification per bad merchant per cooldown window.
-    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "8"))) * 3600
+    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))) * 3600
     now = time.time()
     bad_marks = state.setdefault("bad_standbys", {}).setdefault(model, {})
     if isinstance(bad_marks, list):
@@ -2159,7 +2159,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             return
         bad_marks[standby_name] = time.time()
         state["bad_standbys"][model] = bad_marks
-        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (cooldown re-verifies after %sh); next in line next cycle", standby_name, model, os.environ.get("STANDBY_COOLDOWN_HOURS", "8"))
+        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (cooldown re-verifies after %sh); next in line next cycle", standby_name, model, os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))
         discord_alert(discord, f"cctest: standby {standby_name} for {model} failed verification — demoted, trying the next one")
         return
     LOG.info("[pin] standby %s inconclusive — stays active, watched by the cycle", standby_name)
