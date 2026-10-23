@@ -1085,6 +1085,55 @@ def test_sync_creates_61_sol_pin_with_both_aliases():
     assert body["model_mapping"] == {"gpt-6-1-sol": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6.1-sol"}
 
 
+def test_pin_merchant():
+    # Merchant-suffixed pins yield their merchant; plain-named legacy pins
+    # (trailing digit is part of the model) yield None.
+    assert m.pin_merchant("a6pin-fable-5-4665") == "4665"
+    assert m.pin_merchant("a6pin-sonnet-5") is None
+    # a6pin-opus-5-5 is genuinely ambiguous (opus-5-5 is itself a stem AND
+    # "5" could be a merchant) — the stem check treats it as a merchant pin.
+    assert m.pin_merchant("a6pin-6-1-sol-5950") == "5950"
+    assert m.pin_merchant("mia-failover") is None
+
+
+def test_action_verify_legacy_pin_can_release():
+    # A plain-named legacy pin (no merchant) is gateway-verifiable and a
+    # passing verdict releases its quarantine (2026-10-23: these pins were
+    # stuck forever because only direct checks could release, and legacy
+    # pins can never be direct-checked).
+    chs = [{"id": 12, "name": "a6pin-sonnet-5", "status": 2,
+            "models": "claude-sonnet-5", "model_mapping": ""}]
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    state = {"a6pin-sonnet-5": {"rotation": ["claude-sonnet-5"], "idx": 0,
+                                  "fails": 0, "quarantined": True, "permanent": True,
+                                  "model": "claude-sonnet-5"}}
+    m.RUNTIME = {
+        "gateway": FakeGW(chs),
+        "cctest": PassCC(),
+        "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        "enforce": True, "threshold_for": threshold_for, "discord": None,
+        "state": state, "seller_registry": {},
+    }
+    try:
+        status, payload = m.run_action_verify({"channel": "a6pin-sonnet-5", "model": "claude-sonnet-5"})
+        assert status == 200, (status, payload)
+        assert payload["data"]["verdict"] == "official", payload
+        # quarantine released: channel enabled + state cleared
+        assert chs[0]["status"] == 1, chs
+        assert state["a6pin-sonnet-5"]["quarantined"] is False
+    finally:
+        m.RUNTIME = None
+
+
 def test_model_pool_names_alias():
     # gpt-6-1-sol and gpt-6.1-sol share one pool; other models are singletons.
     assert m.model_pool_names("gpt-6-1-sol") == {"gpt-6-1-sol", "gpt-6.1-sol"}

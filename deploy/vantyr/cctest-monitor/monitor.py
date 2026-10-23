@@ -491,6 +491,28 @@ def parse_a6_key_name(raw):
     return sku, parts[1], channel_name
 
 
+# Model stems from the SKU map — used to distinguish merchant-suffixed pins
+# (a6pin-fable-5-4665 → merchant "4665") from legacy plain-named pins
+# (a6pin-sonnet-5 → suffix "5" is part of the model, NOT a merchant).
+_MODEL_STEMS = {
+    sku.replace("claude-", "", 1).replace("gpt-", "", 1)
+    for sku in A6_KEY_NAME_TO_SKU.values()
+}
+
+
+def pin_merchant(name):
+    """Extract the merchant id from a merchant-suffixed pin name, or None for
+    a legacy plain-named pin. 'a6pin-fable-5-4665' → '4665'; 'a6pin-sonnet-5'
+    → None (the trailing 5 is part of the model stem, not a merchant)."""
+    merchant = (name or "").rsplit("-", 1)[-1]
+    if not merchant.isdigit():
+        return None
+    head = name[: -(len(merchant) + 1)]  # strip "-<merchant>"
+    if head in {f"a6pin-{s}" for s in _MODEL_STEMS}:
+        return merchant
+    return None
+
+
 class A6Market:
     """A6's public marketplace listings (no auth): per-model merchant
     availability, price and success telemetry. Used to (a) surface merchant
@@ -740,25 +762,12 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
     # a bare isdigit() check would misread them as merchant pins. Build the set
     # of valid "stem-" prefixes from the SKU map and require the digit suffix
     # to follow one of them.
-    stems = {
-        sku.replace("claude-", "", 1).replace("gpt-", "", 1)
-        for sku in A6_KEY_NAME_TO_SKU.values()
-    }
-    def _merchant_pin(name):
-        merchant = name.rsplit("-", 1)[-1]
-        if not merchant.isdigit():
-            return None
-        head = name[: -(len(merchant) + 1)]  # strip "-<merchant>"
-        for stem in stems:
-            if head == f"a6pin-{stem}":
-                return merchant
-        return None
     pruned = []
     for ch in channels:
         ch_name = ch.get("name") or ""
         if not is_pinned_channel(ch_name):
             continue
-        merchant = _merchant_pin(ch_name)
+        merchant = pin_merchant(ch_name)
         # Legacy plain-named pins have no merchant id — skip (governed by the
         # cycle, not the A6 key pool).
         if merchant is None:
@@ -1032,8 +1041,8 @@ def run_action_verify(body):
             # Plain-named legacy pins (a6pin-sonnet-5) have no merchant id —
             # they fall through to the gateway path below (they were never
             # direct-checkable and their verdicts were always gateway-routed).
-            merchant = channel_name.rsplit("-", 1)[-1]
-            if merchant.isdigit():
+            merchant = pin_merchant(channel_name)
+            if merchant is not None:
                 return 409, {"error": (
                     f"cannot verify {channel_name!r}: merchant {merchant} has no A6 key "
                     f"on the management account (or reveal is rate-limited). The pin cannot "
