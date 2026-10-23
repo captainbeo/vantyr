@@ -159,7 +159,7 @@ export function ModelRoutingCard(props: {
   )
 }
 
-const PASS_VERDICTS = new Set(['official', 'attr_match'])
+const PASS_VERDICTS = new Set(['official', 'attr_match', 'attr_upgraded'])
 const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
 
 function verdictTextClass(verdict: string): string {

@@ -2166,11 +2166,19 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             # notice via the owner-override branch above). For pinned
             # channels, quarantine resolution is standby promotion, not
             # re-testing the same merchant.
+            # CRITICAL: re-list live — the snapshot is cycle-start state and
+            # the quarantined pin may have been disabled mid-cycle; promoting
+            # against it makes the idempotence guard see a ghost active pin
+            # and refuse (2026-10-23 astra stuck at 0 active pins).
             if is_pinned_channel(name):
+                try:
+                    live = gateway.list_channels()
+                except Exception:
+                    live = channels_snapshot
                 promote_next_standby(
                     gateway, cctest, channel, base_url, seller_key,
                     eligible[0] if eligible else None,
-                    enforce, discord, state, channels_snapshot,
+                    enforce, discord, state, live,
                     seller_registry,
                 )
             return

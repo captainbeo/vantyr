@@ -32,7 +32,7 @@ import type { VerdictRecord } from '../types'
 // for one merchant/channel. Used by the routing ladder and the standby pool.
 // ============================================================================
 
-const PASS_VERDICTS = new Set(['official', 'attr_match'])
+const PASS_VERDICTS = new Set(['official', 'attr_match', 'attr_upgraded'])
 const SOFT_VERDICTS = new Set(['official_flawed', 'reversed'])
 const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
 

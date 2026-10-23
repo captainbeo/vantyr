@@ -73,7 +73,7 @@ const STATUS_VARIANTS: Record<number, 'success' | 'neutral' | 'warning'> = {
   3: 'warning',
 }
 
-const PASS_VERDICTS = new Set(['official', 'attr_match'])
+const PASS_VERDICTS = new Set(['official', 'attr_match', 'attr_upgraded'])
 
 function locale(): string | undefined {
   return toIntlLocale(i18next.resolvedLanguage || i18next.language)

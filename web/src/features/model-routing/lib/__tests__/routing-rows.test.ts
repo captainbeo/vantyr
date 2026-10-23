@@ -400,6 +400,28 @@ describe('buildModelSummaries', () => {
     expect(summaries[0]?.standbys[0]?.state).toBe('ready')
   })
 
+  it('classifies health: attr_upgraded on the active pin is healthy (accepted-upgrade policy)', () => {
+    // The monitor reclassifies a higher-tier swap to attr_upgraded — a PASS.
+    // The frontend PASS set must agree, or an upgraded pin renders uncertain.
+    const status: CctestStatus = {
+      ...CC_STATUS,
+      channels: {
+        'a6pin-fable-5': {
+          last_verdicts: {
+            'claude-fable-5': { verdict: 'attr_upgraded', at: '2026-10-23T00:05:00' },
+          },
+        },
+      },
+    }
+    const rows = buildRoutingRows(
+      [channel({ id: 8, name: 'a6pin-fable-5', models: 'claude-fable-5', status: 1, priority: 20 })],
+      status
+    )
+    const summaries = buildModelSummaries(rows, 0)
+    expect(summaries[0]?.health).toBe('healthy')
+    expect(summaries[0]?.verdict).toBe('attr_upgraded')
+  })
+
   it('classifies health: bad verdict on the active pin is attention', () => {
     const status: CctestStatus = {
       ...CC_STATUS,

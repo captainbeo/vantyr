@@ -116,7 +116,7 @@ export function ModelRouting() {
     [summaries, openModel]
   )
 
-  const PASS_VERDICTS = new Set(['official', 'attr_match'])
+  const PASS_VERDICTS = new Set(['official', 'attr_match', 'attr_upgraded'])
   const SOFT_VERDICTS = new Set(['official_flawed', 'reversed'])
 
   const verifyMutation = useMutation({

@@ -154,7 +154,7 @@ export function buildRoutingRows(
 
 // Verdict categories (mirror the monitor's PASS/SOFT/BAD sets — the
 // inconclusive/unknown values fall through as uncertain).
-const PASS_VERDICTS = new Set(['official', 'attr_match'])
+const PASS_VERDICTS = new Set(['official', 'attr_match', 'attr_upgraded'])
 const BAD_VERDICTS = new Set(['unofficial', 'not_claude', 'attr_swapped'])
 
 function standbyStateFor(
