@@ -793,9 +793,9 @@ def _pin_reveal_key(a6m, channel_name):
     matches / reveal is rate-limited (None → caller falls back)."""
     if a6m is None:
         return None
-    merchant = channel_name.rsplit("-", 1)[-1]
-    if not merchant.isdigit():
-        return None  # plain-named pin (pre-suffix convention); no direct path
+    merchant = pin_merchant(channel_name)
+    if merchant is None:
+        return None  # plain-named legacy pin — no merchant id, no direct path
     if channel_name in _PIN_KEY_CACHE:
         return _PIN_KEY_CACHE[channel_name]
     try:
@@ -1043,7 +1043,7 @@ def read_display_config():
     return {
         "enforce": os.environ.get("ENFORCE", "false").lower() in ("1", "true", "yes"),
         "cycle_minutes": env_int("CYCLE_MINUTES", 10),
-        "standby_cooldown_hours": env_int("STANDBY_COOLDOWN_HOURS", 3),
+        "standby_cooldown_hours": env_int("STANDBY_COOLDOWN_HOURS", 8),
         "permanent_fails": max(2, env_int("PERMANENT_FAILS", 3)),
         "thresholds": {
             "a6pin": env_int("FAIL_THRESHOLD_A6PIN", 1),
@@ -1603,11 +1603,11 @@ def main():
     # as a6/mia until live verdicts say otherwise.
     fail_threshold_prefixes = (
         # Pinned (merchant/model) A6 keys are deterministic: a bad verdict
-        # IS the merchant serving a fake, no lottery noise to average out.
-        # Threshold 1 → one confirmed swap quarantines exactly that
-        # merchant's channel; traffic shifts to the next ladder step and
-        # the owner re-pins the key to a fresh merchant.
-        ("a6pin", max(1, int(os.environ.get("FAIL_THRESHOLD_A6PIN", "1")))),
+        # IS the merchant serving a fake. Threshold 2 (owner rule 2026-10-23):
+        # one bad verdict might be a transient upstream glitch; two
+        # consecutive bad checks is much stronger evidence. Reduces false
+        # quarantines of flaky-but-genuine merchants.
+        ("a6pin", max(1, int(os.environ.get("FAIL_THRESHOLD_A6PIN", "2")))),
         ("selora", max(1, int(os.environ.get("FAIL_THRESHOLD_SELORA", "1")))),
         ("a6", max(1, int(os.environ.get("FAIL_THRESHOLD_A6", "2")))),
         ("mia", max(1, int(os.environ.get("FAIL_THRESHOLD_MIA", "2")))),
@@ -1733,6 +1733,51 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     for name, base_url, seller_key in sellers:
         for ch in expand_seller_to_channels(channels, name, base_url, seller_key):
             seller_registry[ch.get("name")] = seller_key
+    # Auto-release (owner rule 2026-10-23): a quarantined pin whose LATEST
+    # verdict is a pass got a green check somewhere (manual verify, a prior
+    # cycle's re-check) but the release never landed — a restart or a partial
+    # failure between the check and the release. The state is the source of
+    # truth: if the latest recorded verdict says the merchant is genuine, the
+    # quarantine is stale. Release it back to standby (never straight to
+    # active — another pin is serving the model by now).
+    if enforce:
+        for name, ch_state in state.items():
+            if not isinstance(ch_state, dict):
+                continue
+            if not ch_state.get("quarantined"):
+                continue
+            if not is_pinned_channel(name):
+                continue
+            last = (ch_state.get("last_verdicts") or {})
+            model = ch_state.get("model") or ""
+            latest = (last.get(model) or {}).get("verdict")
+            if latest not in PASS_VERDICTS:
+                continue
+            # Find the channel; skip if missing (deleted pin).
+            ch = next((c for c in channels if (c.get("name") or "") == name), None)
+            if ch is None:
+                continue
+            try:
+                release_quarantine(gateway, ch_state, int(ch["id"]), name, enforce, discord)
+                # Re-bench to standby if another pin is already active.
+                other_active = next(
+                    (c for c in channels
+                     if is_pinned_channel(c.get("name") or "")
+                     and int(c.get("status") or 0) == CHANNEL_ENABLED
+                     and (c.get("name") or "") != name
+                     and model_pool_names(model) & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
+                    None,
+                )
+                if other_active is not None:
+                    try:
+                        gateway.set_status(int(ch["id"]), CHANNEL_MANUALLY_DISABLED)
+                        gateway.fix_abilities()
+                    except Exception as e:
+                        LOG.error("[release] re-bench after auto-release FAILED for %s: %s", name, e)
+                LOG.warning("[release] auto-released %s — latest verdict %s is a pass", name, latest)
+                discord_alert(discord, f"cctest: {name} auto-released (latest verdict: {latest})")
+            except Exception as e:
+                LOG.error("[release] auto-release FAILED for %s: %s", name, e)
     # Active pins per model, for sick-pin rotation after their checks.
     # INVARIANT (owner rule 2026-10-22): exactly ONE enabled pin per model.
     # Manually-enabled extras (via the channels page) create a lottery the
@@ -1938,12 +1983,12 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         return
     # Cooldown recovery (owner observation 2026-10-19: merchants that were
     # caught fake come back clean — 1169/5312 both real again within
-    # hours). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 3
+    # hours). A bad mark expires after STANDBY_COOLDOWN_HOURS (default 8
     # per owner rule 2026-10-19): the merchant becomes eligible again and
     # must re-verify via cctest before serving. Fresh (never-tried)
     # standbys are preferred over cooldown-expired ones. Cost bound: at
     # most one re-verification per bad merchant per cooldown window.
-    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))) * 3600
+    cooldown_seconds = max(1, int(os.environ.get("STANDBY_COOLDOWN_HOURS", "8"))) * 3600
     now = time.time()
     bad_marks = state.setdefault("bad_standbys", {}).setdefault(model, {})
     if isinstance(bad_marks, list):
@@ -2033,18 +2078,51 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     if not enforce:
         LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)
         return
-    # ENABLE FIRST (see docstring), rebuild routing, then test.
+
+    # VERIFY FIRST (2026-10-23 owner rule): check the standby's own A6 key
+    # directly BEFORE enabling it — no unverified merchant ever serves
+    # traffic. The pin's own key comes from the A6 management API (cached);
+    # a pin whose key can't be revealed falls back to the old enable-first
+    # path (fail-open, better than leaving the model dark).
+    pre_verdict = None
+    pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name)
+    if pin_key:
+        pin_base = standby.get("base_url") or "https://api.a6api.com"
+        pre_verdict = do_check(cctest, pin_base, pin_key, model)
+        LOG.info("[pin] pre-promotion verify %s (%s) direct -> %s", standby_name, model, pre_verdict)
+        st_state = state.setdefault(
+            standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
+        )
+        record_verdict(st_state, model, pre_verdict)
+        if pre_verdict in BAD_VERDICTS:
+            LOG.warning("[pin] %s FAILED pre-promotion verify for %s — NOT enabled", standby_name, model)
+            bad_marks[standby_name] = time.time()
+            state["bad_standbys"][model] = bad_marks
+            discord_alert(discord, f"cctest: standby {standby_name} for {model} failed pre-promotion check — NOT enabled")
+            return
+
+    # Enable after verification (or immediately when direct check wasn't
+    # possible — fail-open, the old behavior for un-revealable pins).
     try:
         gateway.set_status(int(standby["id"]), CHANNEL_ENABLED)
         gateway.fix_abilities()
     except Exception as e:
         LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
         return
-    LOG.warning("[pin] promoted %s for %s (fake pin disabled) — verifying", standby_name, model)
-    discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model}; verifying authenticity now")
-    # The check rides the gateway with the SKU name (gateway-routed
-    # checks use customer-facing names; the router now picks this pin as
-    # the model's only enabled deterministic path).
+    LOG.warning("[pin] promoted %s for %s — %s", standby_name, model,
+                "pre-verified" if pre_verdict else "verifying now")
+    if pre_verdict:
+        discord_alert(discord, f"cctest: promoted pre-verified standby pin {standby_name} for {model}")
+    else:
+        discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model}; verifying authenticity now")
+
+    # The post-enable check confirms routing actually lands on this pin
+    # (gateway-routed). Skipped when we already direct-verified — redundant.
+    if pre_verdict:
+        LOG.warning("[pin] %s PASSED pre-promotion verification for %s — active pin", standby_name, model)
+        bad_marks.pop(standby_name, None)
+        state["bad_standbys"][model] = bad_marks
+        return
     check_name = model
     verdict, _prediction = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
@@ -2081,7 +2159,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             return
         bad_marks[standby_name] = time.time()
         state["bad_standbys"][model] = bad_marks
-        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (cooldown re-verifies after %sh); next in line next cycle", standby_name, model, os.environ.get("STANDBY_COOLDOWN_HOURS", "3"))
+        LOG.warning("[pin] standby %s tested FAKE for %s — demoted (cooldown re-verifies after %sh); next in line next cycle", standby_name, model, os.environ.get("STANDBY_COOLDOWN_HOURS", "8"))
         discord_alert(discord, f"cctest: standby {standby_name} for {model} failed verification — demoted, trying the next one")
         return
     LOG.info("[pin] standby %s inconclusive — stays active, watched by the cycle", standby_name)
@@ -2160,57 +2238,108 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     eligible = [m for m in models if m.lower().startswith(model_prefixes)]
 
     if ch_state.get("quarantined"):
-        if ch_state.get("permanent"):
-            # Credit spend stopped after too many consecutive fails;
-            # manual re-enable (owner clears state or re-enables + we
-            # notice via the owner-override branch above). For pinned
-            # channels, quarantine resolution is standby promotion, not
-            # re-testing the same merchant.
-            # CRITICAL: re-list live — the snapshot is cycle-start state and
-            # the quarantined pin may have been disabled mid-cycle; promoting
-            # against it makes the idempotence guard see a ghost active pin
-            # and refuse (2026-10-23 astra stuck at 0 active pins).
-            if is_pinned_channel(name):
-                try:
-                    live = gateway.list_channels()
-                except Exception:
-                    live = channels_snapshot
-                promote_next_standby(
-                    gateway, cctest, channel, base_url, seller_key,
-                    eligible[0] if eligible else None,
-                    enforce, discord, state, live,
-                    seller_registry,
-                )
-            return
+        # Quarantined pins are re-checked on a timer (owner rule 2026-10-23):
+        # a merchant caught fake may recover within hours (they rotate
+        # upstreams). RECHECK_INTERVAL: every 2h for normal quarantine;
+        # "permanent" (deterministic fake) gets 8h. A passing direct check
+        # against the pin's OWN key releases it back to standby (never
+        # straight to active — another pin is serving by now).
         candidate = ch_state.get("model") or (eligible[0] if eligible else None)
         if candidate is None:
             LOG.warning("[%s] quarantined but no eligible model to re-test", name)
             return
-        # Pinned channels never re-test their own merchant: the verdict is
-        # deterministic, a fail is final for that merchant (owner rule
-        # 2026-10-18 — balance only spent on active keys and swaps).
-        if is_pinned_channel(name):
-            ch_state["permanent"] = True
-            if not ch_state.get("alerted"):
-                discord_alert(
-                    discord,
-                    f"cctest: {name} pinned merchant caught fake ({candidate}) "
-                    f"— promoting a standby",
-                )
-                ch_state["alerted"] = True
-            LOG.warning("[%s] PIN QUARANTINED (deterministic fail on %s)", name, candidate)
+        recheck_hours = 8 if ch_state.get("permanent") else 2
+        recheck_seconds = recheck_hours * 3600
+        now = time.time()
+        last_recheck = ch_state.get("last_quarantine_check", 0)
+
+        # Check whether the model still has an active pin — if not, the
+        # priority is restoring service (promote a standby), not re-checking
+        # the quarantined one.
+        try:
+            live = gateway.list_channels()
+        except Exception:
+            live = channels_snapshot
+        pool = model_pool_names(candidate)
+        has_active = any(
+            is_pinned_channel(c.get("name") or "")
+            and int(c.get("status") or 0) == CHANNEL_ENABLED
+            and pool & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}
+            for c in (live or [])
+        )
+        if not has_active:
+            # No active pin for this model — promote a standby NOW (the
+            # quarantined pin's re-check can wait for its timer).
             promote_next_standby(
                 gateway, cctest, channel, base_url, seller_key,
-                candidate, enforce, discord, state, channels_snapshot,
+                candidate, enforce, discord, state, live,
                 seller_registry,
             )
             save_state(state)
             return
-        verdict, _prediction = do_check(cctest, base_url, seller_key, candidate)
-        LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)
+
+        if now - last_recheck < recheck_seconds:
+            return
+        if not is_pinned_channel(name):
+            # Non-pin quarantined channels keep the old gateway-routed re-test.
+            verdict, _prediction = do_check(cctest, base_url, seller_key, candidate)
+            LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)
+            record_verdict(ch_state, candidate, verdict)
+            ch_state["last_quarantine_check"] = now
+            if verdict in PASS_VERDICTS:
+                release_quarantine(gateway, ch_state, channel_id, name, enforce, discord)
+            elif verdict in BAD_VERDICTS:
+                ch_state["fails"] += 1
+                if ch_state["fails"] >= permanent_fails:
+                    ch_state["permanent"] = True
+                    if not ch_state.get("alerted"):
+                        discord_alert(
+                            discord,
+                            f"cctest: {name} permanently quarantined "
+                            f"({candidate}, {ch_state['fails']} consecutive bad verdicts) "
+                            f"— manual re-enable required",
+                        )
+                        ch_state["alerted"] = True
+                    LOG.warning("[%s] PERMANENT quarantine (%s)", name, candidate)
+            else:
+                LOG.info("[%s] inconclusive re-test; quarantine unchanged", name)
+            save_state(state)
+            return
+        # Pinned: direct-check the merchant's OWN key — the only way to know
+        # if THIS merchant recovered. A gateway-routed check would test
+        # whichever pin is active, not this one.
+        pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, name)
+        if pin_key is None:
+            LOG.info("[%s] quarantine re-check skipped — no A6 key for merchant", name)
+            return
+        pin_base = channel.get("base_url") or "https://api.a6api.com"
+        verdict, _prediction = do_check(cctest, pin_base, pin_key, candidate)
+        LOG.info("[%s] quarantine re-check %s direct -> %s", name, candidate, verdict)
         record_verdict(ch_state, candidate, verdict)
+        ch_state["last_quarantine_check"] = now
         if verdict in PASS_VERDICTS:
+            # Merchant recovered — release to standby (not active; another
+            # pin is serving this model by now).
             release_quarantine(gateway, ch_state, channel_id, name, enforce, discord)
+            # release_quarantine enables the channel; for a recovered standby
+            # we want it BENCHED (status 2), not live. Re-disable after the
+            # release cleared the quarantine state.
+            other_active = next(
+                (c for c in (channels_snapshot or [])
+                 if is_pinned_channel(c.get("name") or "")
+                 and int(c.get("status") or 0) == CHANNEL_ENABLED
+                 and (c.get("name") or "") != name
+                 and model_pool_names(candidate) & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
+                None,
+            )
+            if other_active is not None:
+                try:
+                    gateway.set_status(int(channel["id"]), CHANNEL_MANUALLY_DISABLED)
+                    gateway.fix_abilities()
+                    LOG.info("[%s] recovered but %s is active — benched as standby", name, other_active.get("name"))
+                except Exception as e:
+                    LOG.error("[%s] re-bench after release FAILED: %s", name, e)
+            discord_alert(discord, f"cctest: {name} recovered ({candidate} passes) — back in the standby pool")
         elif verdict in BAD_VERDICTS:
             ch_state["fails"] += 1
             if ch_state["fails"] >= permanent_fails:
@@ -2225,7 +2354,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
                     ch_state["alerted"] = True
                 LOG.warning("[%s] PERMANENT quarantine (%s)", name, candidate)
         else:
-            LOG.info("[%s] inconclusive re-test; quarantine unchanged", name)
+            LOG.info("[%s] inconclusive re-check; quarantine unchanged", name)
         save_state(state)
         return
 

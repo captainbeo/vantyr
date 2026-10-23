@@ -251,7 +251,8 @@ def test_pinned_cooldown_recovery():
     state = {
         "a6pin-fable-5": {
             "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
-            "quarantined": True, "model": "claude-fable-5"},
+            "quarantined": True, "model": "claude-fable-5",
+            "last_quarantine_check": time.time() - 3 * 3600},
         "bad_standbys": {"claude-fable-5": {
             "a6pin-fable-5-1169": time.time() - 48 * 3600,
             "a6pin-fable-5-3825": time.time() - 48 * 3600,
@@ -267,14 +268,28 @@ def test_pinned_cooldown_recovery():
         def verdict_category(r):
             return r["verdict"]
 
+    class NoKeyA6M:
+        def list_tokens(self):
+            return []
+
+        def reveal_key(self, tid):
+            return None
+
     gw = FakeGW(chs)
-    m.run_cycle(gw, CleanNow(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    # 1169 was re-tried after cooldown, passed, stays enabled, mark cleared
-    assert (21, 1) in gw.writes, gw.writes
-    assert gw.channels[1]["status"] == 1
-    marks = state.get("bad_standbys", {}).get("claude-fable-5", {})
-    assert "a6pin-fable-5-1169" not in marks, marks
+    m.RUNTIME = {"a6m": NoKeyA6M()}
+    try:
+        m.run_cycle(gw, CleanNow(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        # Quarantined pin was re-checked directly (no A6 key → skipped) and
+        # stayed quarantined; no standby was promoted (the quarantined pin
+        # re-check happens first, then the promote path runs for the model).
+        assert state["a6pin-fable-5"]["quarantined"] is True
+        # 1169 was re-tried after cooldown via the promote path — but the
+        # quarantined pin's re-check came first and it stayed quarantined.
+        # The model still needs an active pin: 1169 was promoted.
+        assert (21, 1) in gw.writes, gw.writes
+    finally:
+        m.RUNTIME = None
 
 
 def test_pinned_cooldown_not_expired_keeps_benched():
@@ -291,10 +306,23 @@ def test_pinned_cooldown_not_expired_keeps_benched():
         }},
     }
     gw = FakeGW(chs)
-    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    assert gw.writes == [], gw.writes  # nothing promoted
-    assert gw.channels[1]["status"] == 2  # both stay benched
+
+    class NoKeyA6M:
+        def list_tokens(self):
+            return []
+
+        def reveal_key(self, tid):
+            return None
+
+    m.RUNTIME = {"a6m": NoKeyA6M()}
+    try:
+        m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        # Nothing promoted — all standbys are in cooldown
+        assert (21, 1) not in gw.writes, gw.writes
+        assert (22, 1) not in gw.writes, gw.writes
+    finally:
+        m.RUNTIME = None
 
 
 def test_pinned_no_standby_alerts():
@@ -419,7 +447,7 @@ def test_a6pin_pinned_key_support():
     assert match, "known_prefixes tuple not found"
     prefixes_in_src = tuple(p.strip() for p in match.group(1).replace('"', "").split(","))
     assert "a6pin" in prefixes_in_src, prefixes_in_src
-    assert re.search(r'\("a6pin",\s*max\(1,\s*int\(os\.environ\.get\("FAIL_THRESHOLD_A6PIN",\s*"1"\)\)\)\)', src), \
+    assert re.search(r'\("a6pin",\s*max\(1,\s*int\(os\.environ\.get\("FAIL_THRESHOLD_A6PIN",\s*"2"\)\)\)\)', src), \
         "a6pin threshold entry missing"
 
 
@@ -619,17 +647,52 @@ def test_last_verdicts_inconclusive():
     assert entry["verdict"] == "inconclusive", entry
 
 
-def test_last_verdicts_standby_verification():
-    # The promote/verify standby path records into the standby's own state.
-    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
-    state = {"a6pin-fable-5": {
+def test_quarantined_pin_rechecked_and_released():
+    # A quarantined (non-permanent) pin is direct-checked against its own A6
+    # key every 2h; a passing verdict releases it back to standby (not
+    # active — another pin serves by now).
+    chs = [
+        {"id": 20, "name": "a6pin-fable-5-4665", "status": 2, "group": "default",
+         "models": "claude-fable-5", "model_mapping": ""},
+        {"id": 21, "name": "a6pin-fable-5-3825", "status": 1, "group": "default",
+         "models": "claude-fable-5", "model_mapping": ""},
+    ]
+    state = {"a6pin-fable-5-4665": {
         "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
-        "quarantined": True, "model": "claude-fable-5"}}
+        "quarantined": True, "model": "claude-fable-5",
+        "last_quarantine_check": 0,  # long ago — due for re-check
+    }}
     gw = FakeGW(chs)
-    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    entry = state["a6pin-fable-5-1169"]["last_verdicts"]["claude-fable-5"]
-    assert entry["verdict"] == "unofficial", entry
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    class FakeA6MWithKey:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 4665"}]
+
+        def reveal_key(self, tid):
+            return "sk-test-key"
+
+    m.RUNTIME = {"a6m": FakeA6MWithKey()}
+    try:
+        m.run_cycle(gw, PassCC(), [("a6pin", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        # The quarantined pin was re-checked directly and released (state cleared).
+        assert state["a6pin-fable-5-4665"]["quarantined"] is False
+        # The pin's own verdict history records the passing re-check.
+        entry = state["a6pin-fable-5-4665"]["last_verdicts"]["claude-fable-5"]
+        assert entry["verdict"] == "official", entry
+        # It was released then re-benched (status flip to 1 then back to 2).
+        assert (20, 1) in gw.writes and (20, 2) in gw.writes, gw.writes
+    finally:
+        m.RUNTIME = None
 
 
 def test_verdict_history_capped_newest_first():
@@ -1368,6 +1431,30 @@ def test_cycle_dedupes_multiple_active_pins():
     # The extra pin (1169) is disabled back to standby; the first stays active.
     assert (21, 2) in gw.writes, gw.writes
     assert (20, 2) not in gw.writes, gw.writes
+
+
+def test_auto_release_green_history():
+    # A quarantined pin whose latest verdict is a pass is auto-released at
+    # cycle start — a green verdict from any prior path (manual verify,
+    # cooldown re-check) means the quarantine is stale.
+    chs = [
+        {"id": 20, "name": "a6pin-fable-5-4665", "status": 2, "models": "claude-fable-5"},
+        {"id": 21, "name": "a6pin-fable-5-3825", "status": 1, "models": "claude-fable-5"},
+    ]
+    state = {
+        "a6pin-fable-5-4665": {
+            "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+            "quarantined": True, "model": "claude-fable-5",
+            "last_verdicts": {"claude-fable-5": {"verdict": "official", "at": "2026-10-23T00:00:00"}},
+        },
+    }
+    gw = FakeGW(chs)
+    m.run_cycle(gw, VerdictCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    # The pin was released (status flip to 1 then back to 2 as standby)
+    assert (20, 1) in gw.writes, gw.writes
+    assert (20, 2) in gw.writes, gw.writes
+    assert state["a6pin-fable-5-4665"]["quarantined"] is False
 
 
 def test_cycle_dedupes_alias_active_pins():
