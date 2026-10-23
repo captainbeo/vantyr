@@ -1484,6 +1484,149 @@ def test_action_verify_fail_keeps_quarantine():
         m._PIN_KEY_CACHE.clear()
 
 
+def test_tier_stem_normalization():
+    # SKU spellings, prefixes, case, the cctest dot alias all reduce to stems.
+    assert m._tier_stem("claude-opus-5-5") == "opus-5-5"
+    assert m._tier_stem("claude-fable-5-1") == "fable-5-1"
+    assert m._tier_stem("gpt-6-astra") == "6-astra"
+    assert m._tier_stem("gpt-6-sol") == "6-sol"
+    assert m._tier_stem("gpt-6-1-sol") == "6-1-sol"
+    assert m._tier_stem("gpt-6.1-sol") == "6-1-sol"  # cctest dropdown spelling
+    assert m._tier_stem("Claude-Opus-5") == "opus-5"
+    assert m._tier_stem("claude-opus-4-6") == "opus-4-6"  # legacy prediction name
+    assert m._tier_stem("") is None
+    assert m._tier_stem(None) is None
+
+
+def test_accepted_upgrade_claude_ladder():
+    # claude ladder: sonnet-5 < sonnet-5-5 < opus-5 < opus-5-5 < fable-5 < fable-5-1
+    # opus-5-5 accepts fable-5, fable-5-1
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-fable-5") is True
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-fable-5-1") is True
+    # opus-5-5 rejects everything at-or-below (incl. itself and lower rungs)
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-opus-5-5") is False
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-opus-5") is False
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-sonnet-5-5") is False
+    assert m.accepted_upgrade("claude-opus-5-5", "claude-sonnet-5") is False
+    # sonnet-5-5 accepts opus-5, opus-5-5, fable-5, fable-5-1
+    for p in ("claude-opus-5", "claude-opus-5-5", "claude-fable-5", "claude-fable-5-1"):
+        assert m.accepted_upgrade("claude-sonnet-5-5", p) is True
+    # sonnet-5 accepts opus-5, opus-5-5, fable-5, fable-5-1
+    for p in ("claude-opus-5", "claude-opus-5-5", "claude-fable-5", "claude-fable-5-1"):
+        assert m.accepted_upgrade("claude-sonnet-5", p) is True
+    assert m.accepted_upgrade("claude-sonnet-5", "claude-sonnet-5-5") is True
+    # fable-5 accepts fable-5-1 only
+    assert m.accepted_upgrade("claude-fable-5", "claude-fable-5-1") is True
+    assert m.accepted_upgrade("claude-fable-5", "claude-opus-5-5") is False
+    # fable-5-1 is the top: accepts nothing (owner ruling 2026-10-23)
+    assert m.accepted_upgrade("claude-fable-5-1", "claude-fable-5") is False
+    assert m.accepted_upgrade("claude-fable-5-1", "claude-opus-5-5") is False
+
+
+def test_accepted_upgrade_gpt_ladder():
+    # gpt ladder: sol < 6-1-sol < astra
+    assert m.accepted_upgrade("gpt-6-sol", "gpt-6-1-sol") is True
+    assert m.accepted_upgrade("gpt-6-sol", "gpt-6-astra") is True
+    assert m.accepted_upgrade("gpt-6-sol", "gpt-6-sol") is False
+    assert m.accepted_upgrade("gpt-6-1-sol", "gpt-6-astra") is True
+    assert m.accepted_upgrade("gpt-6-1-sol", "gpt-6-sol") is False
+    # astra is the top: exact match only
+    assert m.accepted_upgrade("gpt-6-astra", "gpt-6-astra") is False
+    assert m.accepted_upgrade("gpt-6-astra", "gpt-6-1-sol") is False
+    # cctest dot spelling of 6.1-sol compares equal
+    assert m.accepted_upgrade("gpt-6-1-sol", "gpt-6.1-sol") is False
+
+
+def test_accepted_upgrade_no_cross_family():
+    # A Claude pin never accepts a GPT prediction and vice versa.
+    assert m.accepted_upgrade("claude-opus-5-5", "gpt-6-astra") is False
+    assert m.accepted_upgrade("gpt-6-astra", "claude-fable-5-1") is False
+    # Unparseable / unknown models are not upgrades.
+    assert m.accepted_upgrade("claude-opus-5-5", None) is False
+    assert m.accepted_upgrade("claude-opus-5-5", "glm-5.3") is False
+    assert m.accepted_upgrade("glm-5.3", "claude-opus-5-5") is False
+
+
+def _upgrade_cctest(expected_served):
+    """Fake cctest returning attr_swapped with the given prediction."""
+    class CC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "attr_swapped",
+                    "attribution": {"prediction": expected_served}}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+        @staticmethod
+        def prediction(r):
+            return r["attribution"]["prediction"]
+    return CC()
+
+
+def test_do_check_reclassifies_upgrade():
+    # attr_swapped whose prediction is a strictly higher tier -> attr_upgraded (PASS).
+    verdict, pred = m.do_check(_upgrade_cctest("claude-fable-5-1"),
+                               "https://x", "sk", "claude-opus-5-5")
+    assert verdict == "attr_upgraded", verdict
+    assert pred == "claude-fable-5-1", pred
+    assert verdict in m.PASS_VERDICTS
+
+
+def test_do_check_downgrade_stays_swapped():
+    # fable-5-1 served fable-5 is a DOWNGRADE: still attr_swapped (owner ruling).
+    verdict, pred = m.do_check(_upgrade_cctest("claude-fable-5"),
+                               "https://x", "sk", "claude-fable-5-1")
+    assert verdict == "attr_swapped", verdict
+    assert verdict in m.BAD_VERDICTS
+
+
+def test_do_check_top_of_ladder_stays_swapped():
+    # astra and fable-5-1 accept nothing; any swap on them is real.
+    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6-astra")
+    assert verdict == "attr_swapped", verdict
+    verdict, _ = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-fable-5-1")
+    assert verdict == "attr_swapped", verdict
+
+
+def test_do_check_no_prediction_stays_swapped():
+    class CC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "attr_swapped"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+    verdict, pred = m.do_check(CC(), "https://x", "sk", "claude-opus-5-5")
+    assert verdict == "attr_swapped", verdict
+    assert pred is None
+
+
+def test_do_check_gpt_upgrade():
+    # gpt-6-sol served gpt-6-astra -> upgrade.
+    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-astra"), "https://x", "sk", "gpt-6-sol")
+    assert verdict == "attr_upgraded", verdict
+
+
+def test_do_check_alias_prediction_is_match_not_swap():
+    # cctest's dropdown spells gpt-6-1-sol with a dot: a check for
+    # gpt-6-1-sol whose prediction is gpt-6.1-sol (the SAME model) must not
+    # stay attr_swapped — quarantining for a spelling alias is a false
+    # positive (audit 2026-10-23).
+    verdict, pred = m.do_check(_upgrade_cctest("gpt-6.1-sol"), "https://x", "sk", "gpt-6-1-sol")
+    assert verdict == "attr_match", verdict
+    assert verdict in m.PASS_VERDICTS
+    # and the reverse direction: upstream name with dot, prediction without
+    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6.1-sol")
+    assert verdict == "attr_match", verdict
+    # a same-rung Claude prediction likewise: exact stem equality after
+    # normalization is a match, not an upgrade or a swap
+    verdict, _ = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-opus-5-5")
+    assert verdict == "attr_match", verdict
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

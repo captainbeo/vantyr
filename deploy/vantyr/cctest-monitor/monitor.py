@@ -118,7 +118,10 @@ MONITOR_TOKEN_NAME = os.environ.get("MONITOR_TOKEN_NAME", "cctest-monitor")
 # attribution-mode values (attr_match / attr_swapped, verdictKey field).
 # Live observation 2026-10-12: A6 attribution check on claude-fable-5-1
 # returned verdictKey attr_swapped, attribution.prediction claude-opus-4-6.
-PASS_VERDICTS = {"official", "attr_match"}
+# attr_upgraded (ours, 2026-10-23): attribution detected attr_swapped, but
+# the detected model ranks strictly higher than the expected one on the
+# tier ladder — an upgrade, treated as a pass (owner rule 2026-10-23).
+PASS_VERDICTS = {"official", "attr_match", "attr_upgraded"}
 SOFT_VERDICTS = {"official_flawed", "reversed"}
 BAD_VERDICTS = {"unofficial", "not_claude", "attr_swapped"}
 # attr_uncertain (live-observed 2026-10-13): attribution could not decide
@@ -170,6 +173,15 @@ def load_state():
 
 
 _STATE_LOCK = threading.Lock()
+# Mutation lock: serialize every operation that changes gateway channel state
+# (enable/disable/quarantine/promote/dedup/prune). ThreadingHTTPServer runs
+# each verify/promote on its own thread, and the cycle + sync threads run
+# concurrently — without this, two promotes interleave: both read the same
+# pre-quarantine snapshot, both quarantine the active pin, and both enable
+# their standby (the 2026-10-23 audit finding B1: two pins enabled at once
+# until the next cycle's dedup). Held for the WHOLE mutation sequence, not
+# just the state save — the lock's job is the gateway writes, not the file.
+_MUTATION_LOCK = threading.Lock()
 
 
 def save_state(state):
@@ -442,6 +454,23 @@ class CCTest:
                 return value.lower()
         return None
 
+    @staticmethod
+    def prediction(result):
+        """The model cctest actually detected, from attribution.prediction
+        (e.g. claude-opus-4-6). Returns None when absent/unparseable."""
+        if not isinstance(result, dict):
+            return None
+        attr = result.get("attribution")
+        if isinstance(attr, dict):
+            value = attr.get("prediction") or attr.get("predicted") or attr.get("model")
+            if isinstance(value, str) and value:
+                return value
+        # tolerate a top-level prediction field too
+        value = result.get("prediction")
+        if isinstance(value, str) and value:
+            return value
+        return None
+
 
 # ---------------------------------------------------------------------------
 # A6 management API (key sync — the owner creates "<MODEL> | <merchant>"
@@ -475,6 +504,61 @@ MODEL_ALIASES = {
     "gpt-6-1-sol": {"gpt-6-1-sol", "gpt-6.1-sol"},
     "gpt-6.1-sol": {"gpt-6-1-sol", "gpt-6.1-sol"},
 }
+
+# Accepted-upgrade policy (owner rule 2026-10-23): when an attribution check
+# says a channel is serving a model that ranks STRICTLY HIGHER than the
+# expected one on the same ladder, the swap is an upgrade — the customer gets
+# more than they paid for — so it is not a fail and must not quarantine.
+# Each ladder is ordered low -> high; the two families never cross-accept.
+#   claude: sonnet-5 < sonnet-5-5 < opus-5 < opus-5-5 < fable-5 < fable-5-1
+#   gpt:    sol < 6-1-sol < astra
+# This reproduces the owner's table exactly (fable-5-1 is the top of the
+# claude ladder, so it accepts nothing; astra is the top of the gpt ladder,
+# so it matches only itself).
+TIER_LADDERS = [
+    ["sonnet-5", "sonnet-5-5", "opus-5", "opus-5-5", "fable-5", "fable-5-1"],
+    ["6-sol", "6-1-sol", "6-astra"],
+]
+
+
+def _tier_stem(model):
+    """Reduce a model/prediction spelling to its ladder stem: lowercase, drop
+    a claude-/gpt- prefix, canonicalize the gpt-6.1-sol dot spelling, and
+    collapse spaces to dashes. Returns the stem or None when empty."""
+    if not model:
+        return None
+    s = str(model).strip().lower()
+    for prefix in ("claude-", "gpt-"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    s = s.replace(" ", "-")
+    s = s.replace("6.1-sol", "6-1-sol")  # cctest dropdown spelling
+    return s or None
+
+
+def _tier_match(expected, predicted):
+    """Classify a prediction against the expected model on the tier ladders.
+    Returns 'higher' (strict upgrade), 'same' (same rung — includes spelling
+    aliases like gpt-6.1-sol vs gpt-6-1-sol), or None (different rung lower,
+    cross-family, or unparseable — a real swap)."""
+    e = _tier_stem(expected)
+    p = _tier_stem(predicted)
+    if not e or not p:
+        return None
+    for ladder in TIER_LADDERS:
+        if e in ladder and p in ladder:
+            if p == e:
+                return "same"
+            return "higher" if ladder.index(p) > ladder.index(e) else None
+    return None
+
+
+def accepted_upgrade(expected, predicted):
+    """True when `predicted` ranks strictly higher than `expected` on the same
+    tier ladder. Cross-family, sideways (same rung), lower, or unparseable
+    predictions are all False (still a real swap)."""
+    return _tier_match(expected, predicted) == "higher"
 
 
 def model_pool_names(model):
@@ -803,6 +887,37 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
     # of valid "stem-" prefixes from the SKU map and require the digit suffix
     # to follow one of them.
     pruned = []
+    # Mutation-locked (non-blocking): the prune disables channels — racing a
+    # concurrent promote would let the promote re-enable a pin we just pruned
+    # (or prune a standby the promote is about to enable). A busy lock skips
+    # the prune this tick; the next 5-min sync retries.
+    if _MUTATION_LOCK.acquire(blocking=False):
+        try:
+            pruned = _prune_phantom_pins(gateway, channels, a6_merchants, discord)
+        finally:
+            _MUTATION_LOCK.release()
+    else:
+        LOG.info("[sync] mutation lock busy — prune skipped this tick")
+    if pruned:
+        discord_alert(
+            discord,
+            f"cctest sync: disabled {len(pruned)} phantom pin(s) with no A6 key: {', '.join(pruned)}",
+        )
+    state["_sync"] = {
+        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "created": created,
+        "skipped_existing": skipped,
+        "unmatched": unmatched,
+        "pruned_phantoms": pruned,
+    }
+    if created:
+        discord_alert(discord, f"cctest sync: created {len(created)} standby pin(s): {', '.join(created)}")
+    if unmatched:
+        LOG.warning("[sync] %d A6 token name(s) not in the SKU map: %s", len(unmatched), ", ".join(unmatched[:5]))
+
+
+def _prune_phantom_pins(gateway, channels, a6_merchants, discord):
+    pruned = []
     for ch in channels:
         ch_name = ch.get("name") or ""
         if not is_pinned_channel(ch_name):
@@ -835,22 +950,7 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
             continue
         pruned.append(ch_name)
         LOG.warning("[sync] pruned phantom pin %s — merchant %s has no A6 key", ch_name, merchant)
-    if pruned:
-        discord_alert(
-            discord,
-            f"cctest sync: disabled {len(pruned)} phantom pin(s) with no A6 key: {', '.join(pruned)}",
-        )
-    state["_sync"] = {
-        "last_sync_at": datetime.now(timezone.utc).isoformat(),
-        "created": created,
-        "skipped_existing": skipped,
-        "unmatched": unmatched,
-        "pruned_phantoms": pruned,
-    }
-    if created:
-        discord_alert(discord, f"cctest sync: created {len(created)} standby pin(s): {', '.join(created)}")
-    if unmatched:
-        LOG.warning("[sync] %d A6 token name(s) not in the SKU map: %s", len(unmatched), ", ".join(unmatched[:5]))
+    return pruned
 
 
 def pin_is_sick(gateway, channel_id, window_minutes):
@@ -1053,13 +1153,25 @@ def run_action_verify(body):
     attributed to mia-failover). The pin's own A6 key is a direct check
     against the merchant, which is exactly what "is this merchant good"
     means. Gateway routing stays for selora-style fingerprint-gated keys,
-    whose checks must ride the Go client."""
+    whose checks must ride the Go client.
+
+    Mutation-locked (blocking acquire): a verify can release a quarantine
+    (gateway write) and consumes a rate-limited A6 key reveal. Two concurrent
+    verifies would double-burn the reveal budget and can race the release.
+    Blocking is right here — the check itself takes 30-90s, so a short queue
+    beats a spurious 409 on the operator's deliberate click.
+    """
     channel_name = body.get("channel")
     model = body.get("model")
     if not channel_name or not model:
         return 400, {"error": "body must be {\"channel\": ..., \"model\": ...}"}
     if RUNTIME is None:
         return 503, {"error": "monitor not initialized (parked?)"}
+    with _MUTATION_LOCK:
+        return _run_action_verify_locked(body, channel_name, model)
+
+
+def _run_action_verify_locked(body, channel_name, model):
     rt = RUNTIME
     try:
         channels = rt["gateway"].list_channels()
@@ -1081,7 +1193,7 @@ def run_action_verify(body):
         pin_key = _pin_reveal_key(rt.get("a6m"), channel_name)
         if pin_key:
             pin_base = channel.get("base_url") or "https://api.a6api.com"
-            verdict = do_check(rt["cctest"], pin_base, pin_key, upstream)
+            verdict, _prediction = do_check(rt["cctest"], pin_base, pin_key, upstream)
             checked_direct = True
             LOG.info("[action] verify %s direct against %s -> %s", channel_name, pin_base, verdict)
         else:
@@ -1109,7 +1221,7 @@ def run_action_verify(body):
             return 400, {"error": f"channel {channel_name!r} has no usable key and is not in SELLER_CHANNELS"}
         base_url, seller_key = entry
         check_name = model if is_gateway_routed(base_url) else upstream
-        verdict = do_check(rt["cctest"], base_url, seller_key, check_name)
+        verdict, _prediction = do_check(rt["cctest"], base_url, seller_key, check_name)
 
     # Record + apply the verdict against the channel we actually checked.
     # Direct checks need no gateway-attribution hop: the point is that the
@@ -1167,13 +1279,30 @@ def run_action_promote(body):
     rotation. With `merchant` set, promotes THAT specific standby (manual
     pick); without it, promotes the healthiest cheap standby (never a blind
     channel-id order). Quarantines the model's current active pin first,
-    then runs the enable-first-verify promote path. Enforce-only."""
+    then runs the enable-first-verify promote path. Enforce-only.
+
+    Mutation-locked: ThreadingHTTPServer runs concurrent requests on separate
+    threads, and the cycle/sync threads mutate channels concurrently. Two
+    interleaved promotes would both quarantine the same active pin and both
+    enable their standby — two actives, the retired lottery. A busy lock
+    means a rotation is already in flight: refuse (409) rather than queue —
+    the second click was almost certainly a double-click.
+    """
     model = body.get("model")
     target_merchant = (body.get("merchant") or "").strip() or None
     if not model:
         return 400, {"error": "body must be {\"model\": ..., \"merchant\": optional}"}
     if RUNTIME is None:
         return 503, {"error": "monitor not initialized (parked?)"}
+    if not _MUTATION_LOCK.acquire(blocking=False):
+        return 409, {"error": "another rotation is in flight — retry in a few seconds"}
+    try:
+        return _run_action_promote_locked(body, model, target_merchant)
+    finally:
+        _MUTATION_LOCK.release()
+
+
+def _run_action_promote_locked(body, model, target_merchant):
     if not RUNTIME["enforce"]:
         return 409, {"error": "monitor is in observe-only mode (ENFORCE=false)"}
     rt = RUNTIME
@@ -1563,6 +1692,10 @@ def sync_loop(a6m, interval_minutes):
             if RUNTIME is not None:
                 channels = RUNTIME["gateway"].list_channels()
                 sync_a6_keys(RUNTIME["gateway"], a6m, channels, RUNTIME["state"], RUNTIME["discord"])
+                # Persist the sync summary immediately — without this the
+                # dashboard's last_sync_at lags by up to a full cycle and a
+                # restart between sync and cycle loses created-pin records.
+                save_state(RUNTIME["state"])
         except Exception:
             LOG.exception("[sync] sync-loop tick failed")
         time.sleep(interval_minutes * 60)
@@ -1655,6 +1788,22 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     # and zero successes is as unusable as a fake — quarantine + promote,
     # exactly the fake path. Inconclusive cctest verdicts alone never
     # rotate (fail-open), but the gateway's own error log is hard evidence.
+    # Mutation-locked: the sick rotation quarantines + promotes channels —
+    # an HTTP promote/verify landing mid-rotation would race it (two pins
+    # enabled, or the rotation re-enabling a pin the operator just rotated
+    # off). A busy cycle skips the rotation this round; the next cycle's
+    # sick check catches it.
+    if enforce:
+        if not _MUTATION_LOCK.acquire(blocking=False):
+            LOG.info("[sick] another rotation is in flight — skipping sick checks this cycle")
+        else:
+            try:
+                _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry)
+            finally:
+                _MUTATION_LOCK.release()
+
+
+def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None):
     if enforce:
         for model, pin in list(active_pins.items()):
             sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes)
@@ -1897,7 +2046,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     # checks use customer-facing names; the router now picks this pin as
     # the model's only enabled deterministic path).
     check_name = model
-    verdict = do_check(cctest, base_url, seller_key, check_name)
+    verdict, _prediction = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
     st_state = state.setdefault(
         standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
@@ -1907,7 +2056,12 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         LOG.warning("[pin] %s PASSED verification for %s — active pin", standby_name, model)
         bad_marks.pop(standby_name, None)
         state["bad_standbys"][model] = bad_marks
-        discord_alert(discord, f"cctest: {standby_name} verified genuine for {model}")
+        if verdict == "attr_upgraded":
+            # Serving a higher-tier model than asked — accepted by policy,
+            # but not "genuine".
+            discord_alert(discord, f"cctest: {standby_name} verified acceptable for {model} (serving a higher-tier model)")
+        else:
+            discord_alert(discord, f"cctest: {standby_name} verified genuine for {model}")
         return
     if verdict in BAD_VERDICTS:
         # demote immediately: model has no clean merchant in this slot;
@@ -1918,6 +2072,12 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             gateway.fix_abilities()
         except Exception as e:
             LOG.error("[pin] demotion FAILED for %s (stays active!): %s", standby_name, e)
+            discord_alert(
+                discord,
+                f"cctest: CRITICAL — confirmed-fake {standby_name} for {model} "
+                f"could not be demoted ({e}) — it stays live until the next cycle retries. "
+                f"Manual disable recommended.",
+            )
             return
         bad_marks[standby_name] = time.time()
         state["bad_standbys"][model] = bad_marks
@@ -1954,6 +2114,21 @@ def process_verdict(gateway, cctest, channel, base_url, seller_key, model,
     elif verdict in PASS_VERDICTS:
         ch_state["fails"] = 0
         ch_state.setdefault("model_fails", {}).pop(model, None)
+        if verdict == "attr_upgraded":
+            # One alert per (channel, model) upgrade state — a merchant that
+            # persistently serves a higher model would otherwise ping every
+            # cycle. Re-arms if the verdict leaves attr_upgraded.
+            upgrades = ch_state.setdefault("upgrade_alerted", {})
+            if not upgrades.get(model):
+                upgrades[model] = True
+                discord_alert(
+                    discord,
+                    f"cctest: {name} serving an upgrade for {model} "
+                    f"(detected a higher-tier model) — accepted, not quarantined",
+                )
+        else:
+            # Any non-upgrade verdict re-arms the alert for that model.
+            ch_state.setdefault("upgrade_alerted", {}).pop(model, None)
 
 
 def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefixes,
@@ -2023,7 +2198,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             )
             save_state(state)
             return
-        verdict = do_check(cctest, base_url, seller_key, candidate)
+        verdict, _prediction = do_check(cctest, base_url, seller_key, candidate)
         LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)
         record_verdict(ch_state, candidate, verdict)
         if verdict in PASS_VERDICTS:
@@ -2059,7 +2234,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     if removed:
         removed_candidate = sorted(removed.keys())[0]
         mapping = parse_model_mapping(channel.get("model_mapping"))
-        verdict = do_check(
+        verdict, _prediction = do_check(
             cctest, base_url, seller_key,
             mapping.get(removed_candidate, removed_candidate),
         )
@@ -2114,7 +2289,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     mapping = parse_model_mapping(channel.get("model_mapping"))
     upstream_candidate = mapping.get(candidate, candidate)
     check_name = candidate if is_gateway_routed(base_url) else upstream_candidate
-    verdict = do_check(cctest, base_url, seller_key, check_name)
+    verdict, _prediction = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[%s] check %s (upstream %s) -> %s", name, check_name, upstream_candidate, verdict)
 
     # Gateway-routed attribution: a check labeled for this channel may
@@ -2285,10 +2460,41 @@ def restore_model(gateway, ch, ch_state, name, model, enforce, discord):
 
 
 def do_check(cctest, base_url, seller_key, model):
+    """Returns (verdict, prediction). verdict is the category string or None
+    (inconclusive); prediction is the model cctest actually detected (from
+    attribution.prediction) or None. Only process_verdict acts on the
+    prediction — every other caller unpacks and ignores it.
+
+    Accepted-upgrade policy (owner rule 2026-10-23): an attr_swapped verdict
+    is reclassified to a PASS verdict before any caller sees it:
+      - predicted model ranks strictly HIGHER on the tier ladder →
+        attr_upgraded (the customer got more than they paid for);
+      - predicted model is the SAME rung (spelling alias, e.g. cctest's
+        gpt-6.1-sol for our gpt-6-1-sol) → attr_match (it IS the right
+        model — quarantining for a dot spelling would be a false positive).
+    So no caller counts a fail or quarantines for either. `model` here is
+    the name we asked the seller for (SKU or upstream spelling — the tier
+    match normalizes both)."""
     result = cctest.check(base_url, seller_key, model)
     if result is None:
-        return None
-    return cctest.verdict_category(result)
+        return None, None
+    verdict = cctest.verdict_category(result)
+    prediction = cctest.prediction(result) if hasattr(cctest, "prediction") else None
+    if verdict == "attr_swapped":
+        tier = _tier_match(model, prediction)
+        if tier == "higher":
+            LOG.warning(
+                "[upgrade] expected %s but served %s — strictly higher tier, accepted",
+                model, prediction,
+            )
+            return "attr_upgraded", prediction
+        if tier == "same":
+            LOG.warning(
+                "[alias] expected %s, prediction %s — same model (spelling alias), accepted",
+                model, prediction,
+            )
+            return "attr_match", prediction
+    return verdict, prediction
 
 
 def start_quarantine(gateway, ch_state, channel_id, name, model, verdict, discord):
@@ -2317,7 +2523,7 @@ def release_quarantine(gateway, ch_state, channel_id, name, enforce, discord):
     ch_state.update({"quarantined": False, "fails": 0, "permanent": False,
                      "alerted": False, "model": ""})
     LOG.info("[%s] released from quarantine", name)
-    discord_alert(discord, f"cctest: {name} released from quarantine (verdict official)")
+    discord_alert(discord, f"cctest: {name} released from quarantine")
 
 
 if __name__ == "__main__":
