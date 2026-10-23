@@ -4431,3 +4431,37 @@ fallback) — disk 68%→13%. Rollback beyond next47 = rebuild from the git
 deploy tag (~20 min); VANTYR.md records every deploy tag. NOTE: the cron
 sorts tags lexicographically, so it breaks at next100 (string "next99" >
 "next100") — revisit the sort when the suffix nears three digits.
+
+## 2026-10-23 — Self-healing quarantine system (owner-approved upgrade, LIVE)
+
+Owner: "I think we need to upgrade the pinning/quarantine system." Approved
+five changes after the audit data showed 21 quarantines / 0 releases in 48h
+(the system removed fast but never recovered on its own):
+
+1. **Quarantined pins re-checked every 2h** (8h for permanent) via direct
+   check against the pin's own A6 key. A pass releases to standby (never
+   straight to active — another pin is serving by now).
+2. **Verify-before-enable**: promote_next_standby direct-checks the
+   standby's own A6 key BEFORE enabling it. No unverified merchant serves
+   traffic. Falls back to enable-first only when the pin's key can't be
+   revealed (fail-open).
+3. **FAIL_THRESHOLD_A6PIN default 1 → 2** (two consecutive bad verdicts
+   before quarantine, not one — transient upstream glitches no longer
+   bench a good merchant).
+4. **STANDBY_COOLDOWN_HOURS default 3 → 8** (bad-mark expiry; the owner's
+   8h, not my proposed 24h).
+5. **Auto-release on green history**: a quarantined pin whose latest
+   verdict is a pass is released at cycle start (a green check from any
+   path proves the quarantine is stale).
+
+Plus: _pin_reveal_key now uses pin_merchant (stem-aware) so legacy
+plain-named pins (a6pin-sonnet-5) are correctly excluded from direct-check
+instead of misparsing as merchant "5".
+
+Deploy: deploy/2026-10-23-self-healing-quarantine, monitor rebuilt +
+recreated. 68/68 tests. All 9 models serving 200, exactly 1 active pin
+each. Live verification: astra rotated from dead 3016 to healthy 5940
+through the new pre-verified promote path (verified attr_match before
+enabling).
+
+VANTYR.md campaign total: 13 confirmed bugs fixed across 5 rounds.
