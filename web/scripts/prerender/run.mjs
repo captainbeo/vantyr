@@ -203,3 +203,8 @@ ${hreflangLinks}
 }
 
 console.log(`\nPrerendered ${rendered}/${mod.PRERENDER_LOCALES.length} locales.`)
+
+// Exit explicitly: the bundled module (imported above) leaves a handle on the
+// event loop, so without this the process hangs after printing and the Docker
+// build step never completes (observed on the VPS build, 2026-10-23).
+process.exit(0)
