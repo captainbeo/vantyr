@@ -4349,3 +4349,32 @@ to merchant 6481 (its A6 pool exhausted — 502); manually rotated to 5110
 dead); promoted 5110 — both restored 200. All 9 models serving.
 
 67/67 dry-run tests (up from 46 at the start of the audit campaign).
+
+## 2026-10-23 — Third auditor + quarantine-branch stale-snapshot fix (LIVE)
+
+The third agent (API contracts) confirmed: gateway/A6/cctest request shapes
+all correct; frontend status-payload contract aligned (attr_upgraded already
+in all frontend PASS sets — the auditor read a mid-edit snapshot); the
+in-flight `pruned` NameError had been fixed pre-deploy. Notables:
+A6Market.search fail-open means an A6 outage degrades auto-promote to
+409-refuse (manual picks still work — by design); /status debug endpoint is
+container-internal only (fine while 8787 stays unpublished).
+
+Its verification pass also caught a live outage: gpt-6-astra stranded at 0
+active pins — the cycle's quarantined-permanent branch (process_channel)
+still passed the cycle-start snapshot to promote_next_standby, so the
+idempotence guard saw the quarantined pin as "already active" and refused
+every recovery. Same stale-snapshot class as the failover_model fix — this
+was the third place the pattern occurred. Fixed + deployed
+(deploy/2026-10-23-quarantine-relist); astra promoted to 3016 (attr_match),
+serving 200. All 9 models 200, exactly 1 active pin each.
+
+Also: mutation lock (round 3) prevented the promote that restored astra
+from double-firing — the 409-busy refusal worked as designed during a
+concurrent cycle tick.
+
+VANTYR.md audit campaign total: 12 confirmed bugs fixed across 4 rounds
+(stale-snapshot ×3, phantom/borrowed verdicts, pin_merchant parsing,
+dedup alias-awareness, release routing rebuild, active-pin prune guard,
+no-mutual-exclusion, demotion alert, sync persistence, state-file lock).
+67/67 tests (from 46 at campaign start).
