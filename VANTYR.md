@@ -4315,3 +4315,37 @@ lottery).
 
 Deploy: deploy/2026-10-23-audit-round, monitor rebuilt + recreated.
 57/57 tests. All 9 models serving 200 post-deploy.
+git add VANTYR.md && git commit -q -m "docs(VANTYR): three-agent audit + mutation lock deploy
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git push public HEAD:main 2>&1 | tail -1
+
+## 2026-10-23 — Three-agent independent audit (LIVE)
+
+Owner asked for an independent 3-agent run on the rotation system. Three
+parallel auditors (lifecycle, concurrency, API-contract lenses), none aware
+of the others or of today's earlier fixes. Convergent finding: channel
+mutations (promote/quarantine/prune/release) from three threads with NO
+mutual exclusion — the state file had a lock but the gateway writes did not.
+
+Fixed (deploy/2026-10-23-audit-round3):
+1. _MUTATION_LOCK on all mutation paths: promote (non-blocking 409 on busy
+   — a second click during rotation is refused, not queued), verify
+   (blocking — serializes the A6 key-reveal budget too), cycle sick-rotation
+   (skip this round on busy), sync prune (skip this tick on busy).
+   Prevents double-promote (two pins enabled — the retired lottery) and
+   promote-vs-prune thrash.
+2. Demotion failure of a confirmed-fake pin now sends a CRITICAL Discord
+   alert (was log-only).
+3. sync_loop persists state after each 5-min tick (last_sync_at no longer
+   lags a full cycle; created-pin records survive restarts).
+4. Earlier same-day rounds (already deployed): stale-snapshot failover
+   promote, pin_merchant longest-stem parse, empty relay key on no-active
+   promote, alias-aware dedup, release fix_abilities, active-pin prune
+   guard, save_state file lock.
+
+Live fallout caught during deploy verification: the 6.1-sol pool rotated
+to merchant 6481 (its A6 pool exhausted — 502); manually rotated to 5110
+(A6 100%). gpt-6-sol was found 503 (the stale-snapshot bug had left it
+dead); promoted 5110 — both restored 200. All 9 models serving.
+
+67/67 dry-run tests (up from 46 at the start of the audit campaign).
