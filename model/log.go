@@ -605,6 +605,69 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	return logs, total, err
 }
 
+// SumUserCacheStats aggregates prompt and prompt-cache-read token totals for a
+// single user's consume logs. Cache tokens live in the `other` JSON blob, so the
+// extraction expression is per log-database dialect; malformed or empty JSON
+// counts as zero instead of failing the query.
+func SumUserCacheStats(userId int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, group string) (cacheTokens int64, promptTokens int64, err error) {
+	// Each dialect's extraction errors on malformed JSON or non-numeric values;
+	// guard so bad rows count as zero instead of failing the whole query.
+	// cache_tokens is written as a JSON number by LogOther.SetPublic, but other
+	// can also carry merged maps from arbitrary code paths, so non-numeric values
+	// must degrade to zero rather than throw.
+	cacheExpr := ""
+	switch common.LogDatabaseType() {
+	case common.DatabaseTypeClickHouse:
+		// JSONExtractUInt reads a numeric member directly (JSONExtractString would
+		// return '' for a JSON number and silently zero every row); isValidJSON
+		// guards malformed blobs, missing key yields 0.
+		cacheExpr = "if(isValidJSON(other), JSONExtractUInt(other, 'cache_tokens'), 0)"
+	case common.DatabaseTypePostgreSQL:
+		// The regex pre-check keeps the jsonb cast off malformed text (CASE does
+		// not guarantee the planner won't inline the cast, so the WHEN must be
+		// safe on its own); the value regex guards non-numeric strings before the
+		// ::bigint cast. Both arms of the CASE reference only guarded expressions.
+		cacheExpr = "CASE WHEN other ~ '^\\s*\\{' AND (other::jsonb ->> 'cache_tokens') ~ '^[0-9]+$' THEN (other::jsonb ->> 'cache_tokens')::bigint ELSE 0 END"
+	case common.DatabaseTypeMySQL:
+		cacheExpr = "CASE WHEN JSON_VALID(other) THEN COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_tokens')) AS SIGNED), 0) ELSE 0 END"
+	case common.DatabaseTypeSQLite:
+		cacheExpr = "CASE WHEN json_valid(other) THEN COALESCE(CAST(json_extract(other, '$.cache_tokens') AS INTEGER), 0) ELSE 0 END"
+	default:
+		return 0, 0, errors.New("unsupported log database type for cache stats")
+	}
+
+	tx := LOG_DB.Table("logs").Select(
+		"COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(" + cacheExpr + "), 0) cache_tokens",
+	)
+	tx = tx.Where("logs.user_id = ?", userId)
+	tx = tx.Where("logs.type = ?", LogTypeConsume)
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+		return 0, 0, err
+	}
+	if tokenName != "" {
+		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+	if group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", group)
+	}
+
+	var sums struct {
+		PromptTokens int64 `gorm:"column:prompt_tokens"`
+		CacheTokens  int64 `gorm:"column:cache_tokens"`
+	}
+	if err := tx.Scan(&sums).Error; err != nil {
+		common.SysError("failed to query user cache stats: " + err.Error())
+		return 0, 0, errors.New("查询统计数据失败")
+	}
+	return sums.CacheTokens, sums.PromptTokens, nil
+}
+
 type Stat struct {
 	Quota int `json:"quota"`
 	Rpm   int `json:"rpm"`

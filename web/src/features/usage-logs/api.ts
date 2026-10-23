@@ -21,6 +21,7 @@ import { api, type ApiRequestConfig } from '@/lib/api'
 import { buildQueryParams } from './lib/query-params'
 import { parseTaskArtifactsResponse } from './lib/task-artifacts'
 import type {
+  GetCacheStatsResponse,
   GetLogsParams,
   GetLogsResponse,
   GetLogStatsParams,
@@ -85,6 +86,19 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+// User-scoped only by design: there is no admin counterpart, so no
+// buildApiPath() indirection here. Returns raw prompt/cache token sums for the
+// caller's selected window; the hit-rate percentage is derived client-side.
+export const getUserCacheStats = async (
+  params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
+): Promise<GetCacheStatsResponse> => {
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const res = await api.get(`/api/log/self/cache-stat?${queryParams}`)
+  return res.data
+}
 
 export async function getUserInfo(
   userId: number

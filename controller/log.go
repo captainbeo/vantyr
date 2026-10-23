@@ -154,3 +154,29 @@ func GetLogsSelfStat(c *gin.Context) {
 	})
 	return
 }
+
+// GetLogsSelfCacheStat returns the caller's aggregate prompt and cache-read
+// token totals over the requested window. Raw sums only — the client computes
+// the hit-rate percentage. No channel or merchant data is involved.
+func GetLogsSelfCacheStat(c *gin.Context) {
+	userId := c.GetInt("id")
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	tokenName := c.Query("token_name")
+	modelName := c.Query("model_name")
+	group := c.Query("group")
+	cacheTokens, promptTokens, err := model.SumUserCacheStats(userId, startTimestamp, endTimestamp, modelName, tokenName, group)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"cache_tokens":  cacheTokens,
+			"prompt_tokens": promptTokens,
+		},
+	})
+	return
+}

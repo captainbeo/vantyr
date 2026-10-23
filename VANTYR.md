@@ -4465,3 +4465,63 @@ through the new pre-verified promote path (verified attr_match before
 enabling).
 
 VANTYR.md campaign total: 13 confirmed bugs fixed across 5 rounds.
+
+## 2026-10-23 — Per-user cache hit rate stat (cache-stat endpoint + usage-logs chip)
+
+**Gap (config-first justification):** users were worried they were not
+receiving prompt-cache discounts through the relay. Upstream New API shows
+per-request cache token counts in the log details dialog but ships no
+aggregate "what share of my prompt tokens were cache reads" number. No
+native setting provides it; a focused Go + TS change was required.
+
+**What was built:**
+
+- `GET /api/log/self/cache-stat` (controller/log.go GetLogsSelfCacheStat,
+  model/log.go SumUserCacheStats, router/api-router.go). Self-scoped by
+  session `user_id`, consume-type logs only, honoring the page's
+  time-window/model/token/group filters. Returns raw sums
+  `{cache_tokens, prompt_tokens}`; the client derives the percentage.
+  cache_tokens is summed out of the per-row `other` JSON blob with a
+  per-dialect extraction expression (SQLite / Postgres / MySQL /
+  ClickHouse), each guarded so malformed JSON or non-numeric values count
+  as zero instead of erroring the query.
+- Access-token route rule added
+  (middleware/access_token_routes.go): `GET /api/log/self/cache-stat` →
+  `usage:read`, matching the other /api/log/self/* routes so scoped PATs
+  are not fail-closed 403.
+- Frontend: a "Cache hit" chip in the usage-logs stats strip
+  (web/src/features/usage-logs/components/common-logs-stats.tsx), user view
+  only, computed as `cache/(prompt+cache)` clamped to [0, 100], '—' when
+  the window has no prompt traffic. i18n key "Cache hit" added to en.json
+  and synced to all 12 locales (English placeholder until translation pass).
+
+**Privacy / merchant-hiding invariant:** the endpoint returns only two
+user-scoped aggregates; no channel id/name, merchant identity, or retry
+chain can ride along (verified: no log rows are projected, so the
+formatUserLogs stripping layer is not even in play). No per-merchant
+breakdown is exposed anywhere — by design, per the owner's decision that
+the A6 merchant-listing cache % is a vetting signal for us, never a
+user-facing number.
+
+**Semantic caveat (recorded, accepted):** the stored `prompt_tokens`
+column subtracts cache-read tokens for Claude-native rows but not for
+OpenAI-semantic rows, so the formula is exact for Claude traffic (Vantyr's
+dominant case) and can drift for OpenAI-format channels; the UI clamps to
+[0, 100] to keep blended windows sane. Documented in
+web/src/features/usage-logs/types.ts (CacheStatistics) and
+common-logs-stats.tsx.
+
+**Verification:** `go build ./...` exit 0 (Docker golang:1.26.1-alpine,
+fresh module cache); `TestSumUserCacheStats` + `TestLogOther` pass;
+4 cache-hit-stats vitest pass (percentage, em-dash empty window, 100%
+clamp, admin-hidden + endpoint-not-called). Full usage-logs suite matches
+the pre-existing clean-tree failure baseline (no new failures). The Go
+test caught a real bug pre-deploy: SQLite `json_extract` errors on
+malformed JSON rather than returning NULL, fixed with a per-dialect
+validity guard. Pre-deploy 3-agent independent audit (backend /
+frontend / privacy-compliance) — findings addressed: ClickHouse
+JSONExtractUInt fix, PAT scope rule, MySQL JSON_UNQUOTE, Postgres
+numeric guard, display clamp, admin no-call test assertion.
+
+**Not yet deployed** — awaiting owner approval per the live-deployment
+gate.

@@ -281,6 +281,27 @@ export interface LogStatistics {
   tpm: number
 }
 
+/**
+ * Aggregate prompt and prompt-cache-read token totals for the current user,
+ * as returned by GET /api/log/self/cache-stat. The cache hit rate is derived
+ * client-side: cache_tokens / (prompt_tokens + cache_tokens).
+ *
+ * Caveat: prompt_tokens semantics differ by relay format. Claude-native rows
+ * exclude cache-read tokens from prompt_tokens (formula is exact); OpenAI-
+ * semantic rows include them (formula slightly overestimates). Callers should
+ * clamp the derived percentage to [0, 100].
+ */
+export interface CacheStatistics {
+  cache_tokens: number
+  prompt_tokens: number
+}
+
+export interface GetCacheStatsResponse {
+  success: boolean
+  message?: string
+  data?: CacheStatistics
+}
+
 // ============================================================================
 // Drawing Logs (MjProxy) Types
 // ============================================================================

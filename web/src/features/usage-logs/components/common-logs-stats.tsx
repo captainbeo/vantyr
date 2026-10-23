@@ -25,8 +25,8 @@ import { formatLogQuota } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
-import { getLogStats, getUserLogStats } from '../api'
-import { DEFAULT_LOG_STATS } from '../constants'
+import { getLogStats, getUserCacheStats, getUserLogStats } from '../api'
+import { DEFAULT_CACHE_STATS, DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
 import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
 
@@ -76,12 +76,46 @@ export function CommonLogsStats() {
     placeholderData: (previousData) => previousData,
   })
 
-  if (isLoading) {
+  // Per-user cache hit rate. User view only: the endpoint is self-scoped by
+  // design, and admins get no aggregate here (channel-level detail stays in
+  // the admin log table).
+  const { data: cacheStats, isLoading: cacheLoading } = useQuery({
+    queryKey: ['usage-logs-cache-stats', searchParams],
+    enabled: !isAdmin,
+    queryFn: async () => {
+      const params = buildApiParams({
+        page: 1,
+        pageSize: 1,
+        searchParams,
+        columnFilters: [],
+        isAdmin: false,
+      })
+      const result = requireServerSuccess(await getUserCacheStats(params))
+      return result.success ? result.data || DEFAULT_CACHE_STATS : DEFAULT_CACHE_STATS
+    },
+    placeholderData: (previousData) => previousData,
+  })
+
+  // Denominator semantics differ by relay format: Claude-native rows store
+  // prompt_tokens with cache reads subtracted (so prompt+cache = total input),
+  // while OpenAI-semantic rows store raw prompt_tokens that already include
+  // cached tokens. The formula below is exact for Claude rows (Vantyr's
+  // dominant traffic) and slightly overestimates for OpenAI rows; clamping to
+  // [0, 100] keeps the mixed-usage blend sane.
+  const cacheTokens = cacheStats?.cache_tokens || 0
+  const cacheDenominator = (cacheStats?.prompt_tokens || 0) + cacheTokens
+  const cacheHitRate =
+    cacheDenominator > 0
+      ? `${Math.min(100, Math.max(0, Math.round((cacheTokens / cacheDenominator) * 100)))}%`
+      : '—'
+
+  if (isLoading || (!isAdmin && cacheLoading)) {
     return (
       <div className='flex items-center gap-2'>
         <Skeleton className='h-7 w-[150px] rounded-md' />
         <Skeleton className='h-7 w-[100px] rounded-md' />
         <Skeleton className='h-7 w-[120px] rounded-md' />
+        {!isAdmin && <Skeleton className='h-7 w-[110px] rounded-md' />}
       </div>
     )
   }
@@ -103,6 +137,13 @@ export function CommonLogsStats() {
         value={stats?.tpm || 0}
         accent='bg-slate-400/70'
       />
+      {!isAdmin && (
+        <StatBadge
+          label={t('Cache hit')}
+          value={cacheHitRate}
+          accent='bg-emerald-500/70'
+        />
+      )}
     </div>
   )
 }
