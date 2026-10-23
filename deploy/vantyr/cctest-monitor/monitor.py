@@ -169,11 +169,19 @@ def load_state():
         return {}
 
 
+_STATE_LOCK = threading.Lock()
+
+
 def save_state(state):
-    tmp = STATE_PATH + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(state, f, indent=2, sort_keys=True)
-    os.replace(tmp, STATE_PATH)
+    # Three writers share this file (cycle thread, sync thread, HTTP action
+    # handlers). Without the lock, two writers interleave json.dump into the
+    # same .tmp — a truncated/corrupted write then replaces state.json.
+    # Serialize the write+replace so state.json is always a complete document.
+    with _STATE_LOCK:
+        tmp = STATE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(state, f, indent=2, sort_keys=True)
+        os.replace(tmp, STATE_PATH)
 
 
 # How many recent checks we keep per (channel, model) for the Model Routing
@@ -795,6 +803,17 @@ def sync_a6_keys(gateway, a6m, channels, state, discord, base_url="https://api.a
             continue
         if int(ch.get("status") or 0) == CHANNEL_MANUALLY_DISABLED:
             continue  # already off
+        if int(ch.get("status") or 0) == CHANNEL_ENABLED:
+            # NEVER prune the active pin — disabling it would strand the model
+            # (zero serving pins until the next cycle promotes a standby).
+            # Log + alert so the owner re-adds the key or rotates manually.
+            LOG.warning("[sync] %s merchant %s has no A6 key but is the ACTIVE pin — "
+                        "leaving it live; add the key back on A6 or promote a standby",
+                        ch_name, merchant)
+            discord_alert(discord, f"cctest sync: {ch_name}'s merchant {merchant} lost its A6 key "
+                                   f"but is the ACTIVE pin for the model — NOT pruned "
+                                   f"(would strand the model). Re-add the key on A6 or rotate manually.")
+            continue
         try:
             gateway.set_status(int(ch["id"]), CHANNEL_MANUALLY_DISABLED)
             gateway.fix_abilities()
@@ -1093,7 +1112,30 @@ def run_action_verify(body):
         # serving genuine output, which is what the quarantine guarded
         # against — either way the quarantine is stale. A failing check
         # never releases anything.
-        release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
+        # One-active guard: if a DIFFERENT pin is already enabled for this
+        # model, releasing (enabling) this one would create a lottery — clear
+        # the quarantine state but keep the channel benched as a standby; the
+        # owner can promote it when they want it serving.
+        try:
+            live = rt["gateway"].list_channels()
+        except Exception:
+            live = channels
+        pool = model_pool_names(model)
+        other_active = next(
+            (c for c in live
+             if (c.get("name") or "") != channel_name
+             and is_pinned_channel(c.get("name") or "")
+             and int(c.get("status") or 0) == CHANNEL_ENABLED
+             and pool & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
+            None,
+        )
+        if other_active is not None:
+            ch_state.update({"quarantined": False, "fails": 0, "permanent": False,
+                             "alerted": False, "model": ""})
+            LOG.info("[action] %s passes re-verify but %s is active — quarantine cleared, kept as standby",
+                     channel_name, other_active.get("name"))
+        else:
+            release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
     elif not checked_direct and verdict in BAD_VERDICTS:
         # Only run the failover policy for gateway-attributed checks; a
         # direct advisory check of a standby must not itself trigger a
@@ -1544,14 +1586,19 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
         if not (is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED):
             continue
         for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
-            if m in active_pins:
+            # Model aliases share ONE pool (gpt-6-1-sol == gpt-6.1-sol): two
+            # enabled pins on the same pool — whatever spelling each serves —
+            # is still a duplicate. Track per canonical pool representative.
+            pool_key = sorted(model_pool_names(m))[0]
+            if pool_key in active_pins and active_pins[pool_key].get("name") != ch.get("name"):
                 extra_actives.append((m, ch))
-            else:
-                active_pins[m] = ch
+            elif pool_key not in active_pins:
+                active_pins[pool_key] = ch
     if extra_actives and enforce:
         for model, extra in extra_actives:
             extra_name = extra.get("name")
-            keeper = active_pins[model].get("name")
+            pool_key = sorted(model_pool_names(model))[0]
+            keeper = active_pins[pool_key].get("name")
             LOG.warning("[dedup] %s has %d active pins — disabling extra %s (keeping %s)",
                         model, len([e for _, e in extra_actives if _ == model]) + 1, extra_name, keeper)
             try:
@@ -1602,7 +1649,7 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 (ch for ch in live
                  if is_pinned_channel(ch.get("name") or "")
                  and int(ch.get("status") or 0) == CHANNEL_ENABLED
-                 and model in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]),
+                 and model_pool_names(model) & {x.strip() for x in (ch.get("models") or "").split(",") if x.strip()}),
                 None,
             )
             if live_active is not None and live_active.get("name") != pin_name:
@@ -2230,6 +2277,7 @@ def release_quarantine(gateway, ch_state, channel_id, name, enforce, discord):
         return
     try:
         gateway.set_status(channel_id, CHANNEL_ENABLED)
+        gateway.fix_abilities()  # rebuild routing so the released pin serves
     except Exception as e:
         LOG.error("[%s] release FAILED (channel stays disabled): %s", name, e)
         return

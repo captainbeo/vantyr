@@ -1175,23 +1175,27 @@ def test_action_verify_unverifiable_phantom_pin():
 
 def test_sync_prunes_phantom_pins():
     # A pin whose merchant has no A6 token is disabled (not deleted) and
-    # recorded; plain-named legacy pins (non-digit suffix) are left alone.
+    # recorded; plain-named legacy pins (non-digit suffix) are left alone;
+    # the ACTIVE pin is never pruned (would strand the model).
     chs = [
         {"id": 60, "name": "a6pin-6-astra-5942", "status": 1, "models": "gpt-6-astra"},   # has token
-        {"id": 61, "name": "a6pin-6-astra-5312", "status": 1, "models": "gpt-6-astra"},   # phantom
+        {"id": 61, "name": "a6pin-6-astra-5312", "status": 3, "models": "gpt-6-astra"},   # phantom standby (auto-disabled, not our quarantine)
         {"id": 62, "name": "a6pin-fable-5", "status": 1, "models": "claude-fable-5"},      # legacy plain name
         {"id": 63, "name": "a6pin-6-astra-2757", "status": 2, "models": "gpt-6-astra"},   # phantom but already off
+        {"id": 64, "name": "a6pin-6-astra-3016", "status": 1, "models": "gpt-6-astra"},   # phantom + ACTIVE
     ]
     gw = SyncGW(chs)
     # A6 account only has merchant 5942.
     a6m = FakeA6M([{"id": 1, "name": "ASTRA 6 | 5942"}], reveals={1: "sk-x"})
     state = {}
     m.sync_a6_keys(gw, a6m, chs, state, None)
-    # 5942 stays enabled; 5312 disabled; legacy a6pin-fable-5 untouched; 2757 untouched
+    # Phantom standby 5312 disabled; 5942 untouched; legacy a6pin-fable-5 untouched;
+    # already-off 2757 untouched; ACTIVE phantom 3016 left live (never stranded).
     assert (61, 2) in gw.writes, gw.writes
     assert (60, 2) not in gw.writes, gw.writes
     assert (62, 2) not in gw.writes, gw.writes
     assert (63, 2) not in gw.writes, gw.writes
+    assert (64, 2) not in gw.writes, gw.writes  # active pin never pruned
     assert state["_sync"]["pruned_phantoms"] == ["a6pin-6-astra-5312"], state["_sync"]
 
 
@@ -1354,6 +1358,25 @@ def test_cycle_dedupes_multiple_active_pins():
         ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
     )
     # The extra pin (1169) is disabled back to standby; the first stays active.
+    assert (21, 2) in gw.writes, gw.writes
+    assert (20, 2) not in gw.writes, gw.writes
+
+
+def test_cycle_dedupes_alias_active_pins():
+    # gpt-6-1-sol and gpt-6.1-sol are the SAME pool — two enabled pins
+    # serving different spellings of the same model are still a duplicate.
+    chs = [
+        {"id": 20, "name": "a6pin-6-1-sol-5950", "status": 1, "models": "gpt-6-1-sol"},
+        {"id": 21, "name": "a6pin-6.1-sol-1416", "status": 1, "models": "gpt-6.1-sol"},
+    ]
+    gw = FakeGW(chs)
+    state = {}
+    m.run_cycle(
+        gw, VerdictCC(),
+        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
+    )
+    # One of them was disabled (the second-seen).
     assert (21, 2) in gw.writes, gw.writes
     assert (20, 2) not in gw.writes, gw.writes
 
