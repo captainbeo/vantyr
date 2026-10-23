@@ -38,7 +38,12 @@ class FakeGW:
         self.model_edits = []
 
     def list_channels(self):
-        return self.channels
+        # Deep-copy per call, matching the real Gateway client (which parses
+        # fresh dicts from each HTTP response). Returning self.channels by
+        # reference would mask snapshot-staleness bugs: a mid-cycle set_status
+        # would be visible to a stale "snapshot" that should not see it.
+        import copy
+        return copy.deepcopy(self.channels)
 
     def model_used_recently(self, cid, model, hours):
         return True
@@ -1086,12 +1091,15 @@ def test_sync_creates_61_sol_pin_with_both_aliases():
 
 
 def test_pin_merchant():
-    # Merchant-suffixed pins yield their merchant; plain-named legacy pins
-    # (trailing digit is part of the model) yield None.
+    # Longest-stem match: merchant-suffixed pins yield their merchant;
+    # plain-named legacy pins (trailing digit is part of the model) → None.
     assert m.pin_merchant("a6pin-fable-5-4665") == "4665"
     assert m.pin_merchant("a6pin-sonnet-5") is None
-    # a6pin-opus-5-5 is genuinely ambiguous (opus-5-5 is itself a stem AND
-    # "5" could be a merchant) — the stem check treats it as a merchant pin.
+    assert m.pin_merchant("a6pin-sonnet-5-5") is None
+    assert m.pin_merchant("a6pin-opus-5-5") is None
+    assert m.pin_merchant("a6pin-fable-5-1") is None
+    assert m.pin_merchant("a6pin-fable-5-1-3825") == "3825"
+    assert m.pin_merchant("a6pin-opus-5-5-3859") == "3859"
     assert m.pin_merchant("a6pin-6-1-sol-5950") == "5950"
     assert m.pin_merchant("mia-failover") is None
 

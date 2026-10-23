@@ -510,14 +510,27 @@ _MODEL_STEMS = {
 
 def pin_merchant(name):
     """Extract the merchant id from a merchant-suffixed pin name, or None for
-    a legacy plain-named pin. 'a6pin-fable-5-4665' → '4665'; 'a6pin-sonnet-5'
-    → None (the trailing 5 is part of the model stem, not a merchant)."""
-    merchant = (name or "").rsplit("-", 1)[-1]
-    if not merchant.isdigit():
+    a legacy plain-named pin.
+
+    Longest-match against the SKU-map stems: 'a6pin-fable-5-4665' → stem
+    'fable-5' + merchant '4665'; 'a6pin-fable-5-1' → stem 'fable-5-1' is
+    itself a model, no merchant → None; 'a6pin-sonnet-5-5-2863' → stem
+    'sonnet-5-5' + merchant '2863'.
+    """
+    if not (name or "").startswith("a6pin-"):
         return None
-    head = name[: -(len(merchant) + 1)]  # strip "-<merchant>"
-    if head in {f"a6pin-{s}" for s in _MODEL_STEMS}:
-        return merchant
+    rest = name[len("a6pin-"):]
+    # Try the longest stem match first so "fable-5-1-3825" resolves to stem
+    # "fable-5-1" + merchant "3825", not stem "fable-5" + merchant "1-3825".
+    for stem in sorted(_MODEL_STEMS, key=len, reverse=True):
+        if rest == stem:
+            return None  # bare stem — plain-named legacy pin, no merchant
+        if rest.startswith(stem + "-"):
+            suffix = rest[len(stem) + 1:]
+            if suffix.isdigit():
+                return suffix
+            # Suffix isn't a bare merchant id — the stem wasn't the right split.
+            # Keep trying shorter stems (e.g. "fable-5-1-x" is not a merchant).
     return None
 
 
@@ -1219,12 +1232,24 @@ def run_action_promote(body):
     chosen = standbys[0]  # manual pick, or health-ranked top
     chosen_name = chosen.get("name")
 
-    base_url, seller_key = "https://vantyr.xyz", rt.get("relay_token", "")
+    base_url, seller_key = "https://vantyr.xyz", ""
     if active is not None:
         entry = find_seller_entry(rt["sellers"], channels, active_name)
         if entry is None:
             return 400, {"error": f"channel {active_name!r} is not in SELLER_CHANNELS"}
         base_url, seller_key = entry
+    else:
+        # No active pin: the post-promotion verification rides the gateway
+        # with the standby's own seller entry (the "a6pin" prefix entry is
+        # the relay key). Resolve or fail closed — an empty key would make
+        # the verification check fail auth.
+        entry = find_seller_entry(rt["sellers"], channels, chosen_name)
+        if entry is not None:
+            base_url, seller_key = entry
+        else:
+            return 400, {"error": f"channel {chosen_name!r} is not in SELLER_CHANNELS"}
+
+    if active is not None:
         # Quarantine the active pin first — promote_next_standby refuses to
         # act while any pin for the model is enabled (idempotence guard), and
         # the rotate intent is exactly "stop serving from this merchant now".
@@ -2176,10 +2201,18 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
             # promote the next standby (enable-first, then verify). Without
             # this the model is left with no active pin until the next
             # cycle's quarantined-re-test branch notices.
+            # CRITICAL: re-list channels post-quarantine — the snapshot is
+            # cycle-start state where the pin we just disabled still shows
+            # enabled, so promote_next_standby's idempotence guard would see
+            # "already has an active pin" and refuse. (2026-10-23 audit.)
             if is_pinned_channel(name):
+                try:
+                    fresh = gateway.list_channels()
+                except Exception:
+                    fresh = channels_snapshot
                 promote_next_standby(
                     gateway, cctest, ch, base_url, seller_key, model,
-                    enforce, discord, state, channels_snapshot,
+                    enforce, discord, state, fresh,
                     seller_registry,
                 )
         else:
