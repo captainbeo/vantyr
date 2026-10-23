@@ -4161,3 +4161,104 @@ token-unit, sort, and view-mode controls; no Standard/Recharge; zero
 console errors. Pre-existing pricing failures (model-cards,
 dynamic-price, task-price-display) are unchanged, stash-verified on the
 pre-change tree. Commit 7d5954f68.
+
+## 2026-10-22/23 — SSE heartbeat + latency/reliability auto-rotation (cctest monitor)
+
+User-reported "stream disconnected before completion: error decoding
+response body" (Codex CLI client-side string). Root-caused from logs:
+
+- ALL stream errors are `end_reason=client_gone/context canceled` — zero
+  server/upstream cuts. The client hangs up during the pre-first-token
+  silence of slow merchants.
+- ch52 (a6pin-6-1-sol-4820) was the sole disconnect source: 48% gone /
+  13.9s FRT vs healthy fleet 0-2% gone. ch40 (fable-5-1-3825) showed the
+  hang signature: 11 rows frt=-1000 (no first token ever) + 60s deaths.
+  Same model via other channels: clean. Conclusion: MERCHANT problem, not
+  backend.
+
+Fixes:
+1. `general_setting.ping_interval_enabled=true, 15s` (options table,
+   live via 60s sync). General fix: all streaming paths incl.
+   pre-first-token window (pinger starts before relayClient.Do). Only
+   Gemini excluded (adaptor sets DisablePing). Small streams improved
+   (sol small 3%→0% gone); comment-pings do NOT reset Codex/Claude CLI
+   liveness timers, so long-generation disconnects persist — the real
+   cure is merchant rotation, not keep-alive.
+2. Owner manually rotated sol→5950 and fable→5630 (both one active pin
+   now; sol double-pin from verify-releases-from-quarantine side effect
+   self-healed via [dedup] at 21:07). NOTE the UX gap: "Verify this
+   merchant" on a standby ENABLES it (release path sets status=1).
+   Promote-only UI is by design; verify-enables is a bug to fix.
+3. Latency/reliability auto-rotation deployed in cctest-monitor
+   (staged, flag OFF): pin_is_sick now also scores recent consume logs
+   — client_gone ratio ≥0.20, mean FRT ≥10s, hangs (frt=-1000) ≥3, min
+   20 samples (thresholds from live fleet distribution 2026-10-22;
+   owner-approved). Reuses the existing sick-rotation quarantine→promote
+   path. Fail-open on thin/missing evidence. Gate: compose env
+   CCTEST_LATENCY_ROTATION_ENABLED (+ _MIN_SAMPLES/_FRT_MS_THRESHOLD/
+   _CLIENT_GONE_RATIO/_HANG_THRESHOLD) added with off defaults; arm with
+   `.env` + `compose up -d cctest-monitor --no-deps` (recreate, NOT
+   restart — env re-read requires recreate). monitor.py.bak-pre-latency
+   + compose.yaml.bak-latency-* backups on VPS; 54/54 tests pass locally
+   incl. new test_pin_latency_sick. Watch `[latency]` log lines for a
+   few cycles before arming.
+
+Update 2026-10-22 22:50 UTC — latency monitor fixed + sol market health:
+- pin_latency_sick now scores only STREAMING rows (non-stream /v1/messages
+  log frt=-1000 with no stream_status on every success — without the filter
+  ch25 showed 40 false "hangs"). Test fixture updated (54/54 pass); the
+  ch25 false-positive case is now a regression test. monitor.py.bak-
+  pre-hangfix-20261023-* backup on VPS.
+- Probe (read-only) against live pool: ch34/5950 reads SICK on 1h+6h
+  (42%/39% gone, 14.6s FRT) — BUT that is the tail of OLD pre-rotation
+  traffic; A6 market shows 5950 recent_p50 = 2543ms (best in pool) and
+  100% success. Old pin 4820 = slowest (recent_p50 15964ms) AND 3.7x
+  price (57600 vs ~15000). Sol pool has healthy fast standbys: 3016
+  (recent_p50 3046), 5132, 5312. Market success rates are all 100% — the
+  client_gone problem is real-traffic latency, not merchant death.
+- Decision: NO rotation needed now — 5950 is currently the best performer.
+  LATENCY_ROTATION_ENABLED stays OFF; thresholds may need the hang-signal
+  window tuning (ch76 trips at exactly 3 hangs / 10.2s on 6h window but is
+  fine on 1h — flap risk). Watch before arming.
+- Open bug: "Verify this merchant" on a standby pin ENABLES it (release
+  path sets status=1) — caused sol double-pin 20:14→21:07 until [dedup]
+  healed it. Verify should be read-only.
+
+## 2026-10-23 — Quarantine release fixes + multi-active dedup (LIVE)
+
+Owner: "merchants verified green but still quarantined — why?" (e.g.
+a6pin-opus-5-5-3859 had 3x attr_match but stayed quarantined).
+
+Root causes (three separate bugs, all fixed):
+1. **Phantom-pin verdicts were borrowed.** A pin with no A6 token (merchant
+   gone from the account) can't be direct-checked; the verify fell back to a
+   gateway-routed check that tested the ACTIVE pin and reported its green
+   verdict as the phantom's. Release (direct-only) never fired. Fixed:
+   verify returns honest 409 "unverifiable" for merchant-suffixed pins with
+   no A6 key. (Yesterday's deploy.)
+2. **Plain-named legacy pins could never release.** a6pin-sonnet-5 (no
+   merchant suffix — the "5" is part of the model) can never be
+   direct-checked, and the release gate required a direct check. Fixed:
+   ANY passing verify now releases quarantine (gateway-routed pass proves
+   the model pool serves genuine output, which is what quarantine guards).
+3. **Stem ambiguity.** pin_merchant() now uses the SKU-map stems to tell
+   a6pin-fable-5-4665 (merchant 4665) from a6pin-sonnet-5 (legacy plain —
+   "5" is model, not merchant). The phantom guard and the reconcile both
+   use it. Note: a6pin-opus-5-5 is genuinely ambiguous (opus-5-5 is itself
+   a stem) and resolves as merchant "5" — acceptable since it has no A6
+   key either way.
+
+Also: sonnet-5 went dark overnight — the cycle promoted merchant 1204 (the
+only non-quarantined standby) but 1204 is dead on A6's side (503 direct).
+The promote path checks authenticity (attr_match), not availability.
+Manually promoted a6pin-sonnet-5-3825 (attr_match, 100% A6 success) —
+sonnet-5 relaying 200 again. The legacy a6pin-sonnet-5 pin then verified
+attr_match via the gateway path and its quarantine released correctly.
+
+Cycle dedup (previous deploy, confirmed live): the first cycle after
+restart disabled the manually-enabled extra pins (fable-5 5630+4756,
+sonnet-5-5 5881, fable-5-1 5630), keeping one active per model.
+
+Deploys: deploy/2026-10-23-release-any-pass + deploy/2026-10-23-stem-aware-release,
+monitor rebuilt + recreated both times. 55/55 tests. Monitor-only — no
+gateway rebuild.
