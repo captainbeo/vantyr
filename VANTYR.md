@@ -4523,5 +4523,24 @@ frontend / privacy-compliance) — findings addressed: ClickHouse
 JSONExtractUInt fix, PAT scope rule, MySQL JSON_UNQUOTE, Postgres
 numeric guard, display clamp, admin no-call test assertion.
 
-**Not yet deployed** — awaiting owner approval per the live-deployment
-gate.
+**Deployed LIVE 2026-10-23** (owner-approved): tag
+deploy/2026-10-23-cache-hit-stat at commit aa7fb26a7 (feature 0ab774460 +
+build fix aa7fb26a7), source archive sha256 43c5ce64…, gateway
+pinned-next49 (f9e71c38fbe8) built on-server and recreated. Live
+verification: /api/log/self/cache-stat 401 unauthenticated, 200 with
+scoped usage:read PAT returning exact real sums (user 94 7d: 94,781,444
+cache / 41,420,226 prompt — matched direct SQL ground truth); binary grep
+confirms Cache hit ×2, cache-stat ×3, query key ×1 in the embedded
+bundle; gateway healthy 2h+; public / 200. Throwaway verification PATs
+and relay token deleted after testing (0 remain). Rollback: repoint
+compose.yaml to vantyr/new-api:pinned-next48 (7df36b9039b4),
+`docker compose up -d --no-deps gateway`.
+
+Deploy incident worth recording: the first pinned-next49 build stalled
+indefinitely — `bun run prerender` printed "11/11 locales" then hung (the
+dynamically imported module leaves an event-loop handle open). Killed
+after 17 min, fixed with an explicit `process.exit(0)` in
+web/scripts/prerender/run.mjs (commit aa7fb26a7), rebuilt clean: cached
+rsbuild layer made the retry fast (~7 min). Anyone rebuilding from the
+2026-10-22 or earlier tags will still hit the prerender hang on a cold
+build.
