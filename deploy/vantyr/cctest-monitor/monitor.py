@@ -543,12 +543,30 @@ class A6Market:
 
     def health_for(self, model, our_merchant_ids):
         """{merchant_id: {healthy, success_rate, sample_count, available,
-        price_micros, supplier}} restricted to our pins. A merchant not on
-        the listing (not currently eligible for the model) is unhealthy.
-        Merchant ids arrive as strings (channel-name suffixes) but the
-        listing's channel_id is an int — compare as strings."""
+        price_micros, supplier}} for every merchant we asked about.
+        A merchant NOT on the listing (delisted — cannot be ordered, will
+        503) is returned as explicitly unhealthy: healthy=False, available=
+        False, unlisted=True. Previously such merchants were simply omitted,
+        and callers treated a missing entry as "unknown" instead of dead —
+        the 2026-10-23 sonnet-5 outage (auto-promote picked delisted
+        merchant 1204). Merchant ids arrive as strings (channel-name
+        suffixes) but the listing's channel_id is an int — compare as
+        strings."""
         our = {str(x) for x in our_merchant_ids}
-        out = {}
+        # Seed every requested merchant as unlisted/unhealthy; listed ones
+        # overwrite with their live telemetry.
+        out = {
+            cid: {
+                "healthy": False,
+                "success_rate": None,
+                "sample_count": 0,
+                "available": False,
+                "unlisted": True,
+                "price_micros": None,
+                "supplier": None,
+            }
+            for cid in our
+        }
         for item in self.search(model):
             cid = str(item.get("channel_id"))
             if cid in our:
@@ -567,6 +585,7 @@ class A6Market:
                     "success_rate": success,
                     "sample_count": samples,
                     "available": avail == 1,
+                    "unlisted": False,
                     "price_micros": item.get("input_price_micros"),
                     "supplier": item.get("supplier_name"),
                 }
@@ -1758,6 +1777,36 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     else:
         if not candidates:
             return
+        # Prefer A6-healthy candidates (2026-10-23 sonnet-5 outage: the
+        # first fresh standby was merchant 1204, delisted from the A6
+        # marketplace and dead — 503s for the whole model). A marketplace
+        # check is one cheap public GET; a delisted/unhealthy merchant
+        # sorts last and an unavailable one is skipped when any healthy
+        # candidate exists. Health data unavailable (A6 fetch failed) →
+        # fall back to first-fresh (fail-open, never worse than before).
+        try:
+            market = A6Market()
+            candidates_health = market.health_for(
+                model,
+                {c.get("name", "").rsplit("-", 1)[-1] for c in candidates},
+            )
+            def _rank(ch):
+                h = candidates_health.get((ch.get("name") or "").rsplit("-", 1)[-1]) or {}
+                if h.get("unlisted"):
+                    return (0, 0, 0)  # delisted — dead last
+                return (
+                    1 if h.get("healthy") else 0,
+                    h.get("success_rate") or 0,
+                    -(h.get("price_micros") or 10**9),
+                )
+            candidates = sorted(candidates, key=_rank, reverse=True)
+            top = candidates[0]
+            if (candidates_health.get((top.get("name") or "").rsplit("-", 1)[-1]) or {}).get("unlisted"):
+                LOG.warning("[pin] only delisted standby candidates for %s — "
+                            "promoting %s anyway (fail-open)", model, top.get("name"))
+        except Exception as e:
+            LOG.warning("[pin] A6 marketplace health unavailable for %s (%s); "
+                        "first-fresh fallback", model, e)
         standby = candidates[0]
     standby_name = standby["name"]
     if not enforce:

@@ -1246,6 +1246,42 @@ def test_pin_is_sick():
     assert m.pin_is_sick(SickGW([], {9: 1}, {}), 9, 60) is None
 
 
+def test_promote_skips_delisted_merchant():
+    # 2026-10-23 sonnet-5 outage: the cycle promoted merchant 1204, which was
+    # delisted from the A6 marketplace (503 dead). promote_next_standby must
+    # rank a delisted candidate last and promote the healthy one instead.
+    chs = [
+        {"id": 20, "name": "a6pin-fable-5", "status": 2, "models": "claude-fable-5"},
+        {"id": 21, "name": "a6pin-fable-5-1169", "status": 2, "models": "claude-fable-5"},  # delisted
+        {"id": 22, "name": "a6pin-fable-5-3825", "status": 2, "models": "claude-fable-5"},  # healthy
+    ]
+    gw = FakeGW(chs)
+    state = {}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    # 1169 is unlisted (delisted from the marketplace), 3825 is healthy.
+    m.A6Market.health_for = lambda self, model, ids: {
+        "1169": {"healthy": False, "success_rate": None, "available": False, "unlisted": True, "price_micros": None, "sample_count": 0, "supplier": None},
+        "3825": {"healthy": True, "success_rate": 10000, "available": True, "unlisted": False, "price_micros": 1, "sample_count": 100, "supplier": "x"},
+    }
+    m.promote_next_standby(gw, PassCC(), chs[0], "https://api.a6api.com", "sk",
+                           "claude-fable-5", True, None, state, chs, {})
+    # The healthy 3825 was promoted (enabled), not the delisted 1169.
+    assert (22, 1) in gw.writes, gw.writes
+    assert (21, 1) not in gw.writes, gw.writes
+    # restore a neutral stub so later tests (e.g. sick rotation expects 1169)
+    # are not affected by this test's delisted-1169 mock
+    m.A6Market.health_for = lambda self, model, ids: {}
+
+
 def test_sick_pin_rotation_in_cycle():
     # An active pin with errors-only traffic is quarantined and a standby
     # promoted within the cycle (same path as a confirmed fake).
