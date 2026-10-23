@@ -4262,3 +4262,27 @@ sonnet-5-5 5881, fable-5-1 5630), keeping one active per model.
 Deploys: deploy/2026-10-23-release-any-pass + deploy/2026-10-23-stem-aware-release,
 monitor rebuilt + recreated both times. 55/55 tests. Monitor-only — no
 gateway rebuild.
+
+## 2026-10-23 — A6 marketplace health gates auto-promote (LIVE)
+
+Owner: "go ahead" on gating auto-promote with A6 health after the
+sonnet-5/1204 outage.
+
+What changed:
+- A6Market.health_for now returns an entry for EVERY asked-about merchant;
+  one absent from the marketplace listing is explicitly
+  healthy=False / available=False / unlisted=True (previously omitted →
+  callers treated "missing" as "unknown" instead of "dead").
+- promote_next_standby's automatic path ranks candidates by A6 health:
+  healthy first, then success rate, then cheapest; unlisted merchants rank
+  dead-last and a delisted-only pool logs a loud warning (fail-open, still
+  promotes rather than strand the model). Marketplace fetch failure →
+  first-fresh fallback (never worse than before). Manual picks are
+  unchanged (operator override).
+
+Regression test: a delisted candidate is skipped for a healthy one in
+promote_next_standby. 56/56 dry-run tests.
+
+Deploy: deploy/2026-10-23-health-gated-promote, monitor rebuilt
+(fa4d627b4ef5) + recreated; first cycle clean; all 9 models serving 200
+with exactly 1 active pin each.
