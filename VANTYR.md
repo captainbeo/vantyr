@@ -4536,6 +4536,28 @@ and relay token deleted after testing (0 remain). Rollback: repoint
 compose.yaml to vantyr/new-api:pinned-next48 (7df36b9039b4),
 `docker compose up -d --no-deps gateway`.
 
+**2026-10-24 post-deploy audit + translations (LIVE):** independent
+3-agent live audit (backend / frontend / privacy) — all clean, no
+BLOCKER/HIGH. Backend: endpoint math bit-exact vs direct SQL for the top
+cache users; 67–104ms worst-case queries; real users already hitting it
+(5–25 ms 200s in gateway logs). Frontend: deployed binary chunk
+byte-extracted and confirmed to be the audited clamped build; response
+contract (single unwrap) verified. Privacy: no cross-user or merchant
+leakage, generic error bodies, rollback chain intact, all 8 containers
+healthy. Follow-ups noted (not blocking): composite index
+(user_id, type, created_at) on logs would cut the busiest user's 30d
+aggregate from ~460 ms to <20 ms; GIN logger writes /api/log/* query
+strings (token_name/group) to gateway logs — extend SetUpLogger
+redaction; overflowing timestamp params silently mean all-time (matches
+sibling behavior).
+
+Translations for the chip label landed and redeployed the same image tag
+(pinned-next49 rebuilt from bd6eb08fc, ~2 min cached build): 缓存命中 /
+緩存命中 / キャッシュヒット / Accès au cache / Cache-Treffer /
+Попадание в кэш / Trúng cache / Acierto de caché / Cache-hit / Önbellek
+isabeti / إصابة الذاكرة المؤقتة — all verified present in the live binary,
+endpoint + site health re-checked after recreate.
+
 Deploy incident worth recording: the first pinned-next49 build stalled
 indefinitely — `bun run prerender` printed "11/11 locales" then hung (the
 dynamically imported module leaves an event-loop handle open). Killed
