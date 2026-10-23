@@ -4286,3 +4286,32 @@ promote_next_standby. 56/56 dry-run tests.
 Deploy: deploy/2026-10-23-health-gated-promote, monitor rebuilt
 (fa4d627b4ef5) + recreated; first cycle clean; all 9 models serving 200
 with exactly 1 active pin each.
+
+## 2026-10-23 — Audit round: 4 confirmed bugs fixed (LIVE)
+
+Owner asked for a full audit of the cctest monitor after the day's rapid
+changes. Confirmed + fixed:
+
+1. **Dedup not alias-aware** — two pins serving gpt-6-1-sol and gpt-6.1-sol
+   (the same pool) were not flagged as duplicates because the dedup tracked
+   by exact model name. Now uses model_pool_names canonical keys. Caught
+   before it fired on live data.
+2. **release_quarantine never rebuilt routing** — set_status(1) without
+   fix_abilities meant a released pin showed enabled in the DB but served
+   no traffic until the next unrelated routing rebuild. Now fix_abilities
+   runs inline.
+3. **Sync prune could strand a model** — if the owner deleted an A6 key
+   whose merchant was the ACTIVE pin, the 5-min sync would disable it and
+   leave zero serving pins. The active pin is now never pruned (Discord
+   alert instead).
+4. **save_state race** — the cycle thread, sync thread, and HTTP action
+   handlers could interleave json.dump into the same .tmp file, producing
+   a truncated/corrupt state.json. Now serialized with a threading.Lock.
+
+Also shipped: release respects the one-active-per-model rule — a passing
+verify on a quarantined pin whose model already has an active pin clears
+the quarantine but keeps the pin benched as a standby (no surprise
+lottery).
+
+Deploy: deploy/2026-10-23-audit-round, monitor rebuilt + recreated.
+57/57 tests. All 9 models serving 200 post-deploy.
