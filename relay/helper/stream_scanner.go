@@ -122,7 +122,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	// streams, a real `event: ping` frame — not the comment — because clients
 	// reset their liveness timers on events, not comments. Gated by the
 	// ping_event_mode setting (off by default; comment behavior unchanged).
-	pingEventMode := generalSettings.PingEventMode && info.RelayFormat == types.RelayFormatClaude
+	// Claude/Anthropic streams get `event: ping`; OpenAI-Responses streams get
+	// the protocol-native `response.in_progress`. Both are real events, which
+	// is what client liveness timers actually count.
+	pingEventMode := generalSettings.PingEventMode &&
+		(info.RelayFormat == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatOpenAIResponses)
 
 	if pingEnabled {
 		pingTicker = time.NewTicker(pingInterval)
@@ -186,9 +190,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 						writeMutex.Lock()
 						defer writeMutex.Unlock()
 						ExtendWriteDeadline(c)
-						if pingEventMode {
+						switch {
+						case info.RelayFormat == types.RelayFormatOpenAIResponses && pingEventMode:
+							err = PingResponsesEventData(c)
+						case pingEventMode:
 							err = PingEventData(c)
-						} else {
+						default:
 							err = PingData(c)
 						}
 					}()

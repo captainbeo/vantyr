@@ -133,6 +133,33 @@ func PingData(c *gin.Context) error {
 // silent first-token window with 15s ping events, died at 60.1s without).
 // Used only for Anthropic /v1/messages-format streams where `ping` is part
 // of the wire protocol.
+// PingResponsesEventData is the OpenAI-Responses equivalent of PingEventData.
+// `ping` is an Anthropic-only event type, so Responses streams get the
+// protocol-native equivalent: a synthetic `response.in_progress` frame.
+//
+// SAFETY (verified 2026-10-24): this frame is written directly to the client
+// under the ping mutex and never passes through the relay's dataHandler, so
+// ResponsesUsageAccumulator.Observe never sees it. Even if it did,
+// Observe only acts on terminal events, delta kinds and output_item.done —
+// `response.in_progress` matches none, and ObserveResponsesOutcome has no
+// case for it either, so it is inert in both. The payload carries only a
+// type (no `response` object), which also means it cannot set started or
+// mutate stream status.
+func PingResponsesEventData(c *gin.Context) error {
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
+
+	if requestContextDone(c) {
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+
+	if _, err := c.Writer.Write([]byte("event: response.in_progress\ndata: {\"type\":\"response.in_progress\"}\n\n")); err != nil {
+		return fmt.Errorf("write responses ping event data failed: %w", err)
+	}
+	return FlushWriter(c)
+}
+
 func PingEventData(c *gin.Context) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")

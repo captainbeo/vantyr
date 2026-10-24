@@ -22,6 +22,8 @@ func TestPingEventDataWritesRealEventFrame(t *testing.T) {
 	}{
 		{"comment ping stays a comment", PingData, ": PING", "event: ping"},
 		{"event ping is a real frame", PingEventData, "event: ping", ": PING"},
+		{"responses ping is a real in_progress event", PingResponsesEventData,
+			"event: response.in_progress", ": PING"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()

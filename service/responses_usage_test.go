@@ -339,3 +339,47 @@ func TestResponsesUsageAccumulatorMissingUsageEstimation(t *testing.T) {
 		})
 	}
 }
+
+// TestResponsesPingEventIsInertInAccumulator guards the SSE keep-alive
+// (Vantyr fork 2026-10-24): PingResponsesEventData emits a synthetic
+// `response.in_progress` frame directly to the client, bypassing the relay
+// dataHandler entirely. This test proves that even if such an event WERE fed
+// into the accumulator, it is completely inert — it must not mark the stream
+// started, must not settle usage, must not touch images/tools, and must not
+// change the accumulated usage of the surrounding real stream.
+func TestResponsesPingEventIsInertInAccumulator(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-6.1-sol",
+		StreamStatus:    relaycommon.NewStreamStatus(),
+	}
+	accumulator := NewResponsesUsageAccumulator(info)
+
+	// The synthetic frame exactly as PingResponsesEventData writes it: type
+	// only, no `response` object.
+	ping := &dto.ResponsesStreamResponse{Type: "response.in_progress"}
+	for i := 0; i < 100; i++ { // many pings, as a slow stream would send
+		accumulator.Observe(ping)
+	}
+
+	// A real stream flows around/after the pings.
+	accumulator.Observe(&dto.ResponsesStreamResponse{
+		Type:  "response.output_text.delta",
+		Delta: "hello",
+	})
+	upstream := &dto.Usage{InputTokens: 30, OutputTokens: 7, TotalTokens: 37}
+	upstream.BillingUsage = dto.NewOpenAIResponsesBillingUsage(upstream)
+	accumulator.Observe(&dto.ResponsesStreamResponse{
+		Type:     "response.completed",
+		Response: &dto.OpenAIResponsesResponse{Usage: upstream},
+	})
+
+	usage := accumulator.Finish()
+	assert.Equal(t, 30, usage.PromptTokens, "pings must not inflate prompt tokens")
+	assert.Equal(t, 7, usage.CompletionTokens, "pings must not inflate completion tokens")
+	assert.Equal(t, 37, usage.TotalTokens, "pings must not inflate total tokens")
+
+	// Stream status must stay out of any terminal/error state because of pings.
+	status := info.StreamStatus
+	require.NotNil(t, status)
+	assert.False(t, status.ResponseFailed(), "a ping must never mark the stream failed")
+}

@@ -432,7 +432,7 @@ func toWebSocketURL(raw string) string {
 	}
 }
 
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, eventMode bool) (context.CancelFunc, <-chan struct{}) {
+func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, eventMode bool, isResponses bool) (context.CancelFunc, <-chan struct{}) {
 	pingerCtx, stopPinger := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -469,7 +469,7 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, eventMode bo
 			select {
 			// 发送 ping 数据
 			case <-ticker.C:
-				if err := sendPingData(c, &pingMutex, eventMode); err != nil {
+				if err := sendPingData(c, &pingMutex, eventMode, isResponses); err != nil {
 					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
 					return
 				}
@@ -490,7 +490,7 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, eventMode bo
 	return stopPinger, done
 }
 
-func sendPingData(c *gin.Context, mutex *sync.Mutex, eventMode bool) error {
+func sendPingData(c *gin.Context, mutex *sync.Mutex, eventMode bool, isResponses bool) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -498,9 +498,12 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex, eventMode bool) error {
 	// doRequest's defer waits for the pinger to exit before returning.
 	helper.ExtendWriteDeadline(c)
 	var err error
-	if eventMode {
+	switch {
+	case eventMode && isResponses:
+		err = helper.PingResponsesEventData(c)
+	case eventMode:
 		err = helper.PingEventData(c)
-	} else {
+	default:
 		err = helper.PingData(c)
 	}
 	if err != nil {
@@ -552,11 +555,14 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		generalSettings := operation_setting.GetGeneralSetting()
 		if generalSettings.PingIntervalEnabled && !info.DisablePing {
 			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			// Real-event keep-alive for Anthropic streams (Vantyr fork,
-			// 2026-10-23): see helper.PingEventData. This is the PRE-first-token
-			// pinger — exactly the window where slow merchants starve clients.
-			eventMode := generalSettings.PingEventMode && info.RelayFormat == types.RelayFormatClaude
-			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval, eventMode)
+			// Real-event keep-alive (Vantyr fork, 2026-10-23/24): see
+			// helper.PingEventData (Claude) and PingResponsesEventData
+			// (OpenAI Responses). This is the PRE-first-token pinger — exactly
+			// the window where slow merchants starve clients.
+			isResponses := info.RelayFormat == types.RelayFormatOpenAIResponses
+			eventMode := generalSettings.PingEventMode &&
+				(info.RelayFormat == types.RelayFormatClaude || isResponses)
+			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval, eventMode, isResponses)
 			// 使用defer确保在任何情况下都能停止ping goroutine
 			defer func() {
 				if stopPinger != nil {
