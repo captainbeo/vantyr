@@ -4566,3 +4566,45 @@ web/scripts/prerender/run.mjs (commit aa7fb26a7), rebuilt clean: cached
 rsbuild layer made the retry fast (~7 min). Anyone rebuilding from the
 2026-10-22 or earlier tags will still hit the prerender hang on a cold
 build.
+
+## 2026-10-24 — verify-no-pin + 502 signal + latency rotation v2 (repo-built, not yet deployed)
+
+Built on the repo's canonical deploy/vantyr/cctest-monitor/monitor.py (the
+parallel sessions' newer baseline; my 2026-10-22 VPS edits were overwritten
+by that evolution — env vars survived, code did not; rebuilt on top).
+
+1. VERIFY NO LONGER PINS (owner spec 2026-10-24): release_quarantine()
+   clears quarantine state ONLY — never sets status=ENABLED. Verify =
+   trueness check + quarantine lift; pinning happens exclusively via
+   "Use this merchant" (promote). Root cause of the 2026-10-22 sol
+   double-pin. Three call sites' release-then-re-bench workarounds removed
+   (dead code by design).
+2. DEGRADED-MERCHANT SIGNAL in pin_is_sick → pin_latency_sick: four axes —
+   client_gone ratio ≥20% (streaming rows only, counted ONCE per row),
+   mean FRT ≥10s (honest mean — hangs excluded), hangs (stream frt=-1000)
+   ≥3, hard-error ratio ≥5% (type=5 rows whose content starts
+   status_code=5xx only — benign 429/aborts excluded via recent_error_logs).
+   Fail-open (None) on query failure or thin evidence on both axes.
+3. WIRING: latency_cfg threaded main()→run_cycle→_run_sick_rotation→
+   pin_is_sick; defensive env parsing (malformed value → default + error
+   log, ratios clamped to (0,1] — no crash-loop, no fleet-arm typo);
+   startup banner + /api/cctest/status expose latency_rotation posture;
+   compose.yaml maps CCTEST_LATENCY_* passthrough (arm via .env +
+   recreate); .env.example documents. Discord alert for latency rotations
+   says "degraded (slow/abandoned/hard errors)" not "no successes".
+
+3-agent independent audit: scoring auditor found 2 real bugs (double-count
+gone+hang; error ratio counting benign 429s — recent_error_logs was dead
+code) — both fixed + regression-tested. Wiring auditor found 4 real issues
+(unclamped ratio parse, missing compose passthrough, mislabeled alert, no
+arm-status visibility) — all fixed. State-machine auditor re-running
+(first attempt died on a gateway 524).
+
+Tests: 65 pass / 4 fail — the 4 are PRE-EXISTING (fail on the pre-change
+baseline; stale assertions about standby promotion order vs the market-
+health ranking from commit d316af280; not rewritten — owner flagged).
+
+NOT DEPLOYED. Deploy = commit + push monitor.py/compose/.env.example to
+the VPS cctest-monitor dir + docker compose up -d cctest-monitor --no-deps
+--build. LATENCY_ROTATION_ENABLED default false — arm after watching
+[latency] lines.

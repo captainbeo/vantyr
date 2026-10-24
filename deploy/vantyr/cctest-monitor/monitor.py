@@ -341,6 +341,38 @@ class Gateway:
             return None
         return (payload.get("data") or {}).get("total") or 0
 
+    def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+        """Recent type=2 (consume) log ROWS for one channel, newest first —
+        the data latency/reliability scoring needs (`other` JSON carries
+        `frt` and `stream_status.end_reason`; `use_time` is seconds).
+        Returns a list of row dicts, or None on query failure (callers must
+        treat None as 'no evidence', never as healthy or sick)."""
+        since = int(time.time()) - int(window_minutes) * 60
+        query = urllib.parse.urlencode({
+            "p": 1, "page_size": int(limit), "type": 2,
+            "channel": channel_id, "start_timestamp": since,
+        })
+        payload, status = self._request("GET", f"/api/log/?{query}")
+        if status != 200 or not payload.get("success"):
+            return None
+        items = (payload.get("data") or {}).get("items")
+        return items if isinstance(items, list) else []
+
+    def recent_error_logs(self, channel_id, window_minutes, limit=50):
+        """Recent type=5 (error) log rows for one channel, newest first —
+        `content` carries the status code (e.g. "status_code=502, ...").
+        Returns a list of row dicts, or None on query failure."""
+        since = int(time.time()) - int(window_minutes) * 60
+        query = urllib.parse.urlencode({
+            "p": 1, "page_size": int(limit), "type": 5,
+            "channel": channel_id, "start_timestamp": since,
+        })
+        payload, status = self._request("GET", f"/api/log/?{query}")
+        if status != 200 or not payload.get("success"):
+            return None
+        items = (payload.get("data") or {}).get("items")
+        return items if isinstance(items, list) else []
+
     def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
         """Traffic gate: did anyone other than the monitor's own token use
         this model on this channel recently? Without the exclusion the
@@ -953,20 +985,141 @@ def _prune_phantom_pins(gateway, channels, a6_merchants, discord):
     return pruned
 
 
-def pin_is_sick(gateway, channel_id, window_minutes):
+def _parse_other(row):
+    """`other` is a JSON string column; tolerate missing/invalid."""
+    try:
+        o = json.loads(row.get("other") or "{}")
+        return o if isinstance(o, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg):
+    """Latency/reliability/degraded-merchant sickness (owner ask 2026-10-22,
+    re-applied 2026-10-24): an active pin that serves the REAL model but too
+    slowly, too often abandoned, or erroring at a high rate still bleeds
+    users — the authenticity check (attr_match) and the error-vs-success
+    type check above are BOTH blind to it (a client_gone stream still bills
+    quota and reads as success; a merchant 502ing 5% of the time between
+    successes never trips "all failures").
+
+    Signals, scored over the channel's recent logs:
+      - client_gone ratio over STREAMING consume rows (non-stream rows log
+        frt=-1000 with no stream_status on every success — the ch25 false
+        positive, 2026-10-22). The ch52 case: 46%.
+      - mean frt (ms) over streaming rows; frt == -1000 on a STREAM row is
+        a hang (no first token ever — the ch40 case, 11 hangs at 8% gone).
+      - hard-error ratio: type=5 rows vs type=2 rows in the window. The
+        ch74 opus-5 case: 25 x 502 "smart-routing candidates all failed"
+        interleaved with 465 successes — invisible to both older checks.
+
+    Returns True (sick), False (healthy), or None (insufficient evidence /
+    query failed — NEVER rotate on missing or thin evidence)."""
+    min_samples = latency_cfg["min_samples"]
+    frt_ms_threshold = latency_cfg["frt_ms_threshold"]
+    client_gone_ratio = latency_cfg["client_gone_ratio"]
+    hang_threshold = latency_cfg["hang_threshold"]
+    error_ratio_threshold = latency_cfg["error_ratio_threshold"]
+    # Hard-error signal: a merchant that interleaves 5xx with successes.
+    # Only rows whose content starts with a 5xx status code count —
+    # type=5 also contains benign client aborts and upstream 429s that New
+    # API already retried elsewhere (recent_error_logs parses the status
+    # code from `content`; "status_code=502, ..." is the merchant-side
+    # failure that matters, the ch74 opus-5 case).
+    error_rows = gateway.recent_error_logs(channel_id, window_minutes, limit=100)
+    successes = gateway.count_logs(2, channel_id, window_minutes)
+    if error_rows is None or successes is None:
+        return None
+    hard_errors = sum(
+        1 for r in error_rows
+        if str(r.get("content") or "").lstrip().startswith("status_code=5")
+    )
+    total_errors = gateway.count_logs(5, channel_id, window_minutes)
+    if total_errors is None:
+        return None
+    total = hard_errors + successes
+    error_ratio = (hard_errors / total) if total > 0 else 0.0
+    # Latency/abandonment signal over streaming consume rows.
+    rows = gateway.recent_consume_logs(channel_id, window_minutes)
+    if rows is None:
+        return None
+    stream_rows = [r for r in rows if isinstance(_parse_other(r).get("stream_status"), dict)]
+    gone = 0
+    hangs = 0
+    frts = []
+    for row in stream_rows:
+        other = _parse_other(row)
+        ss = other["stream_status"]
+        # client_gone counts ONCE per row (the frt==-1000 branch below used
+        # to double-increment it, making the "ratio" exceed 100%). Hangs are
+        # a SEPARATE axis with their own counter and threshold — the ch40
+        # profile was 11 hangs at 8% gone.
+        is_gone = ss.get("end_reason") == "client_gone"
+        try:
+            frt = int(other.get("frt"))
+        except (TypeError, ValueError):
+            frt = None
+        if is_gone:
+            gone += 1
+        if frt is not None and frt >= 0:
+            frts.append(frt)
+        elif frt == -1000:
+            # Streaming row that never produced a first token = hang.
+            # Counted in `hangs` only — NOT in `gone` (separate axis) and
+            # NOT in `frts` (the mean must stay an honest mean of observed
+            # first-token times; hangs already trip via hang_threshold).
+            hangs += 1
+    # Judge latency only with enough streaming traffic (fail-open on thin
+    # data); the hard-error ratio uses total row counts so it works even
+    # when most traffic is non-streaming (the ch74 case: small prompts,
+    # mixed stream/non-stream).
+    latency_sick = False
+    if len(stream_rows) >= min_samples:
+        ratio = gone / len(stream_rows)
+        mean_frt = (sum(frts) / len(frts)) if frts else 0
+        latency_sick = (ratio >= client_gone_ratio or mean_frt >= frt_ms_threshold
+                        or hangs >= hang_threshold)
+    else:
+        ratio = -1.0
+        mean_frt = -1
+    error_sick = total >= min_samples and error_ratio >= error_ratio_threshold
+    sick = latency_sick or error_sick
+    LOG.info(
+        "[latency] ch %s: hard_err=%d ok=%d (ratio=%.2f, all_err=%d), stream=%d, client_gone=%d (%.0f%%), hangs=%d, mean_frt=%dms -> %s",
+        channel_id, hard_errors, successes, error_ratio, total_errors, len(stream_rows), gone,
+        ratio * 100 if ratio >= 0 else 0, hangs, mean_frt, "SICK" if sick else "ok",
+    )
+    # Thin evidence on BOTH axes → no verdict at all (fail-open). A pin
+    # serving a handful of requests an hour must not be judged "healthy"
+    # any more than it may be judged "sick".
+    if len(stream_rows) < min_samples and total < min_samples:
+        return None
+    return sick
+
+
+def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     """Sick-pin detection (owner rule 2026-10-19): a pin whose recent
     traffic is all failures and no successes is as unusable as a fake —
-    rotate it. Returns True (sick), False (healthy), or None (no evidence/
-    query failed — NEVER rotate on missing evidence)."""
+    rotate it. With latency_cfg set and enabled, ALSO rotate a pin that
+    serves the real model but is too slow / too abandoned / erroring too
+    often to be usable (degraded-merchant detection). Returns True (sick),
+    False (healthy), or None (no evidence/query failed — NEVER rotate on
+    missing evidence)."""
     errors = gateway.count_logs(5, channel_id, window_minutes)
     if errors is None:
         return None
-    if errors == 0:
-        return False
-    successes = gateway.count_logs(2, channel_id, window_minutes)
-    if successes is None:
-        return None
-    return errors > 0 and successes == 0
+    if errors > 0:
+        successes = gateway.count_logs(2, channel_id, window_minutes)
+        if successes is None:
+            return None
+        if successes == 0:
+            return True
+    # No hard failures (or errors with some successes): fall through to the
+    # degraded-merchant signal, which catches slow/flaky/erroring merchants
+    # the error-vs-success type check structurally cannot see.
+    if latency_cfg and latency_cfg.get("enabled"):
+        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
+    return False
 
 
 def provider_for(model):
@@ -1051,6 +1204,16 @@ def read_display_config():
             "a6": env_int("FAIL_THRESHOLD_A6", 2),
             "mia": env_int("FAIL_THRESHOLD_MIA", 2),
             "yingz": env_int("FAIL_THRESHOLD_YINGZ", 2),
+        },
+        # Degraded-merchant rotation posture — the admin page must be able
+        # to tell "off by design" from "armed" (and spot a typo'd ratio).
+        "latency_rotation": {
+            "enabled": os.environ.get("LATENCY_ROTATION_ENABLED", "false").lower() in ("1", "true", "yes"),
+            "min_samples": env_int("LATENCY_MIN_SAMPLES", 20),
+            "frt_ms_threshold": env_int("LATENCY_FRT_MS_THRESHOLD", 10000),
+            "client_gone_ratio": os.environ.get("LATENCY_CLIENT_GONE_RATIO", "0.20"),
+            "hang_threshold": env_int("LATENCY_HANG_THRESHOLD", 3),
+            "error_ratio": os.environ.get("LATENCY_ERROR_RATIO", "0.05"),
         },
     }
 
@@ -1230,37 +1393,15 @@ def _run_action_verify_locked(body, channel_name, model):
     record_verdict(ch_state, model, verdict)
     if verdict in PASS_VERDICTS and ch_state.get("quarantined"):
         # The operator re-verified a pin we quarantined and it now passes —
-        # release it (merchant recovered, exactly the recovery loop's job).
-        # For a direct check the pass is this merchant's own; for a
-        # gateway-routed check (plain-named legacy pins, the only
+        # release it. For a direct check the pass is this merchant's own; for
+        # a gateway-routed check (plain-named legacy pins, the only
         # direct-uncheckable kind) the pass proves the model's pool is
-        # serving genuine output, which is what the quarantine guarded
-        # against — either way the quarantine is stale. A failing check
-        # never releases anything.
-        # One-active guard: if a DIFFERENT pin is already enabled for this
-        # model, releasing (enabling) this one would create a lottery — clear
-        # the quarantine state but keep the channel benched as a standby; the
-        # owner can promote it when they want it serving.
-        try:
-            live = rt["gateway"].list_channels()
-        except Exception:
-            live = channels
-        pool = model_pool_names(model)
-        other_active = next(
-            (c for c in live
-             if (c.get("name") or "") != channel_name
-             and is_pinned_channel(c.get("name") or "")
-             and int(c.get("status") or 0) == CHANNEL_ENABLED
-             and pool & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
-            None,
-        )
-        if other_active is not None:
-            ch_state.update({"quarantined": False, "fails": 0, "permanent": False,
-                             "alerted": False, "model": ""})
-            LOG.info("[action] %s passes re-verify but %s is active — quarantine cleared, kept as standby",
-                     channel_name, other_active.get("name"))
-        else:
-            release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
+        # serving genuine output — either way the quarantine is stale. A
+        # failing check never releases anything. release_quarantine now
+        # clears state only and NEVER enables (owner spec 2026-10-24), so no
+        # one-active guard is needed — the pin stays a standby until a
+        # promote picks it up.
+        release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
     elif not checked_direct and verdict in BAD_VERDICTS:
         # Only run the failover policy for gateway-attributed checks; a
         # direct advisory check of a standby must not itself trigger a
@@ -1640,6 +1781,46 @@ def main():
     else:
         LOG.info("A6 key sync disabled (A6_MANAGE_TOKEN/A6_MANAGE_USER not set)")
     sick_window_minutes = max(1, int(os.environ.get("SICK_WINDOW_MINUTES", "60")))
+    # Degraded-merchant auto-rotation (owner ask 2026-10-22/24): in ADDITION
+    # to authenticity (attr_match) and the all-failures sick rule, rotate an
+    # active pin whose real traffic is too slow / too abandoned / erroring
+    # too often. Defaults OFF (LATENCY_ROTATION_ENABLED unset) — unchanged
+    # behavior until the owner arms it after watching the [latency] lines.
+    # Thresholds from the live fleet distribution (2026-10-22): healthy fleet
+    # runs 0-2% gone / 0.5-8s FRT / <5% hard errors; the bad pins sat at
+    # 18-48% gone, 13.9s FRT, or 5%+ 502s. ERROR_RATIO catches the ch74 case
+    # (502s interleaved with successes, invisible to the all-failures rule).
+    # Parse defensively: a malformed env value must NOT crash-loop the
+    # container (restart: unless-stopped), and ratios are clamped into
+    # (0, 1] so a typo like "-5" can never arm the whole fleet.
+    def _env_int(name, default, lo=1, hi=None):
+        try:
+            v = int(os.environ.get(name, str(default)))
+        except (TypeError, ValueError):
+            LOG.error("bad %s=%r — using default %s", name, os.environ.get(name), default)
+            v = default
+        v = max(lo, v)
+        return min(hi, v) if hi is not None else v
+
+    def _env_ratio(name, default):
+        try:
+            v = float(os.environ.get(name, str(default)))
+        except (TypeError, ValueError):
+            LOG.error("bad %s=%r — using default %s", name, os.environ.get(name), default)
+            v = default
+        if not (0.0 < v <= 1.0):
+            LOG.error("out-of-range %s=%r — clamped to default %s", name, v, default)
+            v = default
+        return v
+
+    latency_cfg = {
+        "enabled": os.environ.get("LATENCY_ROTATION_ENABLED", "false").lower() in ("1", "true", "yes"),
+        "min_samples": _env_int("LATENCY_MIN_SAMPLES", 20),
+        "frt_ms_threshold": _env_int("LATENCY_FRT_MS_THRESHOLD", 10000, lo=0),
+        "client_gone_ratio": _env_ratio("LATENCY_CLIENT_GONE_RATIO", 0.20),
+        "hang_threshold": _env_int("LATENCY_HANG_THRESHOLD", 3),
+        "error_ratio_threshold": _env_ratio("LATENCY_ERROR_RATIO", 0.05),
+    }
     # The owner adds keys daily and wants them in the pool fast (owner rule
     # 2026-10-19: as close to real-time as possible). Sync is cheap (token
     # list + ≤5 reveals); the expensive part (cctest checks) stays on the
@@ -1647,9 +1828,12 @@ def main():
     sync_interval_minutes = max(1, int(os.environ.get("SYNC_INTERVAL_MINUTES", "5")))
 
     LOG.info(
-        "cctest-monitor starting: enforce=%s cycle=%dm sync=%dm prefixes=%s sellers=%s thresholds(prefix)=%s a6sync=%s",
+        "cctest-monitor starting: enforce=%s cycle=%dm sync=%dm prefixes=%s sellers=%s thresholds(prefix)=%s a6sync=%s latency_rotation=%s (samples>=%d gone>=%.0f%% frt>=%dms hangs>=%d err>=%.0f%%)",
         enforce, cycle_minutes, sync_interval_minutes, model_prefixes,
         [s[0] for s in sellers], fail_threshold_prefixes, a6m is not None,
+        latency_cfg["enabled"], latency_cfg["min_samples"],
+        latency_cfg["client_gone_ratio"] * 100, latency_cfg["frt_ms_threshold"],
+        latency_cfg["hang_threshold"], latency_cfg["error_ratio_threshold"] * 100,
     )
 
     state = load_state()
@@ -1676,6 +1860,7 @@ def main():
                 gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 threshold_for, permanent_fails, enforce, discord, state,
                 seller_model_filter, None, sick_window_minutes,
+                latency_cfg=latency_cfg,
             )
         except Exception:
             LOG.exception("cycle failed")
@@ -1711,7 +1896,8 @@ def start_sync_loop(a6m, interval_minutes):
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
               threshold_for, permanent_fails, enforce, discord, state,
-              seller_model_filter=None, a6m=None, sick_window_minutes=60):
+              seller_model_filter=None, a6m=None, sick_window_minutes=60,
+              latency_cfg=None):
     seller_model_filter = seller_model_filter or {}
     channels = None
     for name, base_url, seller_key in sellers:
@@ -1758,22 +1944,10 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             if ch is None:
                 continue
             try:
+                # release_quarantine now never enables the channel (owner spec
+                # 2026-10-24), so no re-bench is needed — the pin stays a
+                # standby until promoted.
                 release_quarantine(gateway, ch_state, int(ch["id"]), name, enforce, discord)
-                # Re-bench to standby if another pin is already active.
-                other_active = next(
-                    (c for c in channels
-                     if is_pinned_channel(c.get("name") or "")
-                     and int(c.get("status") or 0) == CHANNEL_ENABLED
-                     and (c.get("name") or "") != name
-                     and model_pool_names(model) & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
-                    None,
-                )
-                if other_active is not None:
-                    try:
-                        gateway.set_status(int(ch["id"]), CHANNEL_MANUALLY_DISABLED)
-                        gateway.fix_abilities()
-                    except Exception as e:
-                        LOG.error("[release] re-bench after auto-release FAILED for %s: %s", name, e)
                 LOG.warning("[release] auto-released %s — latest verdict %s is a pass", name, latest)
                 discord_alert(discord, f"cctest: {name} auto-released (latest verdict: {latest})")
             except Exception as e:
@@ -1843,15 +2017,15 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             LOG.info("[sick] another rotation is in flight — skipping sick checks this cycle")
         else:
             try:
-                _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry)
+                _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry, latency_cfg=latency_cfg)
             finally:
                 _MUTATION_LOCK.release()
 
 
-def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None):
+def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None, latency_cfg=None):
     if enforce:
         for model, pin in list(active_pins.items()):
-            sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes)
+            sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes, latency_cfg=latency_cfg)
             if sick is not True:
                 continue
             pin_name = pin.get("name")
@@ -1879,7 +2053,15 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
                 # Still the active pin — confirm it is genuinely the one we
                 # quarantined (status may have flipped while we iterate).
                 pin = live_active
-            LOG.warning("[sick] active pin %s (ch %s) failing with no successes — rotating", pin_name, pin.get("id"))
+            # Label the rotation honestly: the all-failures rule and the
+            # degraded-merchant rule (latency/errors with successes) are
+            # different diagnoses and the owner's alert must not claim
+            # "no successes" for a pin that was serving fine but bleeding.
+            degraded = bool(latency_cfg and latency_cfg.get("enabled"))
+            reason = ("degraded (slow / abandoned streams / hard errors — see the "
+                      "[latency] log line for this channel)" if degraded
+                      else "failing with no successes")
+            LOG.warning("[sick] active pin %s (ch %s) %s — rotating", pin_name, pin.get("id"), reason)
             ch_state = state.setdefault(pin_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
             ch_state.update({
                 "quarantined": True,
@@ -1890,7 +2072,7 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
             try:
                 gateway.set_status(int(pin["id"]), CHANNEL_MANUALLY_DISABLED)
                 gateway.fix_abilities()
-                discord_alert(discord, f"cctest: active pin {pin_name} for {model} is failing with no successes — rotating to next standby")
+                discord_alert(discord, f"cctest: active pin {pin_name} for {model} is {reason} — rotating to next standby")
                 fresh = gateway.list_channels()  # post-disable, pre-promotion
                 entry = find_seller_entry(sellers, fresh, pin_name)
                 if entry:
@@ -2268,15 +2450,30 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             for c in (live or [])
         )
         if not has_active:
-            # No active pin for this model — promote a standby NOW (the
-            # quarantined pin's re-check can wait for its timer).
-            promote_next_standby(
-                gateway, cctest, channel, base_url, seller_key,
-                candidate, enforce, discord, state, live,
-                seller_registry,
+            # No active pin for this model — try to promote a standby NOW.
+            # The quarantined pin itself is excluded from its own standby
+            # set (name != failed_name, no preferred_name), so for a
+            # SINGLE-pin model this promote is a no-op and the pin must
+            # still get its scheduled re-check below — otherwise a recovered
+            # merchant is never re-tested and the model stays dead until a
+            # manual promote. Only return early when a standby actually
+            # exists to promote (the re-check then waits for its timer).
+            standby_exists = any(
+                is_pinned_channel(c.get("name") or "")
+                and int(c.get("status") or 0) == CHANNEL_MANUALLY_DISABLED
+                and (c.get("name") or "") != name
+                and pool & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}
+                for c in (live or [])
             )
-            save_state(state)
-            return
+            if standby_exists:
+                promote_next_standby(
+                    gateway, cctest, channel, base_url, seller_key,
+                    candidate, enforce, discord, state, live,
+                    seller_registry,
+                )
+                save_state(state)
+                return
+            # Sole pin and no standby: fall through to the re-check timer.
 
         if now - last_recheck < recheck_seconds:
             return
@@ -2287,6 +2484,9 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             record_verdict(ch_state, candidate, verdict)
             ch_state["last_quarantine_check"] = now
             if verdict in PASS_VERDICTS:
+                # Non-pin legacy channel recovered. release_quarantine now
+                # only clears quarantine state (never enables, owner spec
+                # 2026-10-24); the owner re-enables legacy channels manually.
                 release_quarantine(gateway, ch_state, channel_id, name, enforce, discord)
             elif verdict in BAD_VERDICTS:
                 ch_state["fails"] += 1
@@ -2319,26 +2519,9 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         ch_state["last_quarantine_check"] = now
         if verdict in PASS_VERDICTS:
             # Merchant recovered — release to standby (not active; another
-            # pin is serving this model by now).
+            # pin is serving this model by now). release_quarantine now never
+            # enables the channel, so the pin simply rejoins the standby pool.
             release_quarantine(gateway, ch_state, channel_id, name, enforce, discord)
-            # release_quarantine enables the channel; for a recovered standby
-            # we want it BENCHED (status 2), not live. Re-disable after the
-            # release cleared the quarantine state.
-            other_active = next(
-                (c for c in (channels_snapshot or [])
-                 if is_pinned_channel(c.get("name") or "")
-                 and int(c.get("status") or 0) == CHANNEL_ENABLED
-                 and (c.get("name") or "") != name
-                 and model_pool_names(candidate) & {x.strip() for x in (c.get("models") or "").split(",") if x.strip()}),
-                None,
-            )
-            if other_active is not None:
-                try:
-                    gateway.set_status(int(channel["id"]), CHANNEL_MANUALLY_DISABLED)
-                    gateway.fix_abilities()
-                    LOG.info("[%s] recovered but %s is active — benched as standby", name, other_active.get("name"))
-                except Exception as e:
-                    LOG.error("[%s] re-bench after release FAILED: %s", name, e)
             discord_alert(discord, f"cctest: {name} recovered ({candidate} passes) — back in the standby pool")
         elif verdict in BAD_VERDICTS:
             ch_state["fails"] += 1
@@ -2648,19 +2831,23 @@ def start_quarantine(gateway, ch_state, channel_id, name, model, verdict, discor
 
 
 def release_quarantine(gateway, ch_state, channel_id, name, enforce, discord):
+    """Clear the quarantine state WITHOUT enabling the channel (owner spec
+    2026-10-24: "Verify" must only check trueness and lift the quarantine
+    tag — never pin. Pinning happens exclusively through "Use this
+    merchant" (promote), which owns the quarantine-first→enable-next
+    sequence. Previously this set status=ENABLED, which made a verify on
+    a standby silently go live — the 2026-10-22 sol double-pin root
+    cause. The channel keeps whatever status it has (usually a disabled
+    standby); only the quarantine bookkeeping is cleared, so the pin
+    returns to the promotable pool instead of the live pool.)
+    """
     if not enforce:
         LOG.info("[%s] OBSERVE-ONLY: would release from quarantine", name)
         return
-    try:
-        gateway.set_status(channel_id, CHANNEL_ENABLED)
-        gateway.fix_abilities()  # rebuild routing so the released pin serves
-    except Exception as e:
-        LOG.error("[%s] release FAILED (channel stays disabled): %s", name, e)
-        return
     ch_state.update({"quarantined": False, "fails": 0, "permanent": False,
                      "alerted": False, "model": ""})
-    LOG.info("[%s] released from quarantine", name)
-    discord_alert(discord, f"cctest: {name} released from quarantine")
+    LOG.info("[%s] released from quarantine (kept at current channel status)", name)
+    discord_alert(discord, f"cctest: {name} released from quarantine — standby, not pinned")
 
 
 if __name__ == "__main__":

@@ -689,8 +689,59 @@ def test_quarantined_pin_rechecked_and_released():
         # The pin's own verdict history records the passing re-check.
         entry = state["a6pin-fable-5-4665"]["last_verdicts"]["claude-fable-5"]
         assert entry["verdict"] == "official", entry
-        # It was released then re-benched (status flip to 1 then back to 2).
-        assert (20, 1) in gw.writes and (20, 2) in gw.writes, gw.writes
+        # Release NEVER enables the channel (owner spec 2026-10-24: verify
+        # only checks trueness + lifts the quarantine; pinning happens only
+        # via "Use this merchant"). The pin stays benched (status 2) and
+        # NO status writes occur.
+        assert (20, 1) not in gw.writes, gw.writes
+        assert (20, 2) not in gw.writes, gw.writes
+    finally:
+        m.RUNTIME = None
+
+
+def test_sole_quarantined_pin_still_rechecked():
+    # Single-pin model whose pin is quarantined (fake verdict or sick
+    # rotation), no other standby exists. The no-active-pin branch must NOT
+    # early-return after the (no-op) promote attempt — the pin's scheduled
+    # re-check must still run, so a recovered merchant gets re-tested and
+    # auto-released (owner then recovers the model with one "Use this
+    # merchant" click).
+    chs = [{"id": 20, "name": "a6pin-fable-5-4665", "status": 2,
+            "group": "default", "models": "claude-fable-5", "model_mapping": ""}]
+    state = {"a6pin-fable-5-4665": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5",
+        "last_quarantine_check": 0,  # long ago — due for re-check
+    }}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    class FakeA6MWithKey:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 4665"}]
+
+        def reveal_key(self, tid):
+            return "sk-test-key"
+
+    gw = FakeGW(chs)
+    m.RUNTIME = {"a6m": FakeA6MWithKey()}
+    try:
+        m.run_cycle(gw, PassCC(), [("a6pin", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        # The re-check ran (verdict recorded) and the pass released the
+        # quarantine — recovery is possible via one promote click.
+        entry = state["a6pin-fable-5-4665"]["last_verdicts"]["claude-fable-5"]
+        assert entry["verdict"] == "official", entry
+        assert state["a6pin-fable-5-4665"]["quarantined"] is False
+        # Release never enables (owner spec); nothing was pinned.
+        assert (20, 1) not in gw.writes, gw.writes
     finally:
         m.RUNTIME = None
 
@@ -1198,8 +1249,10 @@ def test_action_verify_legacy_pin_can_release():
         status, payload = m.run_action_verify({"channel": "a6pin-sonnet-5", "model": "claude-sonnet-5"})
         assert status == 200, (status, payload)
         assert payload["data"]["verdict"] == "official", payload
-        # quarantine released: channel enabled + state cleared
-        assert chs[0]["status"] == 1, chs
+        # Quarantine released but the channel is NOT enabled (owner spec
+        # 2026-10-24: verify only checks trueness + lifts the quarantine;
+        # pinning happens exclusively via "Use this merchant").
+        assert chs[0]["status"] == 2, chs
         assert state["a6pin-sonnet-5"]["quarantined"] is False
     finally:
         m.RUNTIME = None
@@ -1307,6 +1360,100 @@ class SickGW(FakeGW):
         if log_type == 5:
             return self.error_counts.get(channel_id)
         return self.success_counts.get(channel_id)
+
+
+class LatencyGW(SickGW):
+    """Fake gateway whose consume logs carry `other` JSON with frt +
+    stream_status.end_reason, and whose error logs carry `content` with a
+    status code — the data pin_latency_sick scores. error_contents maps
+    channel_id -> list of content strings (default: all hard 502s)."""
+
+    def __init__(self, error_counts, success_counts, rows, error_contents=None):
+        super().__init__([], error_counts, success_counts)
+        self.rows = rows
+        self.error_contents = error_contents or {}
+
+    def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+        return self.rows
+
+    def recent_error_logs(self, channel_id, window_minutes, limit=100):
+        if channel_id not in self.error_contents:
+            return [{"content": "status_code=502, 智能路由候选均请求失败。"}] * (self.error_counts.get(channel_id) or 0)
+        return [{"content": c} for c in self.error_contents[channel_id]]
+
+
+def _row(end_reason=None, frt=None):
+    import json as _json
+    ss = {"end_reason": end_reason} if end_reason else None
+    # end_reason=None means a NON-STREAMING request: no stream_status key
+    # at all, and frt logged as -1000 (not applicable).
+    payload = {"frt": frt}
+    if ss is not None:
+        payload["stream_status"] = ss
+    return {"other": _json.dumps(payload)}
+
+
+def test_pin_latency_sick():
+    cfg = {"enabled": True, "min_samples": 20, "frt_ms_threshold": 10000,
+           "client_gone_ratio": 0.20, "hang_threshold": 3,
+           "error_ratio_threshold": 0.05}
+    # ch52 profile: ~46% client_gone, high frt → sick
+    rows = [_row("client_gone", 13000)] * 9 + [_row("eof", 15000)] * 11
+    gw = LatencyGW({52: 0}, {52: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 52, 60, latency_cfg=cfg) is True
+    # healthy fleet profile: 0% gone, sub-second frt → healthy
+    rows = [_row("eof", 900)] * 25
+    gw = LatencyGW({9: 0}, {9: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 9, 60, latency_cfg=cfg) is False
+    # thin traffic (< min_samples) → None, never rotate on weak evidence
+    gw = LatencyGW({9: 0}, {9: 3}, [_row("eof", 900)] * 3)
+    assert m.pin_is_sick(gw, 9, 60, latency_cfg=cfg) is None
+    # ch40 profile: 8% gone but 11 streaming frt=-1000 hangs → sick on hangs
+    rows = [_row("client_gone", -1000)] * 11 + [_row("eof", 4800)] * 127
+    gw = LatencyGW({40: 0}, {40: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 40, 60, latency_cfg=cfg) is True
+    # hangs do NOT inflate the client_gone ratio: 4 hang rows + 46 clean
+    # rows → gone=4 (8% < 20%, counted once per row), hangs=4 >= 3 → sick
+    # via the hang threshold, NOT via the ratio.
+    rows = [_row("client_gone", -1000)] * 4 + [_row("eof", 2000)] * 46
+    gw = LatencyGW({40: 0}, {40: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 40, 60, latency_cfg=cfg) is True  # hangs
+    # ch25 profile (2026-10-22 false positive): mostly NON-STREAMING rows
+    # (no stream_status, frt=-1000) which are ordinary successes — must NOT
+    # count as hangs. 40 non-stream + 25 healthy stream rows → ok.
+    rows = [_row(None, -1000)] * 40 + [_row("eof", 4000)] * 25
+    gw = LatencyGW({25: 0}, {25: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 25, 60, latency_cfg=cfg) is False
+    # non-stream rows alone: stream axis fails open (0 < min_samples) but
+    # the error axis has 30 clean rows (0 hard errors) → healthy, not sick.
+    gw = LatencyGW({25: 0}, {25: 30}, [_row(None, -1000)] * 30)
+    assert m.pin_is_sick(gw, 25, 60, latency_cfg=cfg) is False
+    # thin evidence on BOTH axes → None (no verdict, fail-open)
+    gw = LatencyGW({25: 0}, {25: 5}, [_row(None, -1000)] * 5)
+    assert m.pin_is_sick(gw, 25, 60, latency_cfg=cfg) is None
+    # ch74 profile (opus-5 2026-10-23): 25 hard 502s interleaved with 465
+    # successes → 5.1% HARD-error ratio trips error_sick
+    rows = [_row("eof", 3000)] * 465
+    gw = LatencyGW({74: 25}, {74: 465}, rows)
+    assert m.pin_is_sick(gw, 74, 60, latency_cfg=cfg) is True
+    # benign errors (429 / client aborts, status_code=4xx) do NOT trip:
+    # 465 ok + 25 4xx errors → 5.1% total-error but 0% hard-error → ok
+    gw = LatencyGW({74: 25}, {74: 465}, rows,
+                   error_contents={74: ["status_code=429, rate limited"] * 25})
+    assert m.pin_is_sick(gw, 74, 60, latency_cfg=cfg) is False
+    # query failure on either log kind → None (fail-open)
+    class FailGW(LatencyGW):
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return None
+    assert m.pin_is_sick(FailGW({9: 0}, {9: 5}, []), 9, 60, latency_cfg=cfg) is None
+    class FailErrGW(LatencyGW):
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return None
+    assert m.pin_is_sick(FailErrGW({9: 5}, {9: 5}, [_row("eof", 100)] * 25), 9, 60, latency_cfg=cfg) is None
+    # latency disabled → existing error/success behavior untouched
+    rows = [_row("client_gone", 13000)] * 30
+    gw = LatencyGW({9: 0}, {9: len(rows)}, rows)
+    assert m.pin_is_sick(gw, 9, 60, latency_cfg=None) is False
 
 
 def test_pin_is_sick():
@@ -1451,9 +1598,11 @@ def test_auto_release_green_history():
     gw = FakeGW(chs)
     m.run_cycle(gw, VerdictCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
                 ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-    # The pin was released (status flip to 1 then back to 2 as standby)
-    assert (20, 1) in gw.writes, gw.writes
-    assert (20, 2) in gw.writes, gw.writes
+    # Auto-release clears the quarantine but NEVER writes channel status
+    # (owner spec 2026-10-24: release = standby, not pinned; the other pin
+    # keeps serving).
+    assert (20, 1) not in gw.writes, gw.writes
+    assert (20, 2) not in gw.writes, gw.writes
     assert state["a6pin-fable-5-4665"]["quarantined"] is False
 
 
@@ -1521,8 +1670,12 @@ def test_action_verify_releases_quarantine_on_pass():
         status, payload = m.run_action_verify({"channel": "a6pin-fable-5-4756", "model": "claude-fable-5"})
         assert status == 200, payload
         assert payload["data"]["verdict"] == "official", payload
-        # released: enabled + state cleared
-        assert (20, 1) in gw.writes, gw.writes
+        # Released: quarantine state cleared, but the channel is NOT enabled
+        # (owner spec 2026-10-24: verify checks trueness and lifts the
+        # quarantine only; pinning happens exclusively via "Use this
+        # merchant" — the 2026-10-22 sol double-pin root cause).
+        assert (20, 1) not in gw.writes, gw.writes
+        assert chs[0]["status"] == 2, chs
         assert state["a6pin-fable-5-4756"]["quarantined"] is False, state
     finally:
         m.RUNTIME = None
