@@ -360,6 +360,14 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	modelRatioForLog, _, _ := ratio_setting.GetModelRatio(billingModelName)
 	tieredCacheRatio, _ := ratio_setting.GetCacheRatio(billingModelName)
 	tieredCacheCreationRatio, _ := ratio_setting.GetCreateCacheRatio(billingModelName)
+	// Claude splits cache writes into 5m and 1h TTL buckets with different
+	// prices. The per-token path derives them (5m = the base create ratio,
+	// 1h = base * 6/3.75); the tiered path must report the same, or the
+	// panel shows 0 for the TTL-specific fields (GenerateClaudeOtherInfo
+	// only writes them when their token counts are non-zero, so a 0 ratio
+	// silently reports "free" for real cache writes).
+	tieredCacheCreation5mRatio := tieredCacheCreationRatio
+	tieredCacheCreation1hRatio := tieredCacheCreationRatio * claudeCacheCreation1hMultiplier
 
 	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info)
 	if err != nil {
@@ -430,12 +438,14 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	// c*0.35 + cc*0.05 + cr*0.01). Values come from the same config maps the
 	// per-token path uses, so the panel reports what the operator configured.
 	priceData := hosttypes.PriceData{
-		FreeModel:          freeModel,
-		GroupRatioInfo:     groupRatioInfo,
-		QuotaToPreConsume:  preConsumedQuota,
-		ModelRatio:         modelRatioForLog,
-		CacheRatio:         tieredCacheRatio,
-		CacheCreationRatio: tieredCacheCreationRatio,
+		FreeModel:            freeModel,
+		GroupRatioInfo:       groupRatioInfo,
+		QuotaToPreConsume:    preConsumedQuota,
+		ModelRatio:           modelRatioForLog,
+		CacheRatio:           tieredCacheRatio,
+		CacheCreationRatio:   tieredCacheCreationRatio,
+		CacheCreation5mRatio: tieredCacheCreation5mRatio,
+		CacheCreation1hRatio: tieredCacheCreation1hRatio,
 	}
 
 	logger.LogDebug(c, "model_price_helper_tiered result: model=%s preConsume=%d quotaBeforeGroup=%.2f groupRatio=%.2f tier=%s", billingModelName, preConsumedQuota, quotaBeforeGroup, groupRatioInfo.GroupRatio, trace.MatchedTier)
