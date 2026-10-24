@@ -1937,7 +1937,11 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             last = (ch_state.get("last_verdicts") or {})
             model = ch_state.get("model") or ""
             latest = (last.get(model) or {}).get("verdict")
-            if latest not in PASS_VERDICTS:
+            # Tolerate malformed state (2026-10-24: a6pin-6-astra-3016 held
+            # verdict=[None, None] from an earlier record_verdict bug; the
+            # membership test crashed with unhashable-type and killed every
+            # cycle). Anything that isn't a plain string is not a pass.
+            if not isinstance(latest, str) or latest not in PASS_VERDICTS:
                 continue
             # Find the channel; skip if missing (deleted pin).
             ch = next((c for c in channels if (c.get("name") or "") == name), None)
