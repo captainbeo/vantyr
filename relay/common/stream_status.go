@@ -166,6 +166,20 @@ func (s *StreamStatus) ResponseOutcome() string {
 	return string(s.response)
 }
 
+// IsTerminal reports whether the stream has reached a terminal outcome
+// (completed / failed / incomplete / cancelled). Used by the keep-alive
+// pingers to stop emitting once the response is over — a keep-alive after
+// the terminal event is protocol-odd and, for Responses clients, can read
+// as an out-of-order frame.
+func (s *StreamStatus) IsTerminal() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.response != ""
+}
+
 func (s *StreamStatus) ResponseFailed() bool {
 	return s.ResponseOutcome() == string(ResponseOutcomeFailed)
 }

@@ -24,6 +24,17 @@ type ResponsesUsageAccumulator struct {
 	finished       bool
 }
 
+// KeepAliveResponseID is the sentinel id the relay's Responses keep-alive
+// frame (PingResponsesEventData) puts on its synthetic response.in_progress
+// event. It marks a frame as transport keep-alive rather than real upstream
+// work, so accounting never treats it as billable.
+const KeepAliveResponseID = "resp_ping_keepalive"
+
+func isKeepAliveEvent(event *dto.ResponsesStreamResponse) bool {
+	return event != nil && event.Type == "response.in_progress" &&
+		event.Response != nil && event.Response.ID == KeepAliveResponseID
+}
+
 func NewResponsesUsageAccumulator(info *relaycommon.RelayInfo) *ResponsesUsageAccumulator {
 	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{}}
 }
@@ -35,7 +46,16 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 	if event.Response != nil {
 		a.info.ObserveResponseModel(event.Response.Model)
 	}
-	a.started = true
+	// A keep-alive frame (the synthetic response.in_progress the ping path
+	// emits) is not billable work and must not mark the stream started:
+	// Finish() bills estimated prompt tokens whenever started is true, so if
+	// a keep-alive is ever routed through here a ping-only disconnect would
+	// charge the customer for a stream that produced nothing. Identified by
+	// the sentinel id our ping writes, so it holds even though the payload
+	// carries a schema-shaped response object.
+	if !isKeepAliveEvent(event) {
+		a.started = true
+	}
 	ObserveResponsesOutcome(a.info, event)
 	switch event.Type {
 	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":

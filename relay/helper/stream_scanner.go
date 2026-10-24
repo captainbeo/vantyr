@@ -185,6 +185,14 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			for {
 				select {
 				case <-pingTicker.C:
+					// Stop keep-alives once the stream reached a terminal
+					// outcome: a ping after response.completed / message_stop
+					// is protocol-odd and Responses clients can read it as an
+					// out-of-order frame.
+					if info.StreamStatus != nil && info.StreamStatus.IsTerminal() {
+						logger.LogDebug(c, "ping suppressed: stream already terminal")
+						return
+					}
 					var err error
 					func() {
 						writeMutex.Lock()

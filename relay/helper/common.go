@@ -145,6 +145,26 @@ func PingData(c *gin.Context) error {
 // case for it either, so it is inert in both. The payload carries only a
 // type (no `response` object), which also means it cannot set started or
 // mutate stream status.
+// PingResponsesEventData is the OpenAI-Responses equivalent of PingEventData.
+// `ping` is an Anthropic-only event type, so Responses streams get the
+// protocol-native equivalent: a synthetic `response.in_progress` frame.
+//
+// SAFETY (verified 2026-10-24): this frame is written directly to the client
+// under the ping mutex and never passes through the relay's dataHandler, so
+// ResponsesUsageAccumulator.Observe never sees it. Even if it did,
+// Observe only acts on terminal events, delta kinds and output_item.done —
+// `response.in_progress` matches none, and ObserveResponsesOutcome has no
+// case for it either, so it is inert in both. The payload carries only a
+// type (no `response` object), which also means it cannot set started or
+// mutate stream status.
+//
+// The payload carries a minimal but schema-shaped `response` object (id +
+// status: in_progress) plus a sequence_number. Strictly-typed Responses SDK
+// clients validate/deserialise typed events; a bare {"type": ...} frame can
+// be rejected as out-of-schema and abort the stream (an abort+retry would
+// double-bill: interrupted-stream billing on attempt 1 plus a full bill on
+// the retry). Keeping the minimal schema shape avoids that. id is a
+// non-clashing sentinel; sequence_number -1 signals "not a real sequence".
 func PingResponsesEventData(c *gin.Context) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
@@ -154,7 +174,10 @@ func PingResponsesEventData(c *gin.Context) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	if _, err := c.Writer.Write([]byte("event: response.in_progress\ndata: {\"type\":\"response.in_progress\"}\n\n")); err != nil {
+	// KeepAliveResponseID (service.KeepAliveResponseID) must match the id
+	// here: the accumulator uses it to recognise the frame as a keep-alive
+	// and never mark the stream started/billable.
+	if _, err := c.Writer.Write([]byte("event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_ping_keepalive\",\"status\":\"in_progress\"},\"sequence_number\":-1}\n\n")); err != nil {
 		return fmt.Errorf("write responses ping event data failed: %w", err)
 	}
 	return FlushWriter(c)

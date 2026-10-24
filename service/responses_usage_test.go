@@ -354,12 +354,19 @@ func TestResponsesPingEventIsInertInAccumulator(t *testing.T) {
 	}
 	accumulator := NewResponsesUsageAccumulator(info)
 
-	// The synthetic frame exactly as PingResponsesEventData writes it: type
-	// only, no `response` object.
-	ping := &dto.ResponsesStreamResponse{Type: "response.in_progress"}
+	// The synthetic frame exactly as PingResponsesEventData writes it:
+	// response.in_progress carrying only the keep-alive sentinel id.
+	ping := &dto.ResponsesStreamResponse{
+		Type:     "response.in_progress",
+		Response: &dto.OpenAIResponsesResponse{ID: KeepAliveResponseID},
+	}
 	for i := 0; i < 100; i++ { // many pings, as a slow stream would send
 		accumulator.Observe(ping)
 	}
+	// A keep-alive must not mark the stream started — otherwise a ping-only
+	// disconnect would bill estimated prompt tokens (Finish() bills prompt
+	// whenever started). This is the invariant the frame's bypass relies on.
+	assert.False(t, accumulator.started, "a keep-alive must not start the stream")
 
 	// A real stream flows around/after the pings.
 	accumulator.Observe(&dto.ResponsesStreamResponse{
@@ -382,4 +389,31 @@ func TestResponsesPingEventIsInertInAccumulator(t *testing.T) {
 	status := info.StreamStatus
 	require.NotNil(t, status)
 	assert.False(t, status.ResponseFailed(), "a ping must never mark the stream failed")
+}
+
+// TestResponsesPingOnlyStreamBillsNothing locks the keep-alive billing
+// invariant end-to-end: a stream that received ONLY keep-alive frames and
+// then disconnected must produce zero usage — no estimated prompt, no
+// completion, no total. If a keep-alive is ever treated as real work (or
+// ever sets started), this test fails and the customer gets double-billed
+// on the abort+retry the keep-alive was meant to prevent.
+func TestResponsesPingOnlyStreamBillsNothing(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-6.1-sol",
+		StreamStatus:    relaycommon.NewStreamStatus(),
+	}
+	info.SetEstimatePromptTokens(5000) // the dangerous path: started would bill this
+	accumulator := NewResponsesUsageAccumulator(info)
+
+	for i := 0; i < 8; i++ {
+		accumulator.Observe(&dto.ResponsesStreamResponse{
+			Type:     "response.in_progress",
+			Response: &dto.OpenAIResponsesResponse{ID: KeepAliveResponseID},
+		})
+	}
+	// Stream disconnects without a terminal event.
+	usage := accumulator.Finish()
+	assert.Equal(t, 0, usage.PromptTokens, "ping-only stream must not bill estimated prompt")
+	assert.Equal(t, 0, usage.CompletionTokens, "ping-only stream must not bill completion")
+	assert.Equal(t, 0, usage.TotalTokens, "ping-only stream must bill nothing")
 }
