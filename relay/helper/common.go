@@ -122,6 +122,32 @@ func PingData(c *gin.Context) error {
 	return FlushWriter(c)
 }
 
+// PingEventData writes a REAL SSE event frame, not a comment. SSE comment
+// lines (": PING") are transport framing that strict clients do not count
+// as stream activity, so their idle/liveness timers keep running through
+// the pre-first-token silence and they hang up at their hard limit (60s
+// observed on Claude Code / Codex CLI). A real `event: ping` frame is a
+// protocol-level event Anthropic defines exactly for keep-alive, and
+// event-counting clients reset their timers on it (A/B verified on the
+// Vantyr production host 2026-10-23: 60s-timeout client survived a 90s
+// silent first-token window with 15s ping events, died at 60.1s without).
+// Used only for Anthropic /v1/messages-format streams where `ping` is part
+// of the wire protocol.
+func PingEventData(c *gin.Context) error {
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
+
+	if requestContextDone(c) {
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+
+	if _, err := c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n")); err != nil {
+		return fmt.Errorf("write ping event data failed: %w", err)
+	}
+	return FlushWriter(c)
+}
+
 func ObjectData(c *gin.Context, object any) error {
 	if object == nil {
 		return errors.New("object is nil")

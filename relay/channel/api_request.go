@@ -432,7 +432,7 @@ func toWebSocketURL(raw string) string {
 	}
 }
 
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.CancelFunc, <-chan struct{}) {
+func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, eventMode bool) (context.CancelFunc, <-chan struct{}) {
 	pingerCtx, stopPinger := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -469,7 +469,7 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.Can
 			select {
 			// 发送 ping 数据
 			case <-ticker.C:
-				if err := sendPingData(c, &pingMutex); err != nil {
+				if err := sendPingData(c, &pingMutex, eventMode); err != nil {
 					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
 					return
 				}
@@ -490,14 +490,19 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.Can
 	return stopPinger, done
 }
 
-func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
+func sendPingData(c *gin.Context, mutex *sync.Mutex, eventMode bool) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	// Bound the write so a slow client cannot block this goroutine forever;
 	// doRequest's defer waits for the pinger to exit before returning.
 	helper.ExtendWriteDeadline(c)
-	err := helper.PingData(c)
+	var err error
+	if eventMode {
+		err = helper.PingEventData(c)
+	} else {
+		err = helper.PingData(c)
+	}
 	if err != nil {
 		logger.LogError(c, "SSE ping error: "+err.Error())
 		return err
@@ -547,7 +552,11 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		generalSettings := operation_setting.GetGeneralSetting()
 		if generalSettings.PingIntervalEnabled && !info.DisablePing {
 			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval)
+			// Real-event keep-alive for Anthropic streams (Vantyr fork,
+			// 2026-10-23): see helper.PingEventData. This is the PRE-first-token
+			// pinger — exactly the window where slow merchants starve clients.
+			eventMode := generalSettings.PingEventMode && info.RelayFormat == types.RelayFormatClaude
+			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval, eventMode)
 			// 使用defer确保在任何情况下都能停止ping goroutine
 			defer func() {
 				if stopPinger != nil {

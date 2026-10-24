@@ -14,6 +14,11 @@ type GeneralSetting struct {
 	DocsLink            string `json:"docs_link"`
 	PingIntervalEnabled bool   `json:"ping_interval_enabled"`
 	PingIntervalSeconds int    `json:"ping_interval_seconds"`
+	// PingEventMode emits a real SSE `event: ping` frame instead of a `: PING`
+	// comment for Anthropic-format streams. Real events reset client liveness
+	// timers during the pre-first-token silence; comments do not (A/B verified
+	// 2026-10-23). Off by default — set true to enable.
+	PingEventMode bool `json:"ping_event_mode"`
 	// 当前站点额度展示类型：USD / CNY / TOKENS
 	QuotaDisplayType string `json:"quota_display_type"`
 	// 自定义货币符号，用于 CUSTOM 展示类型
@@ -27,6 +32,7 @@ var generalSetting = GeneralSetting{
 	DocsLink:                   "https://docs.newapi.pro",
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
+	PingEventMode:              false,
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,

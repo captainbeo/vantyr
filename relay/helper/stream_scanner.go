@@ -16,6 +16,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
 
@@ -117,6 +118,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		pingInterval = DefaultPingInterval
 	}
 
+	// Real-event keep-alive (Vantyr fork, 2026-10-23): for Anthropic-format
+	// streams, a real `event: ping` frame — not the comment — because clients
+	// reset their liveness timers on events, not comments. Gated by the
+	// ping_event_mode setting (off by default; comment behavior unchanged).
+	pingEventMode := generalSettings.PingEventMode && info.RelayFormat == types.RelayFormatClaude
+
 	if pingEnabled {
 		pingTicker = time.NewTicker(pingInterval)
 	}
@@ -179,7 +186,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 						writeMutex.Lock()
 						defer writeMutex.Unlock()
 						ExtendWriteDeadline(c)
-						err = PingData(c)
+						if pingEventMode {
+							err = PingEventData(c)
+						} else {
+							err = PingData(c)
+						}
 					}()
 					if err != nil {
 						logger.LogError(c, "ping data error: "+err.Error())
