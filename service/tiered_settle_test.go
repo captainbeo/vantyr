@@ -1089,3 +1089,56 @@ func TestSamePriceCacheReadsRemainInInput(t *testing.T) {
 		})
 	}
 }
+
+// TestTieredCacheBillingMatchesProductionFormula locks the ACTUAL production
+// expression for the Claude tiered models against hand-computed prices.
+// Audit context (2026-10-25): a user reported "cache does nothing, I'm being
+// billed full price". Billing was in fact correct — verified by reproducing
+// the logged quota exactly — but nothing in the test suite pinned that, so
+// the question could not be answered without manual arithmetic. This test is
+// the answer: any change to the expression coefficients, the token
+// decomposition, or the quota conversion now fails loudly.
+func TestTieredCacheBillingMatchesProductionFormula(t *testing.T) {
+	// Production formula for claude-sonnet-5-5 / claude-opus-5-5.
+	// Coefficients are $/1,000,000 tokens:
+	//   input $0.15  completion $0.35  cache-write $0.05  cache-read $0.01
+	const sonnet55Expr = `tier("base", p * 0.15 + c * 0.35 + cc * 0.05 + cr * 0.01)`
+
+	info := makeRelayInfo(sonnet55Expr, 1.0, 37360, 0)
+
+	// Real request from production (user-reported cache complaint):
+	// prompt 37360, completion 789, cache-read 92602, cache-write 19533.
+	//   p*0.15   = 5,604.00
+	//   c*0.35   =   276.15
+	//   cc*0.05  =   976.65
+	//   cr*0.01  =   926.02
+	//   total    = 7,782.82  -> quota = 7782.82/1M * 500,000 = 3891.41 -> 3891
+	params := billingexpr.TokenParams{
+		P: 37360, C: 789, CR: 92602, CC: 19533,
+	}
+	ok, quota, _ := TryTieredSettle(info, params)
+	if !ok {
+		t.Fatal("expected tiered settle for the production formula")
+	}
+	if quota != 3891 {
+		t.Fatalf("quota = %d, want 3891 (production row). "+
+			"Cache pricing regressed — check the expression coefficients and "+
+			"the token decomposition in tryTieredSettleParams.", quota)
+	}
+
+	// Cache reads must be priced FAR below input, or the cache is pointless.
+	// 0.01 vs 0.15 = 15x cheaper. Pin it so a coefficient edit can't silently
+	// make cache more expensive than fresh input.
+	cacheOnly := billingexpr.TokenParams{P: 0, C: 0, CR: 1_000_000}
+	_, cacheQuota, _ := TryTieredSettle(makeRelayInfo(sonnet55Expr, 1.0, 0, 0), cacheOnly)
+	inputOnly := billingexpr.TokenParams{P: 1_000_000, C: 0}
+	_, inputQuota, _ := TryTieredSettle(makeRelayInfo(sonnet55Expr, 1.0, 0, 0), inputOnly)
+	if cacheQuota >= inputQuota {
+		t.Fatalf("cache read (%d) must be cheaper than input (%d)", cacheQuota, inputQuota)
+	}
+	// And the ratio should be the intended 15x, not something accidental.
+	if inputQuota != cacheQuota*15 {
+		t.Fatalf("cache discount drift: input %d / cache %d = %d, want 15x",
+			inputQuota, cacheQuota, inputQuota/cacheQuota)
+	}
+}

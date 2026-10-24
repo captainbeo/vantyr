@@ -354,6 +354,13 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		return hosttypes.PriceData{}, err
 	}
 
+	// The expression's $/1M coefficients already carry the model's input
+	// price; expose the config-side model ratio + cache ratios purely for
+	// logging so the dashboard reports them instead of 0.
+	modelRatioForLog, _, _ := ratio_setting.GetModelRatio(billingModelName)
+	tieredCacheRatio, _ := ratio_setting.GetCacheRatio(billingModelName)
+	tieredCacheCreationRatio, _ := ratio_setting.GetCreateCacheRatio(billingModelName)
+
 	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info)
 	if err != nil {
 		return hosttypes.PriceData{}, err
@@ -415,10 +422,20 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	info.TieredBillingSnapshot = snapshot
 	info.BillingRequestInput = &requestInput
 
+	// Surface the config cache ratios + model ratio for LOGGING even though
+	// this path prices them inside the expression rather than via ratios.
+	// Without this the log records cache_ratio=0 for every tiered model and
+	// the dashboard shows "no cache" while cache reads are in fact billed
+	// (verified 2026-10-25: a real sonnet-5-5 row billed exactly p*0.15 +
+	// c*0.35 + cc*0.05 + cr*0.01). Values come from the same config maps the
+	// per-token path uses, so the panel reports what the operator configured.
 	priceData := hosttypes.PriceData{
-		FreeModel:         freeModel,
-		GroupRatioInfo:    groupRatioInfo,
-		QuotaToPreConsume: preConsumedQuota,
+		FreeModel:          freeModel,
+		GroupRatioInfo:     groupRatioInfo,
+		QuotaToPreConsume:  preConsumedQuota,
+		ModelRatio:         modelRatioForLog,
+		CacheRatio:         tieredCacheRatio,
+		CacheCreationRatio: tieredCacheCreationRatio,
 	}
 
 	logger.LogDebug(c, "model_price_helper_tiered result: model=%s preConsume=%d quotaBeforeGroup=%.2f groupRatio=%.2f tier=%s", billingModelName, preConsumedQuota, quotaBeforeGroup, groupRatioInfo.GroupRatio, trace.MatchedTier)
