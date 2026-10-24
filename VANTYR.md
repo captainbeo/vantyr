@@ -32,7 +32,10 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
   Subscription (Codex)", one OAuth-account JSON per key slot, multi-key
   `random`. Claude accounts = Sub2API channel pointing at the sidecar
   (higher priority), seller Claude channels as fallback. Sellers = "New
-  API" type 60 channels, their base URL + key.
+  API" type 60 channels, their base URL + key. Kiro accounts = the
+  `kiro-proxy` sidecar (see "Kiro account pool" below) registered as a
+  channel, base URL `http://kiro-proxy:8080`, the sidecar's API key as the
+  channel key, higher priority than seller Claude fallbacks.
 - Pricing: Operation Settings → model ratios; every sold model needs a
   price. Group ratio `default` = 1.0; margin on seller-sourced usage is set
   via channel group multipliers.
@@ -54,6 +57,46 @@ source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
 - [ ] SMTP credentials
 - [x] Turnstile site/secret keys (live 2026-10-06, see ops log)
 - [ ] sub2api `SECRET_KEY` for its admin/cookie flows
+- [ ] `KIRO_PROXY_ADMIN_PASSWORD` (strong random; admin panel is
+      loopback-only)
+
+## Kiro account pool (kiro-proxy sidecar)
+
+Kiro accounts are not wired into the Go backend. They live behind a
+sidecar that exposes the pool as an Anthropic/OpenAI-compatible endpoint,
+and the gateway points a channel at it — the same pattern as sub2api.
+
+- Upstream: https://github.com/tanu360/kiro-reverse-api (MIT). No upstream
+  tags or releases exist, so the image is pinned by digest:
+  `ghcr.io/tanu360/kiro-reverse-api@sha256:68425f26…` (source commit
+  `9290b35`, 2026-10-10). Review the intervening upstream history before
+  any re-pin, same as the New API re-pin gate. Do not track `:latest`.
+- Endpoints: Anthropic `/v1/messages`, OpenAI `/v1/chat/completions`,
+  OpenAI `/v1/responses`, `/v1/models`. Because it speaks Anthropic
+  natively, register it as a **type 14 "Anthropic"** channel (base URL
+  `http://kiro-proxy:8080`, no version suffix) rather than type 60; a type
+  60 "New API" channel works too if the OpenAI path is preferred.
+- Data: `./data/kiro-proxy/kiro.db` (bind mount). Holds OAuth tokens and
+  the admin password hash — treat as secret, never commit, back up like the
+  gateway DB. Keep the directory `0700`.
+- Accounts: add via `http://127.0.0.1:8080/admin` (loopback only). Supported
+  auth: AWS Builder ID, IAM Identity Center, SSO token, credentials JSON.
+  Then enable Settings → API Settings and create a client key for the
+  channel.
+- Pool behavior: round-robin per model, auto token refresh, 5-minute
+  cooldown on 429, hourly recovery scan for exhausted monthly quota,
+  auto-disable on 403 suspension.
+- Health: `GET /health`; compose healthcheck required before the gateway
+  accepts the channel's traffic.
+- Compliance note (owner decision required): Kiro is an AWS product and its
+  terms do not publish an authorization for re-serving subscription quota
+  behind a commercial API. This is the highest-ToS-risk channel in the
+  stack. Keep the operator circle small and record the owner's written
+  decision before enabling live traffic.
+
+## Secrets checklist for R5 (live)
+
+- [ ] `SESSION_SECRET`, `CRYPTO_SECRET` (32+ random bytes each)
 
 ## AGPL obligations (live)
 

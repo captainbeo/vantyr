@@ -171,6 +171,35 @@ services:
   # sub2api (Claude OAuth accounts → Anthropic-compatible API) is added at
   # Phase R2 once its image and credential handling are configured.
 
+  # kiro-proxy — Kiro account pool → Anthropic/OpenAI-compatible API.
+  # Sidecar that turns the operator's authorized Kiro accounts into the
+  # Opus+Sonnet primary pool. Registered in the gateway as a channel; loopback
+  # only (Caddy/gateway reach it over the vantyr network). Pinned image digest
+  # below; see VANTYR.md for the upstream review note.
+  kiro-proxy:
+    image: ghcr.io/tanu360/kiro-reverse-api@sha256:68425f261983afa228db1a8f18a26ae5a83862636cbac24ed644e3cfd1c8505f
+    container_name: vantyr-kiro-proxy
+    restart: unless-stopped
+    environment:
+      - DATA_DIR=/app/state
+      - LOG_LEVEL=${KIRO_PROXY_LOG_LEVEL:-info}
+      # Admin-panel password; strong random value from .env (never committed).
+      - ADMIN_PASSWORD=${KIRO_PROXY_ADMIN_PASSWORD:?set KIRO_PROXY_ADMIN_PASSWORD in .env}
+    ports:
+      # Loopback only — admin panel + API must not be reachable off-host.
+      - "127.0.0.1:${KIRO_PROXY_PORT:-8080}:8080"
+    volumes:
+      # kiro.db holds OAuth tokens + admin creds; private bind mount, never commit.
+      - ./data/kiro-proxy:/app/state
+    networks:
+      - vantyr
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pg_data:
   redis_data:
