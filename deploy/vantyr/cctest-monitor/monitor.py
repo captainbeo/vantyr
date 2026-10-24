@@ -2274,7 +2274,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name)
     if pin_key:
         pin_base = standby.get("base_url") or "https://api.a6api.com"
-        pre_verdict = do_check(cctest, pin_base, pin_key, model)
+        pre_verdict, _pred = do_check(cctest, pin_base, pin_key, model)
         LOG.info("[pin] pre-promotion verify %s (%s) direct -> %s", standby_name, model, pre_verdict)
         st_state = state.setdefault(
             standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
