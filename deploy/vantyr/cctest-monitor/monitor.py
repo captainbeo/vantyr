@@ -1108,17 +1108,22 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     errors = gateway.count_logs(5, channel_id, window_minutes)
     if errors is None:
         return None
+    # When a latency config is enabled, the all-failures early-return must NOT
+    # fire: raw type=5 counts include benign 429s / client aborts that New API
+    # already retried (3,692 such rows exist in production). A healthy pin in
+    # a quiet window with one benign 429 would otherwise be rotated. With the
+    # config armed, defer to pin_latency_sick, which counts only hard 5xx
+    # content — that is the "catastrophic evidence" the circuit breaker's
+    # severe-only promise depends on (audit finding 2026-10-24). The raw
+    # early-return stays for the legacy config-less path only.
+    if latency_cfg and latency_cfg.get("enabled"):
+        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
     if errors > 0:
         successes = gateway.count_logs(2, channel_id, window_minutes)
         if successes is None:
             return None
         if successes == 0:
             return True
-    # No hard failures (or errors with some successes): fall through to the
-    # degraded-merchant signal, which catches slow/flaky/erroring merchants
-    # the error-vs-success type check structurally cannot see.
-    if latency_cfg and latency_cfg.get("enabled"):
-        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
     return False
 
 
@@ -2364,21 +2369,29 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
         )
         record_verdict(st_state, model, pre_verdict)
-        pre_checked = True
-        # A direct pre-promotion check must PASS to enable the pin. A bad
-        # verdict OR an inconclusive one (None — cctest unreachable, key
-        # rejected, or the check couldn't run) both refuse the promotion:
-        # inconclusive is not proof of genuineness. Before 2026-10-24 this
-        # let any standby through because the tuple bug made None truthy;
-        # keeping None == refuse preserves the "no unverified merchant ever
-        # serves traffic" rule the pre-verify exists to enforce.
-        if pre_verdict not in PASS_VERDICTS:
-            reason = "FAILED" if pre_verdict in BAD_VERDICTS else "INCONCLUSIVE"
-            LOG.warning("[pin] %s %s pre-promotion verify for %s — NOT enabled", standby_name, reason, model)
+        if pre_verdict in BAD_VERDICTS:
+            # Confirmed bad: never enable.
+            LOG.warning("[pin] %s FAILED pre-promotion verify for %s — NOT enabled", standby_name, model)
             bad_marks[standby_name] = time.time()
             state["bad_standbys"][model] = bad_marks
-            discord_alert(discord, f"cctest: standby {standby_name} for {model} {reason.lower()} pre-promotion check — NOT enabled")
+            discord_alert(discord, f"cctest: standby {standby_name} for {model} failed pre-promotion check — NOT enabled")
             return
+        if pre_verdict in PASS_VERDICTS:
+            pre_checked = True
+        else:
+            # INCONCLUSIVE (cctest unreachable, or the key lacks the model
+            # permission — HTTP 403 model_not_allowed). Do NOT refuse: a
+            # direct-check limitation is not evidence of fakeness, and
+            # refusing here deadlocked claude-sonnet-5-5 into zero serving
+            # paths on 2026-10-24 (every standby's direct key returned None,
+            # so no pin was ever enabled and nothing re-tried). Fall through
+            # to the gateway-routed enable-then-verify path below: the pin is
+            # enabled, then verified through the real customer route, and
+            # demoted immediately on a bad verdict. "No unverified merchant
+            # serves traffic" still holds — verification just moves after
+            # the enable, exactly as it did before direct checks existed.
+            LOG.warning("[pin] %s pre-promotion verify inconclusive for %s — "
+                        "falling back to gateway-routed verify after enable", standby_name, model)
 
     # Enable after verification (or immediately when direct check wasn't
     # possible — fail-open, the old behavior for un-revealable pins).

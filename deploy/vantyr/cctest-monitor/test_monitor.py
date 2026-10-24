@@ -443,27 +443,34 @@ def test_promotion_refused_when_pre_verify_inconclusive():
         def reveal_key(self, tid):
             return "sk-test-key"
 
-    for label, cc, want_bad_mark in (
-        ("inconclusive", NoVerdictCC(), True),
-    ):
-        chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
-        state = {"a6pin-fable-5": {
-            "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
-            "quarantined": True, "model": "claude-fable-5"}}
-        gw = FakeGW(chs)
-        m.RUNTIME = {"a6m": FakeA6MWithKey()}
-        try:
-            with hermetic_market():
-                m.run_cycle(gw, cc, [("a6pin", "https://api.a6api.com", "sk-pin")],
-                            ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
-        finally:
-            m.RUNTIME = None
-        # The standby must NOT have been enabled, whatever else happened.
-        assert (21, 1) not in gw.writes, (label, gw.writes)
-        assert gw.channels[1]["status"] == 2, (label, gw.channels[1])
-        if want_bad_mark:
-            marks = state.get("bad_standbys", {}).get("claude-fable-5", {})
-            assert "a6pin-fable-5-1169" in marks, (label, marks)
+    # Inconclusive direct check (key lacks the model / cctest unreachable)
+    # must NOT be refused and must NOT be claimed as "pre-verified PASSED":
+    # it falls back to the gateway-routed enable-then-verify path. The pin
+    # is enabled, then verified through the real route, and demoted on a bad
+    # gateway verdict.
+    chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+    state = {"a6pin-fable-5": {
+        "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+        "quarantined": True, "model": "claude-fable-5"}}
+    gw = FakeGW(chs)
+    m.RUNTIME = {"a6m": FakeA6MWithKey()}
+    try:
+        with hermetic_market():
+            m.run_cycle(gw, NoVerdictCC(), [("a6pin", "https://api.a6api.com", "sk-pin")],
+                        ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    finally:
+        m.RUNTIME = None
+    # Enabled (fallback). The gateway-routed verify also returned None
+    # (inconclusive — not a pass, not a fail), so the pin STAYS enabled
+    # pending the next cycle's re-check; it was NOT demoted, but critically
+    # it was also NOT marked as a verified pass. This is the fail-open path
+    # that keeps a model from going dark when the direct key can't check it.
+    assert (21, 1) in gw.writes, gw.writes
+    assert gw.channels[1]["status"] == 1, gw.channels[1]
+    # and it must NOT be recorded as a genuine pass
+    entry = (state.get("a6pin-fable-5-1169", {}).get("last_verdicts", {})
+             .get("claude-fable-5", {}))
+    assert entry.get("verdict") != "official", entry
 
 
 def test_do_check_returns_verdict_not_tuple():
@@ -1665,6 +1672,63 @@ def test_sick_pin_rotation_in_cycle():
         ("claude", "gpt"), 168, threshold_for, 3, True, None, state2,
     )
     assert chs2[0]["status"] == 1, chs2[0]  # still active
+
+
+def test_circuit_breaker_ignores_sparse_benign_errors():
+    """REGRESSION GUARD (audit finding 2026-10-24): the breaker's severe-only
+    promise would be void if the pin_is_sick early-return fired first. A
+    healthy pin with a handful of benign 429s in a quiet window must NOT be
+    rotated by the breaker. Raw type=5 counts include 429s and client aborts;
+    only hard 5xx evidence may trip the severe path."""
+
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.80}
+
+    class QuietBenignGW(FakeGW):
+        # 2 benign 429s, 1 success — a healthy pin having a quiet 15 min.
+        def __init__(self, channels, ch_id):
+            super().__init__(channels)
+            self._cid = ch_id
+
+        def count_logs(self, log_type, channel_id, window_minutes):
+            if channel_id != self._cid:
+                return 0
+            return 2 if log_type == 5 else 1
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=429, rate limited"}] * 2
+
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return [_row("eof", 900)]
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1
+    chs[0]["id"] = 20
+    gw = QuietBenignGW(chs, 20)
+    state = {}
+    m.RUNTIME = {
+        "gateway": gw, "cctest": PassCC(),
+        "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        "enforce": True, "discord": None, "state": state, "seller_registry": {},
+    }
+    try:
+        with hermetic_market():
+            m.circuit_breaker_tick(cfg, 15)
+    finally:
+        m.RUNTIME = None
+    # healthy pin must still be active; nothing was rotated
+    assert chs[0]["status"] == 1, chs[0]
+    assert (21, 1) not in gw.writes, gw.writes
 
 
 def test_circuit_breaker_rotates_catastrophic_pin_only():
