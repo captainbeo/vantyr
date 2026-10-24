@@ -2434,7 +2434,19 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         if candidate is None:
             LOG.warning("[%s] quarantined but no eligible model to re-test", name)
             return
-        recheck_hours = 8 if ch_state.get("permanent") else 2
+        # Owner rule 2026-10-24: permanent (confirmed-fake) pins re-check
+        # every 3h, same cadence class as normal quarantine (2h). Both are
+        # env-tunable so the cadence can change without a code deploy.
+        def _recheck_h(var, default):
+            try:
+                return max(1, int(os.environ.get(var, str(default))))
+            except (TypeError, ValueError):
+                return default
+        recheck_hours = (
+            _recheck_h("QUARANTINE_RECHECK_PERMANENT_HOURS", 3)
+            if ch_state.get("permanent")
+            else _recheck_h("QUARANTINE_RECHECK_HOURS", 2)
+        )
         recheck_seconds = recheck_hours * 3600
         now = time.time()
         last_recheck = ch_state.get("last_quarantine_check", 0)

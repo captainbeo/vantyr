@@ -135,6 +135,9 @@ services:
       - A6_MANAGE_TOKEN=${CCTEST_A6_MANAGE_TOKEN:-}
       - A6_MANAGE_USER=${CCTEST_A6_MANAGE_USER:-}
       - SICK_WINDOW_MINUTES=${CCTEST_SICK_WINDOW_MINUTES:-60}
+      # Quarantine re-check cadence (hours). Owner rule 2026-10-24.
+      - QUARANTINE_RECHECK_HOURS=${CCTEST_QUARANTINE_RECHECK_HOURS:-2}
+      - QUARANTINE_RECHECK_PERMANENT_HOURS=${CCTEST_QUARANTINE_RECHECK_PERMANENT_HOURS:-3}
       # Degraded-merchant auto-rotation (2026-10-24). Default off; arm by
       # setting CCTEST_LATENCY_ROTATION_ENABLED=true in .env then
       # `docker compose up -d cctest-monitor` (recreate — restart does NOT
