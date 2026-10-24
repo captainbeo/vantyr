@@ -1356,7 +1356,7 @@ def _run_action_verify_locked(body, channel_name, model):
         pin_key = _pin_reveal_key(rt.get("a6m"), channel_name)
         if pin_key:
             pin_base = channel.get("base_url") or "https://api.a6api.com"
-            verdict, _prediction = do_check(rt["cctest"], pin_base, pin_key, upstream)
+            verdict = do_check(rt["cctest"], pin_base, pin_key, upstream)
             checked_direct = True
             LOG.info("[action] verify %s direct against %s -> %s", channel_name, pin_base, verdict)
         else:
@@ -1384,7 +1384,7 @@ def _run_action_verify_locked(body, channel_name, model):
             return 400, {"error": f"channel {channel_name!r} has no usable key and is not in SELLER_CHANNELS"}
         base_url, seller_key = entry
         check_name = model if is_gateway_routed(base_url) else upstream
-        verdict, _prediction = do_check(rt["cctest"], base_url, seller_key, check_name)
+        verdict = do_check(rt["cctest"], base_url, seller_key, check_name)
 
     # Record + apply the verdict against the channel we actually checked.
     # Direct checks need no gateway-attribution hop: the point is that the
@@ -1854,6 +1854,26 @@ def main():
     # minutes, independent of the (expensive) per-cycle cctest checks.
     if a6m is not None:
         start_sync_loop(a6m, sync_interval_minutes)
+    # Severe-degradation circuit breaker (owner ask 2026-10-24): the hourly
+    # cycle catches a bad merchant within the hour, but a pin failing ~all
+    # requests (the ch25 case: 96% hard errors) costs real users that whole
+    # window. This watchdog reuses the exact rotation path with a SEVERE-ONLY
+    # config on a short interval, so catastrophic pins rotate in minutes, not
+    # an hour. Gated on enforce AND the latency flag being armed; fail-open.
+    circuit_cfg = {
+        "enabled": latency_cfg.get("enabled") and os.environ.get(
+            "CIRCUIT_BREAKER_ENABLED", "true").lower() in ("1", "true", "yes"),
+        # severe-only thresholds: trip only on catastrophic evidence
+        "min_samples": max(1, int(os.environ.get("CIRCUIT_MIN_SAMPLES", "15"))),
+        "client_gone_ratio": float(os.environ.get("CIRCUIT_CLIENT_GONE_RATIO", "0.50")),
+        "frt_ms_threshold": 10**12,     # latency alone never trips the breaker
+        "hang_threshold": 10**9,        # hangs alone never trip it either
+        "error_ratio_threshold": float(os.environ.get("CIRCUIT_ERROR_RATIO", "0.80")),
+    }
+    circuit_window = max(1, int(os.environ.get("CIRCUIT_WINDOW_MINUTES", "15")))
+    circuit_interval = max(1, int(os.environ.get("CIRCUIT_INTERVAL_MINUTES", "5")))
+    if circuit_cfg["enabled"] and enforce:
+        start_circuit_breaker(circuit_cfg, circuit_window, circuit_interval)
     while True:
         try:
             run_cycle(
@@ -1892,6 +1912,69 @@ def start_sync_loop(a6m, interval_minutes):
         daemon=True, name="cctest-a6-sync",
     ).start()
     LOG.info("A6 key sync loop started (every %dm)", interval_minutes)
+
+
+def circuit_breaker_tick(circuit_cfg, window_minutes):
+    """One severe-degradation sweep. Reuses the normal rotation path with a
+    severe-only config: only catastrophic evidence trips it (>=80% hard
+    errors, or >=50% abandoned streams), so a merely-marginal merchant waits
+    for the regular hourly cycle. Returns the number of rotations attempted.
+
+    Mutation-locked like the cycle's rotation: an operator promote/verify
+    landing mid-sweep would race it. A busy lock skips this tick.
+    """
+    rt = RUNTIME
+    if rt is None or not rt.get("enforce"):
+        return 0
+    if not _MUTATION_LOCK.acquire(blocking=False):
+        LOG.info("[circuit] another rotation is in flight — skipping this tick")
+        return 0
+    try:
+        channels = rt["gateway"].list_channels()
+        active_pins = {}
+        for ch in channels:
+            if not (is_pinned_channel(ch.get("name") or "")
+                    and int(ch.get("status") or 0) == CHANNEL_ENABLED):
+                continue
+            for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
+                active_pins.setdefault(m, ch)
+        _run_sick_rotation(
+            rt["gateway"], rt["cctest"], rt["sellers"], active_pins, rt["state"],
+            rt["discord"], True, window_minutes, rt.get("seller_registry"),
+            latency_cfg=circuit_cfg,
+        )
+        save_state(rt["state"])
+        return len(active_pins)
+    except Exception:
+        LOG.exception("[circuit] tick failed")
+        return 0
+    finally:
+        _MUTATION_LOCK.release()
+
+
+def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes):
+    LOG.info(
+        "[circuit] severe-degradation breaker started: every %dm over a %dm window "
+        "(error>=%.0f%% or gone>=%.0f%%, min %d)",
+        interval_minutes, window_minutes, circuit_cfg["error_ratio_threshold"] * 100,
+        circuit_cfg["client_gone_ratio"] * 100, circuit_cfg["min_samples"],
+    )
+    while True:
+        time.sleep(interval_minutes * 60)
+        try:
+            n = circuit_breaker_tick(circuit_cfg, window_minutes)
+            if n:
+                LOG.debug("[circuit] swept %d active pin(s)", n)
+        except Exception:
+            LOG.exception("[circuit] loop tick failed")
+
+
+def start_circuit_breaker(circuit_cfg, window_minutes, interval_minutes):
+    threading.Thread(
+        target=circuit_breaker_loop,
+        args=(circuit_cfg, window_minutes, interval_minutes),
+        daemon=True, name="cctest-circuit-breaker",
+    ).start()
 
 
 def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
@@ -2271,20 +2354,30 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     # a pin whose key can't be revealed falls back to the old enable-first
     # path (fail-open, better than leaving the model dark).
     pre_verdict = None
+    pre_checked = False
     pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name)
     if pin_key:
         pin_base = standby.get("base_url") or "https://api.a6api.com"
-        pre_verdict, _pred = do_check(cctest, pin_base, pin_key, model)
+        pre_verdict = do_check(cctest, pin_base, pin_key, model)
         LOG.info("[pin] pre-promotion verify %s (%s) direct -> %s", standby_name, model, pre_verdict)
         st_state = state.setdefault(
             standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
         )
         record_verdict(st_state, model, pre_verdict)
-        if pre_verdict in BAD_VERDICTS:
-            LOG.warning("[pin] %s FAILED pre-promotion verify for %s — NOT enabled", standby_name, model)
+        pre_checked = True
+        # A direct pre-promotion check must PASS to enable the pin. A bad
+        # verdict OR an inconclusive one (None — cctest unreachable, key
+        # rejected, or the check couldn't run) both refuse the promotion:
+        # inconclusive is not proof of genuineness. Before 2026-10-24 this
+        # let any standby through because the tuple bug made None truthy;
+        # keeping None == refuse preserves the "no unverified merchant ever
+        # serves traffic" rule the pre-verify exists to enforce.
+        if pre_verdict not in PASS_VERDICTS:
+            reason = "FAILED" if pre_verdict in BAD_VERDICTS else "INCONCLUSIVE"
+            LOG.warning("[pin] %s %s pre-promotion verify for %s — NOT enabled", standby_name, reason, model)
             bad_marks[standby_name] = time.time()
             state["bad_standbys"][model] = bad_marks
-            discord_alert(discord, f"cctest: standby {standby_name} for {model} failed pre-promotion check — NOT enabled")
+            discord_alert(discord, f"cctest: standby {standby_name} for {model} {reason.lower()} pre-promotion check — NOT enabled")
             return
 
     # Enable after verification (or immediately when direct check wasn't
@@ -2296,21 +2389,21 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
         return
     LOG.warning("[pin] promoted %s for %s — %s", standby_name, model,
-                "pre-verified" if pre_verdict else "verifying now")
-    if pre_verdict:
+                "pre-verified" if pre_checked else "verifying now")
+    if pre_checked:
         discord_alert(discord, f"cctest: promoted pre-verified standby pin {standby_name} for {model}")
     else:
         discord_alert(discord, f"cctest: promoted standby pin {standby_name} for {model}; verifying authenticity now")
 
     # The post-enable check confirms routing actually lands on this pin
     # (gateway-routed). Skipped when we already direct-verified — redundant.
-    if pre_verdict:
+    if pre_checked:
         LOG.warning("[pin] %s PASSED pre-promotion verification for %s — active pin", standby_name, model)
         bad_marks.pop(standby_name, None)
         state["bad_standbys"][model] = bad_marks
         return
     check_name = model
-    verdict, _prediction = do_check(cctest, base_url, seller_key, check_name)
+    verdict = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[pin] standby verification %s (%s) -> %s", standby_name, check_name, verdict)
     st_state = state.setdefault(
         standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
@@ -2495,7 +2588,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             return
         if not is_pinned_channel(name):
             # Non-pin quarantined channels keep the old gateway-routed re-test.
-            verdict, _prediction = do_check(cctest, base_url, seller_key, candidate)
+            verdict = do_check(cctest, base_url, seller_key, candidate)
             LOG.info("[%s] quarantine re-test %s -> %s", name, candidate, verdict)
             record_verdict(ch_state, candidate, verdict)
             ch_state["last_quarantine_check"] = now
@@ -2529,7 +2622,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             LOG.info("[%s] quarantine re-check skipped — no A6 key for merchant", name)
             return
         pin_base = channel.get("base_url") or "https://api.a6api.com"
-        verdict, _prediction = do_check(cctest, pin_base, pin_key, candidate)
+        verdict = do_check(cctest, pin_base, pin_key, candidate)
         LOG.info("[%s] quarantine re-check %s direct -> %s", name, candidate, verdict)
         record_verdict(ch_state, candidate, verdict)
         ch_state["last_quarantine_check"] = now
@@ -2570,7 +2663,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     if removed:
         removed_candidate = sorted(removed.keys())[0]
         mapping = parse_model_mapping(channel.get("model_mapping"))
-        verdict, _prediction = do_check(
+        verdict = do_check(
             cctest, base_url, seller_key,
             mapping.get(removed_candidate, removed_candidate),
         )
@@ -2625,7 +2718,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     mapping = parse_model_mapping(channel.get("model_mapping"))
     upstream_candidate = mapping.get(candidate, candidate)
     check_name = candidate if is_gateway_routed(base_url) else upstream_candidate
-    verdict, _prediction = do_check(cctest, base_url, seller_key, check_name)
+    verdict = do_check(cctest, base_url, seller_key, check_name)
     LOG.info("[%s] check %s (upstream %s) -> %s", name, check_name, upstream_candidate, verdict)
 
     # Gateway-routed attribution: a check labeled for this channel may
@@ -2796,13 +2889,23 @@ def restore_model(gateway, ch, ch_state, name, model, enforce, discord):
 
 
 def do_check(cctest, base_url, seller_key, model):
-    """Returns (verdict, prediction). verdict is the category string or None
-    (inconclusive); prediction is the model cctest actually detected (from
-    attribution.prediction) or None. Only process_verdict acts on the
-    prediction — every other caller unpacks and ignores it.
+    """Returns the verdict category as a string, or None when inconclusive.
+
+    DELIBERATELY A SINGLE VALUE (refactor 2026-10-24). This used to return
+    (verdict, prediction), and one caller assigned the whole tuple to a
+    variable it then tested with `if pre_verdict:` / `in BAD_VERDICTS`.
+    A non-empty tuple is truthy and matches no verdict set, so a FAILED
+    pre-promotion check read as a PASS and promoted the merchant anyway
+    (live: a6pin-opus-5-5-4756 re-promoted onto 96%-failing traffic while
+    the healthy pin was rotated away). The prediction was never used by
+    any caller — only by this function's own tier logic — so returning one
+    value removes the whole class of unpacking mistakes.
+
+    Callers must treat None as INCONCLUSIVE: never a pass, never a rotation
+    trigger. See pin_latency_sick / process_verdict for that contract.
 
     Accepted-upgrade policy (owner rule 2026-10-23): an attr_swapped verdict
-    is reclassified to a PASS verdict before any caller sees it:
+    is reclassified to a PASS verdict here, before any caller sees it:
       - predicted model ranks strictly HIGHER on the tier ladder →
         attr_upgraded (the customer got more than they paid for);
       - predicted model is the SAME rung (spelling alias, e.g. cctest's
@@ -2813,7 +2916,7 @@ def do_check(cctest, base_url, seller_key, model):
     match normalizes both)."""
     result = cctest.check(base_url, seller_key, model)
     if result is None:
-        return None, None
+        return None
     verdict = cctest.verdict_category(result)
     prediction = cctest.prediction(result) if hasattr(cctest, "prediction") else None
     if verdict == "attr_swapped":
@@ -2823,14 +2926,14 @@ def do_check(cctest, base_url, seller_key, model):
                 "[upgrade] expected %s but served %s — strictly higher tier, accepted",
                 model, prediction,
             )
-            return "attr_upgraded", prediction
+            return "attr_upgraded"
         if tier == "same":
             LOG.warning(
                 "[alias] expected %s, prediction %s — same model (spelling alias), accepted",
                 model, prediction,
             )
-            return "attr_match", prediction
-    return verdict, prediction
+            return "attr_match"
+    return verdict
 
 
 def start_quarantine(gateway, ch_state, channel_id, name, model, verdict, discord):

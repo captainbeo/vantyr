@@ -415,6 +415,88 @@ def test_pinned_standby_checked_with_own_key():
     assert (21, 1) in gw.writes, gw.writes
 
 
+def test_promotion_refused_when_pre_verify_inconclusive():
+    """REGRESSION GUARD (2026-10-24). do_check used to return
+    (verdict, prediction) and the pre-promotion verify assigned the whole
+    tuple, so an inconclusive check (None, None) was truthy, matched no
+    verdict set, and every standby was promoted as "PASSED pre-promotion
+    verification". Live: a6pin-opus-5-5-4756 was re-promoted onto
+    traffic failing 96% while the healthy pin was rotated away.
+
+    Invariant: with the pin key available (a direct check IS possible), a
+    standby is enabled ONLY on an explicit PASS verdict. Inconclusive and
+    bad verdicts both refuse the promotion.
+    """
+    class NoVerdictCC:
+        @staticmethod
+        def check(b, k, mo):
+            return None            # cctest unreachable / no answer
+
+        @staticmethod
+        def verdict_category(r):
+            return None
+
+    class FakeA6MWithKey:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 1169"}]
+
+        def reveal_key(self, tid):
+            return "sk-test-key"
+
+    for label, cc, want_bad_mark in (
+        ("inconclusive", NoVerdictCC(), True),
+    ):
+        chs = [dict(c) for c in PIN_CHANNELS] + [dict(c) for c in CHANNELS]
+        state = {"a6pin-fable-5": {
+            "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
+            "quarantined": True, "model": "claude-fable-5"}}
+        gw = FakeGW(chs)
+        m.RUNTIME = {"a6m": FakeA6MWithKey()}
+        try:
+            with hermetic_market():
+                m.run_cycle(gw, cc, [("a6pin", "https://api.a6api.com", "sk-pin")],
+                            ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        finally:
+            m.RUNTIME = None
+        # The standby must NOT have been enabled, whatever else happened.
+        assert (21, 1) not in gw.writes, (label, gw.writes)
+        assert gw.channels[1]["status"] == 2, (label, gw.channels[1])
+        if want_bad_mark:
+            marks = state.get("bad_standbys", {}).get("claude-fable-5", {})
+            assert "a6pin-fable-5-1169" in marks, (label, marks)
+
+
+def test_do_check_returns_verdict_not_tuple():
+    """do_check must return a single value. Returning a tuple is what let a
+    caller treat (None, None) as a truthy pass and promote an unverified
+    merchant (2026-10-24)."""
+    class CC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    out = m.do_check(CC(), "https://x", "sk", "claude-opus-5-5")
+    assert not isinstance(out, tuple), out
+    assert out == "official", out
+
+    class NoneCC:
+        @staticmethod
+        def check(b, k, mo):
+            return None
+
+        @staticmethod
+        def verdict_category(r):
+            return None
+
+    out = m.do_check(NoneCC(), "https://x", "sk", "claude-opus-5-5")
+    assert not isinstance(out, tuple), out
+    assert out is None, out
+
+
 def test_pinned_standby_model_membership_not_prefix():
     # sonnet-5 and sonnet-5-5 are different models: a sonnet-5 standby set
     # must not include sonnet-5-5 pins (name-prefix collision).
@@ -1585,6 +1667,79 @@ def test_sick_pin_rotation_in_cycle():
     assert chs2[0]["status"] == 1, chs2[0]  # still active
 
 
+def test_circuit_breaker_rotates_catastrophic_pin_only():
+    """The severe-degradation watchdog (circuit_breaker_tick) reuses the
+    rotation path with severe-only thresholds: it rotates a pin failing
+    ~everything, and leaves a merely-marginal pin for the hourly cycle."""
+
+    class CatastrophicGW(SickGW):
+        # 90% hard errors, well over the 80% breaker threshold.
+        def __init__(self, channels, ch_id):
+            super().__init__(channels, {ch_id: 90}, {ch_id: 10})
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=502"}] * (self.error_counts.get(channel_id) or 0)
+
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+
+    class MarginalGW(FakeGW):
+        # 25% errors — under the 80% breaker threshold (would trip the hourly
+        # 5% error_ratio rule, but NOT the breaker).
+        def __init__(self, channels, ch_id):
+            super().__init__(channels)
+            self._cid = ch_id
+
+        def count_logs(self, log_type, channel_id, window_minutes):
+            return 25 if (log_type == 5 and channel_id == self._cid) else 100
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=502"}] * 25
+
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.80}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    def run_once(gw_cls):
+        chs = [dict(c) for c in PIN_CHANNELS]
+        chs[0]["status"] = 1
+        chs[0]["id"] = 20
+        gw = gw_cls(chs, 20)
+        state = {}
+        m.RUNTIME = {
+            "gateway": gw, "cctest": PassCC(),
+            "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+            "enforce": True, "discord": None, "state": state, "seller_registry": {},
+        }
+        try:
+            with hermetic_market():
+                m.circuit_breaker_tick(cfg, 15)
+        finally:
+            m.RUNTIME = None
+        return chs[0], gw
+
+    # catastrophic pin rotates
+    ch0, gw = run_once(CatastrophicGW)
+    assert ch0["status"] == 2, ch0
+    assert (21, 1) in gw.writes, gw.writes
+    # marginal pin does NOT rotate on the breaker (hourly cycle owns it)
+    ch1, gw2 = run_once(MarginalGW)
+    assert ch1["status"] == 1, ch1
+    assert (21, 1) not in gw2.writes, gw2.writes
+
+
 def test_cycle_dedupes_multiple_active_pins():
     # Owner rule: exactly ONE enabled pin per model. When a second pin is
     # manually enabled (e.g. via the channels page), the cycle disables it
@@ -1845,26 +2000,28 @@ def _upgrade_cctest(expected_served):
 
 def test_do_check_reclassifies_upgrade():
     # attr_swapped whose prediction is a strictly higher tier -> attr_upgraded (PASS).
-    verdict, pred = m.do_check(_upgrade_cctest("claude-fable-5-1"),
-                               "https://x", "sk", "claude-opus-5-5")
+    # do_check returns the verdict alone; the prediction is internal to its
+    # tier logic (refactor 2026-10-24 — returning a tuple let a caller treat
+    # (None, None) as truthy and promote an unverified merchant).
+    verdict = m.do_check(_upgrade_cctest("claude-fable-5-1"),
+                         "https://x", "sk", "claude-opus-5-5")
     assert verdict == "attr_upgraded", verdict
-    assert pred == "claude-fable-5-1", pred
     assert verdict in m.PASS_VERDICTS
 
 
 def test_do_check_downgrade_stays_swapped():
     # fable-5-1 served fable-5 is a DOWNGRADE: still attr_swapped (owner ruling).
-    verdict, pred = m.do_check(_upgrade_cctest("claude-fable-5"),
-                               "https://x", "sk", "claude-fable-5-1")
+    verdict = m.do_check(_upgrade_cctest("claude-fable-5"),
+                         "https://x", "sk", "claude-fable-5-1")
     assert verdict == "attr_swapped", verdict
     assert verdict in m.BAD_VERDICTS
 
 
 def test_do_check_top_of_ladder_stays_swapped():
     # astra and fable-5-1 accept nothing; any swap on them is real.
-    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6-astra")
+    verdict = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6-astra")
     assert verdict == "attr_swapped", verdict
-    verdict, _ = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-fable-5-1")
+    verdict = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-fable-5-1")
     assert verdict == "attr_swapped", verdict
 
 
@@ -1877,14 +2034,13 @@ def test_do_check_no_prediction_stays_swapped():
         @staticmethod
         def verdict_category(r):
             return r["verdict"]
-    verdict, pred = m.do_check(CC(), "https://x", "sk", "claude-opus-5-5")
+    verdict = m.do_check(CC(), "https://x", "sk", "claude-opus-5-5")
     assert verdict == "attr_swapped", verdict
-    assert pred is None
 
 
 def test_do_check_gpt_upgrade():
     # gpt-6-sol served gpt-6-astra -> upgrade.
-    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-astra"), "https://x", "sk", "gpt-6-sol")
+    verdict = m.do_check(_upgrade_cctest("gpt-6-astra"), "https://x", "sk", "gpt-6-sol")
     assert verdict == "attr_upgraded", verdict
 
 
@@ -1893,15 +2049,15 @@ def test_do_check_alias_prediction_is_match_not_swap():
     # gpt-6-1-sol whose prediction is gpt-6.1-sol (the SAME model) must not
     # stay attr_swapped — quarantining for a spelling alias is a false
     # positive (audit 2026-10-23).
-    verdict, pred = m.do_check(_upgrade_cctest("gpt-6.1-sol"), "https://x", "sk", "gpt-6-1-sol")
+    verdict = m.do_check(_upgrade_cctest("gpt-6.1-sol"), "https://x", "sk", "gpt-6-1-sol")
     assert verdict == "attr_match", verdict
     assert verdict in m.PASS_VERDICTS
     # and the reverse direction: upstream name with dot, prediction without
-    verdict, _ = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6.1-sol")
+    verdict = m.do_check(_upgrade_cctest("gpt-6-1-sol"), "https://x", "sk", "gpt-6.1-sol")
     assert verdict == "attr_match", verdict
     # a same-rung Claude prediction likewise: exact stem equality after
     # normalization is a match, not an upgrade or a swap
-    verdict, _ = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-opus-5-5")
+    verdict = m.do_check(_upgrade_cctest("claude-opus-5-5"), "https://x", "sk", "claude-opus-5-5")
     assert verdict == "attr_match", verdict
 
 
