@@ -191,6 +191,40 @@ PIN_CHANNELS = [
 ]
 
 
+import contextlib
+
+
+@contextlib.contextmanager
+def hermetic_market(health=None):
+    """Patch A6Market.health_for for deterministic promote ordering.
+
+    promote_next_standby ranks standbys by LIVE A6 marketplace telemetry
+    (commit f06d2a29c). Without this patch, tests hit the real A6 API and
+    the winner depends on today's live prices (observed 2026-10-24: live
+    3825 price 72000 < 1169's 156000 → 3825 promoted, tests asserting
+    channel-id order fail — and would flip back whenever the market moves).
+
+    Default (health=None): every merchant equally healthy and equally
+    priced, so the sort is stable and the pre-ranking channel order wins —
+    matching the historical test expectations (1169 before 3825).
+    """
+    if health is None:
+        def health(model, our_merchant_ids):
+            return {
+                str(x): {"healthy": True, "success_rate": 10000,
+                         "sample_count": 100, "available": True,
+                         "unlisted": False, "price_micros": 1,
+                         "supplier": "test"}
+                for x in our_merchant_ids
+            }
+    original = m.A6Market.health_for
+    m.A6Market.health_for = lambda self, model, ids: health(model, ids)
+    try:
+        yield
+    finally:
+        m.A6Market.health_for = original
+
+
 def test_pinned_fake_promotes_tested_standby():
     # Enable-first semantics: the standby is enabled, then verified; a
     # fake verification demotes it and marks it bad. The fake active pin
@@ -203,8 +237,9 @@ def test_pinned_fake_promotes_tested_standby():
         "rotation": ["claude-fable-5"], "idx": 0, "fails": 1,
         "quarantined": True, "model": "claude-fable-5",
     }
-    m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    with hermetic_market():
+        m.run_cycle(gw, VerdictCC(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
     # standby 1169 was promoted (enabled) then verified FAKE → demoted
     # (status 2 again) and marked bad WITH a timestamp
     assert (21, 1) in gw.writes, gw.writes   # enable happened
@@ -231,8 +266,9 @@ def test_pinned_standby_promotion_on_pass():
             return r["verdict"]
 
     gw = FakeGW(chs)
-    m.run_cycle(gw, StandbyPass(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    with hermetic_market():
+        m.run_cycle(gw, StandbyPass(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
     # standby 1169 promoted and verified → stays enabled, not marked bad
     assert (21, 1) in gw.writes, gw.writes
     assert (21, 2) not in gw.writes, gw.writes
@@ -278,8 +314,9 @@ def test_pinned_cooldown_recovery():
     gw = FakeGW(chs)
     m.RUNTIME = {"a6m": NoKeyA6M()}
     try:
-        m.run_cycle(gw, CleanNow(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
-                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        with hermetic_market():
+            m.run_cycle(gw, CleanNow(), [("a6pin-fable-5", "https://api.a6api.com", "sk-pin")],
+                        ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
         # Quarantined pin was re-checked directly (no A6 key → skipped) and
         # stayed quarantined; no standby was promoted (the quarantined pin
         # re-check happens first, then the promote path runs for the model).
@@ -368,8 +405,9 @@ def test_pinned_standby_checked_with_own_key():
         ("a6pin-fable-5-1169", "https://vantyr.xyz", "sk-RELAY"),
         ("a6pin-fable-5-3825", "https://vantyr.xyz", "sk-RELAY"),
     ]
-    m.run_cycle(gw, KeySpy(), sellers, ("claude", "gpt"), 168, threshold_for, 3,
-                True, None, state)
+    with hermetic_market():
+        m.run_cycle(gw, KeySpy(), sellers, ("claude", "gpt"), 168, threshold_for, 3,
+                    True, None, state)
     # verification check + (benign) immediate re-verify of the promoted
     # standby's own entry later in the cycle — at most 2, never more
     assert 1 <= len(seen_keys) <= 2, seen_keys
@@ -1490,18 +1528,18 @@ def test_promote_skips_delisted_merchant():
             return r["verdict"]
 
     # 1169 is unlisted (delisted from the marketplace), 3825 is healthy.
-    m.A6Market.health_for = lambda self, model, ids: {
+    delisted_health = {
         "1169": {"healthy": False, "success_rate": None, "available": False, "unlisted": True, "price_micros": None, "sample_count": 0, "supplier": None},
         "3825": {"healthy": True, "success_rate": 10000, "available": True, "unlisted": False, "price_micros": 1, "sample_count": 100, "supplier": "x"},
     }
-    m.promote_next_standby(gw, PassCC(), chs[0], "https://api.a6api.com", "sk",
-                           "claude-fable-5", True, None, state, chs, {})
+    with hermetic_market(lambda model, ids: delisted_health):
+        m.promote_next_standby(gw, PassCC(), chs[0], "https://api.a6api.com", "sk",
+                               "claude-fable-5", True, None, state, chs, {})
     # The healthy 3825 was promoted (enabled), not the delisted 1169.
+    # The context manager restores the ORIGINAL A6Market.health_for — no
+    # leak into later tests.
     assert (22, 1) in gw.writes, gw.writes
     assert (21, 1) not in gw.writes, gw.writes
-    # restore a neutral stub so later tests (e.g. sick rotation expects 1169)
-    # are not affected by this test's delisted-1169 mock
-    m.A6Market.health_for = lambda self, model, ids: {}
 
 
 def test_sick_pin_rotation_in_cycle():
