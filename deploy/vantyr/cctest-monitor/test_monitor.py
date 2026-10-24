@@ -180,6 +180,18 @@ def test_yingz_parse():
     assert bad == []
 
 
+def test_kiro_parse():
+    # kiro is an accepted SELLER_CHANNELS prefix (the kiro-proxy sidecar pool).
+    good = m.parse_seller_channels(
+        "kiro|https://vantyr.xyz|sk-abc",
+        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz", "kiro"))
+    assert good == [("kiro", "https://vantyr.xyz", "sk-abc")]
+    bad = m.parse_seller_channels(
+        "kiro|https://vantyr.xyz|sk-abc",
+        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz"))
+    assert bad == []
+
+
 PIN_CHANNELS = [
     # active pin quarantined by us (status 2) + two standbys (status 2)
     {"id": 20, "name": "a6pin-fable-5", "status": 2, "group": "default",

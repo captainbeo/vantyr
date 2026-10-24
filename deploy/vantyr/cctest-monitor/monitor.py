@@ -1717,7 +1717,7 @@ def main():
         return 1
     sellers = parse_seller_channels(
         os.environ.get("SELLER_CHANNELS", ""),
-        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz"),
+        known_prefixes=("selora", "a6", "a6pin", "mia", "yingz", "kiro"),
     )
     if not sellers:
         park("SELLER_CHANNELS has no valid entries")

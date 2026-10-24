@@ -88,11 +88,26 @@ and the gateway points a channel at it — the same pattern as sub2api.
   auto-disable on 403 suspension.
 - Health: `GET /health`; compose healthcheck required before the gateway
   accepts the channel's traffic.
-- Compliance note (owner decision required): Kiro is an AWS product and its
-  terms do not publish an authorization for re-serving subscription quota
-  behind a commercial API. This is the highest-ToS-risk channel in the
-  stack. Keep the operator circle small and record the owner's written
-  decision before enabling live traffic.
+- Compliance note: Kiro is an AWS product and its terms do not publish an
+  authorization for re-serving subscription quota behind a commercial API.
+  This is the highest-ToS-risk channel in the stack. Keep the operator
+  circle small.
+- **Owner decision (2026-10-25): Kiro is live.** The owner reviewed the AWS
+  ToS exposure above and chose to serve the pool commercially anyway. Risk
+  accepted knowingly; the account is a free "KIRO STUDENT" tier
+  (1000 credits/mo). Also owner-decided: `claude-haiku-5-5` is served by
+  Kiro **only** — no A6 fallback. Consequence: haiku-5-5 has a single
+  channel, so a Kiro quota exhaustion or 403 suspension is a hard customer
+  failure on that model until more accounts are added to the pool.
+- Cache-write pricing is two-tier, following Anthropic's own rule: the
+  configured `CreateCacheRatio` is the **5-minute** write price, and the
+  gateway derives the 1-hour write price as `ratio x 1.6`
+  (`relay/helper/price.go`, `claudeCacheCreation1hMultiplier`). For
+  `claude-haiku-5-5` that means $0.035/1M for 5m writes and $0.056/1M for
+  client-requested 1h writes. This is intended, not a defect — do not
+  "fix" the divergence downward, or 1h writes bill below Anthropic's
+  upstream cost. Kiro defaults every cache to a 5m TTL, so 1h writes are
+  rare but valid.
 
 ## Secrets checklist for R5 (live)
 
