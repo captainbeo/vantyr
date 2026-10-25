@@ -1749,6 +1749,61 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
     assert (21, 1) not in gw.writes, gw.writes
 
 
+def test_recent_error_logs_paginates_past_one_page():
+    """REGRESSION GUARD (audit H1, 2026-10-25). A single capped page
+    undercounted hard errors while the ratio denominator used the TRUE success
+    count, so the 80%-severe breaker could never trip on a busy channel
+    (200 errors / 40 successes / 83% failing read as 'not sick'). This tests
+    the pagination itself, not a fake that bypasses it."""
+
+    class PagingGateway(m.Gateway):
+        """Serves 200 error rows across pages of 100, like the real API."""
+        def __init__(self):
+            super().__init__("http://x", "tok")
+            self.pages_requested = 0
+
+        def _request(self, method, path, body=None):
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(path).query)
+            page = int(q.get("p", ["1"])[0])
+            size = int(q.get("page_size", ["100"])[0])
+            self.pages_requested += 1
+            total = 200
+            start = (page - 1) * size
+            n = max(0, min(size, total - start))
+            items = [{"content": "status_code=502"}] * n
+            return {"success": True, "data": {"items": items, "total": total}}, 200
+
+    gw = PagingGateway()
+    rows = gw.recent_error_logs(1, 15, limit=100)
+    assert rows is not None
+    assert len(rows) == 200, f"paginated {len(rows)} rows, want 200 — page cap truncates"
+    assert gw.pages_requested >= 2, gw.pages_requested
+
+
+def test_dual_spelling_pin_can_be_quarantined():
+    """REGRESSION GUARD (audit H4, 2026-10-25). sync_a6_keys creates pins
+    listing BOTH spellings (gpt-6-1-sol + gpt-6.1-sol). Removing one spelling
+    left the other, so the pin never reached the quarantine branch; the
+    model-removal path was then blocked by its own channel and looped
+    forever. A confirmed-fake dual-spelling pin served indefinitely."""
+    # A pin listing both aliases.
+    ch = {"id": 70, "name": "a6pin-6-1-sol-5151", "status": 1,
+          "group": "default", "models": "gpt-6-1-sol,gpt-6.1-sol"}
+    gw = FakeGW([ch])
+    ch_state = {"model_fails": {"gpt-6-1-sol": 2, "gpt-6.1-sol": 2}}
+    state = {}
+    m.failover_model(
+        gw, ch, ch_state, "a6pin-6-1-sol-5151", "gpt-6-1-sol", "attr_swapped",
+        True, None, [ch], cctest=None, base_url="https://x", seller_key="sk",
+        state=state, seller_registry={},
+    )
+    # Must QUARANTINE (disable the channel), not attempt a model removal.
+    assert (70, 2) in gw.writes, gw.writes
+    assert gw.model_edits == [], gw.model_edits
+    assert ch_state.get("quarantined") is True, ch_state
+
+
 def test_cycle_channel_processing_respects_mutation_lock():
     """REGRESSION GUARD (audit BLOCKER 2026-10-25). The cycle's dedup and
     per-channel processing used to run WITHOUT the mutation lock, so an

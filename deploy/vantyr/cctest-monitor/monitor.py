@@ -358,20 +358,43 @@ class Gateway:
         items = (payload.get("data") or {}).get("items")
         return items if isinstance(items, list) else []
 
-    def recent_error_logs(self, channel_id, window_minutes, limit=50):
+    def recent_error_logs(self, channel_id, window_minutes, limit=50, max_rows=1000):
         """Recent type=5 (error) log rows for one channel, newest first —
         `content` carries the status code (e.g. "status_code=502, ...").
-        Returns a list of row dicts, or None on query failure."""
+        Returns a list of row dicts, or None on query failure.
+
+        PAGINATED (audit H1, 2026-10-25). A single page capped the hard-error
+        count while the denominator used the TRUE success count, so the
+        error ratio was understated and the 80%-severe breaker could never
+        trip on a busy channel: 200 errors / 40 successes (83% failing)
+        read as "not sick". We now page until the window is exhausted, with a
+        hard `max_rows` bound so one pathological channel cannot stall the
+        sweep. Callers that need an exact count must compare against
+        count_logs(5, ...) — pin_latency_sick does.
+        """
         since = int(time.time()) - int(window_minutes) * 60
-        query = urllib.parse.urlencode({
-            "p": 1, "page_size": int(limit), "type": 5,
-            "channel": channel_id, "start_timestamp": since,
-        })
-        payload, status = self._request("GET", f"/api/log/?{query}")
-        if status != 200 or not payload.get("success"):
-            return None
-        items = (payload.get("data") or {}).get("items")
-        return items if isinstance(items, list) else []
+        rows = []
+        page = 1
+        while len(rows) < max_rows:
+            query = urllib.parse.urlencode({
+                "p": page, "page_size": int(limit), "type": 5,
+                "channel": channel_id, "start_timestamp": since,
+            })
+            payload, status = self._request("GET", f"/api/log/?{query}")
+            if status != 200 or not payload.get("success"):
+                return None
+            data = payload.get("data") or {}
+            items = data.get("items")
+            if not isinstance(items, list) or not items:
+                break
+            rows.extend(items)
+            total = data.get("total")
+            if isinstance(total, int) and len(rows) >= total:
+                break
+            if len(items) < int(limit):
+                break
+            page += 1
+        return rows[:max_rows]
 
     def model_used_recently(self, channel_id, model, window_hours, exclude_token=None):
         """Traffic gate: did anyone other than the monitor's own token use
@@ -3005,7 +3028,16 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
     The live re-fetch closes that window: the second removal sees the
     first one's effect and is blocked. Enforce mode only (observe mode
     never mutates, so the race cannot occur)."""
-    remaining = [m for m in (ch.get("models") or "").split(",") if m.strip() and m.strip() != model]
+    # Pool-aware "only entry" test (audit H4, 2026-10-25). Aliases share one
+    # pool: a pin listing BOTH gpt-6-1-sol and gpt-6.1-sol kept a non-empty
+    # `remaining` after removing one spelling, so it took the model-removal
+    # path instead of quarantining. The removal was then blocked by its own
+    # channel (which still lists the sibling spelling), and the cycle repeated
+    # that forever — a confirmed-fake dual-spelling pin could never be
+    # quarantined, only silently kept serving.
+    pool = model_pool_names(model)
+    remaining = [m for m in (ch.get("models") or "").split(",")
+                 if m.strip() and m.strip() not in pool]
     if not remaining:
         LOG.info("[%s] model %s is the only entry; escalating to channel quarantine instead", name, model)
         if enforce:
@@ -3045,7 +3077,7 @@ def failover_model(gateway, ch, ch_state, name, model, verdict, enforce, discord
         other.get("id") != ch.get("id")
         and int(other.get("status") or 0) == CHANNEL_ENABLED
         and any(g in [og.strip() for og in (other.get("group") or "").split(",")] for g in groups)
-        and model in [m.strip() for m in (other.get("models") or "").split(",")]
+        and pool & {m.strip() for m in (other.get("models") or "").split(",")}
         for other in live_channels
     )
     if not covered:
