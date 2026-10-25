@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -464,4 +465,94 @@ func TestSessionRulesInheritOrOverrideGlobalDefault(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestChatCompletionsRulePinsTokenId verifies the built-in "chat completions
+// trace" rule (2026-10-25, user-report fix: OpenAI-format callers of Claude
+// scattered over 17 channels, cache hits ~1.5k crumbs). Design decisions
+// under test: (1) `user` body field first, token_id context fallback;
+// (2) prefer mode — never strict; (3) the built-in defaults are correct.
+func TestChatCompletionsRulePinsTokenId(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	setting := operation_setting.GetChannelAffinitySetting()
+
+	// The rule must exist with the designed shape.
+	var rule *operation_setting.ChannelAffinityRule
+	for i := range setting.Rules {
+		if setting.Rules[i].Name == "chat completions trace" {
+			rule = &setting.Rules[i]
+			break
+		}
+	}
+	require.NotNil(t, rule, "chat completions trace rule must exist")
+	assert.Equal(t, []string{"/v1/chat/completions"}, rule.PathRegex)
+	assert.Equal(t, []string{"^claude-.*$"}, rule.ModelRegex)
+	assert.False(t, rule.SkipRetryOnFailure, "prefer mode: failover must be allowed")
+	assert.NotEqual(t, "strict", rule.SessionMode, "strict mode would strand users on dead merchants")
+
+	// Fallback key source: token_id (context_int). A request without `user`
+	// must still resolve a session key from the API token.
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	body := `{"model":"claude-opus-5-5","messages":[{"role":"user","content":"hi"}]}`
+	ctx.Request.Body = io.NopCloser(strings.NewReader(body))
+	ctx.Set("token_id", 63)
+
+	for _, src := range rule.KeySources {
+		v := extractChannelAffinityValue(ctx, src)
+		if v != "" {
+			// token_id fallback fired (no `user` field in the body)
+			assert.Equal(t, "63", v, "token_id fallback must key the session")
+			break
+		}
+	}
+
+	// And the `user` field takes priority when present.
+	rec2 := httptest.NewRecorder()
+	ctx2, _ := gin.CreateTestContext(rec2)
+	ctx2.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	body2 := `{"model":"claude-opus-5-5","user":"sess-abc-123","messages":[{"role":"user","content":"hi"}]}`
+	ctx2.Request.Body = io.NopCloser(strings.NewReader(body2))
+	ctx2.Set("token_id", 63)
+
+	first := extractChannelAffinityValue(ctx2, rule.KeySources[0])
+	assert.Equal(t, "sess-abc-123", first, "the `user` body field must win over token_id")
+}
+
+// TestChatCompletionsRuleEndToEndStickiness: two requests from the same
+// token route to the SAME remembered channel; when that channel is gone,
+// routing falls through to a healthy one (prefer mode, no error).
+func TestChatCompletionsRuleEndToEndStickiness(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	setting := operation_setting.GetChannelAffinitySetting()
+	var rule *operation_setting.ChannelAffinityRule
+	for i := range setting.Rules {
+		if setting.Rules[i].Name == "chat completions trace" {
+			rule = &setting.Rules[i]
+			break
+		}
+	}
+	require.NotNil(t, rule)
+
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Request.Body = io.NopCloser(strings.NewReader(`{"model":"claude-opus-5-5","messages":[]}`))
+	ctx.Set("token_id", 63)
+
+	// Simulate a previously recorded pin for this session on channel 83.
+	value := extractChannelAffinityValue(ctx, rule.KeySources[1])
+	require.NotEmpty(t, value)
+	cacheKey := buildChannelAffinityCacheKeySuffix(*rule, "claude-opus-5-5", "default", value)
+	cache := getChannelAffinityCache()
+	require.NoError(t, cache.SetWithTTL(cacheKey, 83, time.Minute))
+	t.Cleanup(func() { _, _ = cache.DeleteMany([]string{cacheKey}) })
+
+	// The first attempt must resolve the remembered channel.
+	channelID, found := GetPreferredChannelByAffinity(ctx, "claude-opus-5-5", "default")
+	require.True(t, found)
+	assert.Equal(t, 83, channelID)
 }

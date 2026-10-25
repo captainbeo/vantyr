@@ -86,6 +86,17 @@ var claudeCliPassThroughHeaders = []string{
 	"Anthropic-Version",
 }
 
+// chatCompletionsPassThroughHeaders: the OpenAI-format equivalents for
+// client-identifying headers that the upstream may use for cache-key
+// stability and abuse detection.
+var chatCompletionsPassThroughHeaders = []string{
+	"User-Agent",
+	"X-App",
+	"HTTP-Referer",
+	"X-Title",
+	"OpenAI-Organization",
+}
+
 func buildPassHeaderTemplate(headers []string) map[string]any {
 	clonedHeaders := make([]string, 0, len(headers))
 	clonedHeaders = append(clonedHeaders, headers...)
@@ -147,6 +158,32 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			TTLSeconds:            0,
 			ParamOverrideTemplate: buildPassHeaderTemplate(claudeCliPassThroughHeaders),
 			SkipRetryOnFailure:    true,
+			IncludeUsingGroup:     true,
+			IncludeRuleName:       true,
+			UserAgentInclude:      nil,
+		},
+		{
+			// OpenAI-format callers of Claude models (user-report 2026-10-25:
+			// 114 requests scattered over 17 channels, cache hits ~1.5k crumbs
+			// because the upstream prompt cache is per-merchant). Same session
+			// stickiness the /v1/messages rule gives, keyed on what the OpenAI
+			// format actually carries: the `user` field when the client sets
+			// it, falling back to the Vantyr token id so every request from
+			// one API key pins together. Prefer mode by design: a dead
+			// merchant fails over immediately (the cache is lost either way;
+			// the request must not be) and the fallback becomes the new pin.
+			Name:       "chat completions trace",
+			ModelRegex: []string{"^claude-.*$"},
+			PathRegex:  []string{"/v1/chat/completions"},
+			KeySources: []ChannelAffinityKeySource{
+				{Type: "gjson", Path: "user"},
+				{Type: "context_int", Key: "token_id"},
+			},
+			ValueRegex:            "",
+			TTLSeconds:            3600,
+			ParamOverrideTemplate: buildPassHeaderTemplate(chatCompletionsPassThroughHeaders),
+			SkipRetryOnFailure:    false,
+			SessionMode:           "prefer",
 			IncludeUsingGroup:     true,
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
