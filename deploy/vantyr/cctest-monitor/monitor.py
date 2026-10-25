@@ -1826,6 +1826,27 @@ def main():
         "hang_threshold": _env_int("LATENCY_HANG_THRESHOLD", 3),
         "error_ratio_threshold": _env_ratio("LATENCY_ERROR_RATIO", 0.05),
     }
+    # PRIMARY (non-pin) channels — owner decision 2026-10-25, "Option A".
+    # A channel whose name is listed here is the PREFERRED supplier for its
+    # models (e.g. kiro-pool at priority 30 outranks every a6pin at 20). The
+    # a6pin pins stay enabled as the BACKUP. Without this the primary is
+    # invisible to the monitor (is_pinned_channel only matches "a6pin*"), so
+    # it is never health-swept and never fails over — a Kiro stop would take
+    # four Claude models down with no rotation.
+    #
+    # Behaviour, when a primary trips the severe-degradation thresholds:
+    #   1. DISABLE it, so New API's priority routing falls through to the
+    #      a6pin backup for every model it serves (no promotion needed — the
+    #      pins are already enabled and below it in priority).
+    #   2. Re-enable it automatically once it has been healthy AGAIN for
+    #      PRIMARY_RESTORE_MINUTES, staying disabled in between. The
+    #      disables/enables are recorded in state so a restart cannot leave
+    #      it stuck off.
+    primary_channels = tuple(
+        n.strip() for n in os.environ.get("PRIMARY_CHANNELS", "").split(",") if n.strip()
+    )
+    primary_restore_minutes = max(1, int(os.environ.get("PRIMARY_RESTORE_MINUTES", "30")))
+
     # The owner adds keys daily and wants them in the pool fast (owner rule
     # 2026-10-19: as close to real-time as possible). Sync is cheap (token
     # list + ≤5 reveals); the expensive part (cctest checks) stays on the
@@ -1854,6 +1875,7 @@ def main():
         "state": state,
         "seller_registry": {},
         "a6m": a6m,
+        "primary_channels": primary_channels,
     }
     # Key sync runs on its own fast loop — new A6 keys join the pool within
     # minutes, independent of the (expensive) per-cycle cctest checks.
@@ -1878,7 +1900,8 @@ def main():
     circuit_window = max(1, int(os.environ.get("CIRCUIT_WINDOW_MINUTES", "15")))
     circuit_interval = max(1, int(os.environ.get("CIRCUIT_INTERVAL_MINUTES", "5")))
     if circuit_cfg["enabled"] and enforce:
-        start_circuit_breaker(circuit_cfg, circuit_window, circuit_interval)
+        start_circuit_breaker(circuit_cfg, circuit_window, circuit_interval,
+                              primary_channels, primary_restore_minutes)
     while True:
         try:
             run_cycle(
@@ -1919,6 +1942,113 @@ def start_sync_loop(a6m, interval_minutes):
     LOG.info("A6 key sync loop started (every %dm)", interval_minutes)
 
 
+def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
+    """Health-sweep the PRIMARY (non-pin) channels and fail over / restore.
+
+    Owner decision 2026-10-25 ("Option A"): kiro-pool is the preferred
+    supplier and the a6pin pins are the backup. The monitor only ever
+    inspected channels named a6pin*, so the primary — by then carrying ~98%
+    of Claude traffic — was never health-checked and never failed over.
+
+    Failover model differs from pins: there is nothing to promote. The
+    primary outranks the pins, so DISABLING it makes New API's priority
+    routing fall through to the already-enabled a6pin backup. Restore is the
+    inverse and must be automatic, or a single bad window leaves the (often
+    cheaper) primary off forever.
+
+    Returns the number of primaries acted on.
+    """
+    rt = RUNTIME
+    if rt is None or not rt.get("enforce") or not rt.get("primary_channels"):
+        return 0
+    if not _MUTATION_LOCK.acquire(blocking=False):
+        LOG.info("[primary] another rotation is in flight — skipping this tick")
+        return 0
+    acted = 0
+    try:
+        channels = rt["gateway"].list_channels()
+        state = rt["state"]
+        prim_state = state.setdefault("_primary", {})
+        wanted = set(rt["primary_channels"])
+        now = time.time()
+
+        for ch in channels:
+            name = ch.get("name") or ""
+            if name not in wanted:
+                continue
+            cid = int(ch["id"])
+            enabled = int(ch.get("status") or 0) == CHANNEL_ENABLED
+            entry = prim_state.setdefault(name, {"disabled_at": None, "healthy_since": None})
+
+            if enabled:
+                sick = pin_is_sick(rt["gateway"], cid, window_minutes, latency_cfg=circuit_cfg)
+                if sick is True:
+                    try:
+                        rt["gateway"].set_status(cid, CHANNEL_MANUALLY_DISABLED)
+                        rt["gateway"].fix_abilities()
+                    except Exception as e:
+                        LOG.error("[primary] FAILED to disable %s: %s", name, e)
+                        continue
+                    entry["disabled_at"] = now
+                    entry["healthy_since"] = None
+                    acted += 1
+                    LOG.warning(
+                        "[primary] %s (ch %s) degraded — DISABLED, traffic fails over to "
+                        "the a6pin backup for its models", name, cid,
+                    )
+                    discord_alert(
+                        rt["discord"],
+                        f"cctest: primary {name} degraded — disabled; a6pin backup now serving. "
+                        f"Auto-restore after {restore_minutes}m of clean traffic.",
+                    )
+                else:
+                    entry["healthy_since"] = None
+            else:
+                # Disabled by us? Only restore what WE turned off.
+                if entry.get("disabled_at") is None:
+                    LOG.debug("[primary] %s is disabled but not by us — leaving it", name)
+                    continue
+                healthy = pin_is_sick(rt["gateway"], cid, window_minutes, latency_cfg=circuit_cfg)
+                if healthy is True:
+                    entry["healthy_since"] = None
+                    continue
+                if healthy is None:
+                    # No evidence while disabled (it serves no traffic, so the
+                    # logs are silent). That is expected — start the clock on
+                    # the first tick that has data rather than blocking restore
+                    # forever. Evidence-backed healthy (False) also starts it.
+                    pass
+                if entry.get("healthy_since") is None:
+                    entry["healthy_since"] = now
+                    continue
+                if now - entry["healthy_since"] < restore_minutes * 60:
+                    continue
+                try:
+                    rt["gateway"].set_status(cid, CHANNEL_ENABLED)
+                    rt["gateway"].fix_abilities()
+                except Exception as e:
+                    LOG.error("[primary] FAILED to restore %s: %s", name, e)
+                    continue
+                entry["disabled_at"] = None
+                entry["healthy_since"] = None
+                acted += 1
+                LOG.warning("[primary] %s (ch %s) clean for %dm — RESTORED as primary",
+                            name, cid, restore_minutes)
+                discord_alert(
+                    rt["discord"],
+                    f"cctest: primary {name} restored after {restore_minutes}m clean.",
+                )
+
+        if acted:
+            save_state(state)
+        return acted
+    except Exception:
+        LOG.exception("[primary] sweep failed")
+        return acted
+    finally:
+        _MUTATION_LOCK.release()
+
+
 def circuit_breaker_tick(circuit_cfg, window_minutes):
     """One severe-degradation sweep. Reuses the normal rotation path with a
     severe-only config: only catastrophic evidence trips it (>=80% hard
@@ -1957,13 +2087,19 @@ def circuit_breaker_tick(circuit_cfg, window_minutes):
         _MUTATION_LOCK.release()
 
 
-def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes):
+def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes,
+                         primary_channels=(), restore_minutes=30):
     LOG.info(
         "[circuit] severe-degradation breaker started: every %dm over a %dm window "
         "(error>=%.0f%% or gone>=%.0f%%, min %d)",
         interval_minutes, window_minutes, circuit_cfg["error_ratio_threshold"] * 100,
         circuit_cfg["client_gone_ratio"] * 100, circuit_cfg["min_samples"],
     )
+    if primary_channels:
+        LOG.info(
+            "[primary] failover enabled for primary channel(s) %s: disable on severe "
+            "degradation, auto-restore after %dm clean", list(primary_channels), restore_minutes,
+        )
     while True:
         time.sleep(interval_minutes * 60)
         try:
@@ -1972,12 +2108,19 @@ def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes):
                 LOG.debug("[circuit] swept %d active pin(s)", n)
         except Exception:
             LOG.exception("[circuit] loop tick failed")
+        if primary_channels:
+            try:
+                sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes)
+            except Exception:
+                LOG.exception("[primary] loop tick failed")
 
 
-def start_circuit_breaker(circuit_cfg, window_minutes, interval_minutes):
+def start_circuit_breaker(circuit_cfg, window_minutes, interval_minutes,
+                          primary_channels=(), restore_minutes=30):
     threading.Thread(
         target=circuit_breaker_loop,
-        args=(circuit_cfg, window_minutes, interval_minutes),
+        args=(circuit_cfg, window_minutes, interval_minutes,
+              tuple(primary_channels or ()), restore_minutes),
         daemon=True, name="cctest-circuit-breaker",
     ).start()
 

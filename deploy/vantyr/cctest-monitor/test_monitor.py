@@ -1743,6 +1743,81 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
     assert (21, 1) not in gw.writes, gw.writes
 
 
+def test_primary_channel_fails_over_when_degraded():
+    """Owner decision 2026-10-25 (Option A): kiro-pool is the primary
+    supplier for its models and the a6pin pins are the backup. Because the
+    primary outranks the pins, failover = disable it so priority routing
+    falls through to the already-enabled pin. It must ALSO be restored
+    automatically, or one bad window leaves the primary off forever."""
+
+    class PrimaryGW(FakeGW):
+        def __init__(self, channels, err, ok):
+            super().__init__(channels)
+            self._err, self._ok = err, ok
+
+        def count_logs(self, log_type, channel_id, window_minutes):
+            return self._err if log_type == 5 else self._ok
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=502"}] * self._err
+
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.80}
+
+    def make(ch_status):
+        return {"id": 95, "name": "kiro-pool", "status": ch_status,
+                "group": "default", "models": "claude-opus-5-5", "model_mapping": ""}
+
+    def run(gw, state):
+        m.RUNTIME = {"gateway": gw, "cctest": None, "sellers": [], "enforce": True,
+                     "discord": None, "state": state, "seller_registry": {},
+                     "primary_channels": ("kiro-pool",)}
+        try:
+            return m.sweep_primary_channels(cfg, 15, 30)
+        finally:
+            m.RUNTIME = None
+
+    # 1. Degraded primary -> DISABLED (traffic falls to the a6pin backup)
+    ch = make(1)
+    gw = PrimaryGW([ch], err=90, ok=10)          # 90% hard errors
+    state = {}
+    acted = run(gw, state)
+    assert acted == 1, acted
+    assert ch["status"] == 2, ch                 # disabled
+    assert state["_primary"]["kiro-pool"]["disabled_at"] is not None
+    # NO promotion happened — the pins were already enabled below it
+    assert not gw.writes or all(w[0] != 21 for w in gw.writes), gw.writes
+
+    # 2. Still degraded while disabled -> stays disabled, no restore
+    gw2 = PrimaryGW([ch], err=90, ok=10)
+    run(gw2, state)
+    assert ch["status"] == 2, ch
+
+    # 3. Healthy while disabled, but restore window not elapsed -> stays off
+    gw3 = PrimaryGW([ch], err=0, ok=100)
+    run(gw3, state)
+    assert ch["status"] == 2, ch
+    assert state["_primary"]["kiro-pool"]["healthy_since"] is not None
+
+    # 4. Healthy past the restore window -> re-enabled as primary
+    state["_primary"]["kiro-pool"]["healthy_since"] = time.time() - 31 * 60
+    run(gw3, state)
+    assert ch["status"] == 1, ch
+    assert state["_primary"]["kiro-pool"]["disabled_at"] is None
+
+    # 5. A channel we never disabled is left alone
+    chx = make(2)
+    st2 = {}
+    gw4 = PrimaryGW([chx], err=0, ok=100)
+    run(gw4, st2)
+    assert chx["status"] == 2, chx
+    assert st2["_primary"]["kiro-pool"]["disabled_at"] is None
+
+
 def test_circuit_breaker_rotates_catastrophic_pin_only():
     """The severe-degradation watchdog (circuit_breaker_tick) reuses the
     rotation path with severe-only thresholds: it rotates a pin failing
