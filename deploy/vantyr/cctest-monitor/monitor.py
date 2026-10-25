@@ -817,12 +817,27 @@ class A6Management:
 _PIN_KEY_CACHE = {}
 
 
-def _pin_reveal_key(a6m, channel_name):
+def _pin_reveal_key(a6m, channel_name, model=None):
     """Resolve a pin channel name to its A6 key via the management API.
-    Merchant id = trailing numeric suffix of the channel name; the key is the
-    A6 token whose name ends in '| <merchant>' for the pin's model. Cached.
+
     Returns the sk- key, or None when A6_MANAGE_* is unset / no token
-    matches / reveal is rate-limited (None → caller falls back)."""
+    matches / reveal is rate-limited (None → caller falls back).
+
+    MODEL MATTERS (audit BLOCKER 2026-10-25). Merchant ids are reused across
+    models — the same merchant sells several SKUs (e.g. 4756 sells fable-5
+    AND opus-5-5), and list_tokens() returns them in API order. An earlier
+    version matched on the merchant suffix alone, so a pin could be revealed
+    with ANOTHER MODEL's key: the check then reported a swap against the
+    wrong model, refused a perfectly healthy pin, and bad-marked it for the
+    cooldown. Worst case an operator promote quarantined the active pin and
+    then refused the standby, leaving the model with zero enabled pins.
+
+    Matching order:
+      1. exact derived channel name (unambiguous — encodes the SKU),
+      2. merchant suffix AND the token's SKU is in the pin's model pool.
+    When `model` is None we fall back to the merchant-only match for
+    backwards compatibility, but every caller must pass it.
+    """
     if a6m is None:
         return None
     merchant = pin_merchant(channel_name)
@@ -830,11 +845,18 @@ def _pin_reveal_key(a6m, channel_name):
         return None  # plain-named legacy pin — no merchant id, no direct path
     if channel_name in _PIN_KEY_CACHE:
         return _PIN_KEY_CACHE[channel_name]
+    pool = model_pool_names(model) if model else None
     try:
         for token in a6m.list_tokens():
             name = (token.get("name") or "").strip()
-            _sku, tok_merchant, _channel = parse_a6_key_name(name)
-            if _channel == channel_name or (tok_merchant == merchant and channel_name.endswith("-" + merchant)):
+            sku, tok_merchant, derived_channel = parse_a6_key_name(name)
+            exact = derived_channel == channel_name
+            same_merchant = (
+                tok_merchant == merchant
+                and channel_name.endswith("-" + merchant)
+                and (pool is None or sku in pool)
+            )
+            if exact or same_merchant:
                 key = a6m.reveal_key(token.get("id"))
                 if key:
                     _PIN_KEY_CACHE[channel_name] = key
@@ -1363,7 +1385,7 @@ def _run_action_verify_locked(body, channel_name, model):
     # management API (revealed on demand, cached). This works for enabled AND
     # standby/disabled pins — the fix for "verification failed after promote".
     if is_pinned_channel(channel_name):
-        pin_key = _pin_reveal_key(rt.get("a6m"), channel_name)
+        pin_key = _pin_reveal_key(rt.get("a6m"), channel_name, upstream)
         if pin_key:
             pin_base = channel.get("base_url") or "https://api.a6api.com"
             verdict = do_check(rt["cctest"], pin_base, pin_key, upstream)
@@ -2211,7 +2233,8 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 extra_actives.append((m, ch))
             elif pool_key not in active_pins:
                 active_pins[pool_key] = ch
-    if extra_actives and enforce:
+    if extra_actives and enforce and _MUTATION_LOCK.acquire(blocking=False):
+      try:
         for model, extra in extra_actives:
             extra_name = extra.get("name")
             pool_key = sorted(model_pool_names(model))[0]
@@ -2234,14 +2257,39 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 channels = gateway.list_channels()
             except Exception:
                 pass
+      finally:
+        _MUTATION_LOCK.release()
+    elif extra_actives and enforce:
+        LOG.info("[dedup] mutation lock busy — deferring dedup to the next cycle")
+    # MUTATION-LOCKED per-channel processing (audit BLOCKER 2026-10-25).
+    # process_channel can quarantine, promote, enable, disable and edit a
+    # channel's model list. It used to run unlocked, so an operator promote
+    # or a circuit-breaker tick landing mid-loop raced it: the auditor
+    # reproduced TWO enabled pins for one model (cycle enabling its standby
+    # after the operator had already enabled a different one) and a
+    # quarantine+promote that ignored a lock held by another thread. The
+    # lock is per-channel rather than per-cycle so a long cycle (dozens of
+    # cctest checks, each up to ~90s) does not block the 5-minute breaker or
+    # the operator for its whole duration.
     for name, base_url, seller_key in sellers:
         allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
-            process_channel(
-                gateway, cctest, channel, base_url, seller_key, model_prefixes,
-                usage_window_hours, threshold_for, permanent_fails, enforce,
-                discord, state, channels, allowed, seller_registry,
-            )
+            if _MUTATION_LOCK.acquire(blocking=False):
+                try:
+                    process_channel(
+                        gateway, cctest, channel, base_url, seller_key, model_prefixes,
+                        usage_window_hours, threshold_for, permanent_fails, enforce,
+                        discord, state, channels, allowed, seller_registry,
+                    )
+                finally:
+                    _MUTATION_LOCK.release()
+            else:
+                # Another rotation is in flight; this channel's turn is
+                # skipped and the next cycle re-checks it. Failing open
+                # (not blocking) keeps the breaker and the operator
+                # responsive — the same trade-off the sick rotation makes.
+                LOG.info("[cycle] mutation lock busy — skipping check of %s this cycle",
+                         channel.get("name"))
             save_state(state)
     # Sick-pin rotation (owner rule 2026-10-19): a pin with recent failures
     # and zero successes is as unusable as a fake — quarantine + promote,
@@ -2508,7 +2556,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     # path (fail-open, better than leaving the model dark).
     pre_verdict = None
     pre_checked = False
-    pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name)
+    pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name, model)
     if pin_key:
         pin_base = standby.get("base_url") or "https://api.a6api.com"
         pre_verdict = do_check(cctest, pin_base, pin_key, model)
@@ -2778,7 +2826,7 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
         # Pinned: direct-check the merchant's OWN key — the only way to know
         # if THIS merchant recovered. A gateway-routed check would test
         # whichever pin is active, not this one.
-        pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, name)
+        pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, name, candidate)
         if pin_key is None:
             LOG.info("[%s] quarantine re-check skipped — no A6 key for merchant", name)
             return

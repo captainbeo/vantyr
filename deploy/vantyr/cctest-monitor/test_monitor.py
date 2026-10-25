@@ -1749,6 +1749,94 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
     assert (21, 1) not in gw.writes, gw.writes
 
 
+def test_cycle_channel_processing_respects_mutation_lock():
+    """REGRESSION GUARD (audit BLOCKER 2026-10-25). The cycle's dedup and
+    per-channel processing used to run WITHOUT the mutation lock, so an
+    operator promote or circuit-breaker tick landing mid-loop raced it — the
+    auditor reproduced two enabled pins for one model.
+
+    Scenario: two pins enabled for one model (dedup WOULD disable the extra).
+    While another thread holds the lock, the cycle must skip and write
+    nothing."""
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1
+    chs[0]["id"] = 20
+    chs[1]["status"] = 1                     # the duplicate dedup should remove
+    chs[1]["id"] = 21
+    chs[1]["name"] = "a6pin-fable-5-1169"
+    gw = FakeGW(chs)
+    state = {}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    # Control: without the lock held, the cycle DOES dedup (proves the
+    # scenario would write, so the assertion below is meaningful).
+    m.run_cycle(gw, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+                ("claude", "gpt"), 168, threshold_for, 3, True, None, {})
+    assert (21, 2) in gw.writes, gw.writes
+
+    # Now hold the lock as a competing rotation would, and run again on a
+    # fresh duplicate pair: no writes may happen.
+    chs2 = [dict(c) for c in PIN_CHANNELS]
+    chs2[0]["status"] = 1
+    chs2[0]["id"] = 20
+    chs2[1]["status"] = 1
+    chs2[1]["id"] = 21
+    chs2[1]["name"] = "a6pin-fable-5-1169"
+    gw2 = FakeGW(chs2)
+
+    assert m._MUTATION_LOCK.acquire(blocking=False)
+    try:
+        m.run_cycle(gw2, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+    finally:
+        m._MUTATION_LOCK.release()
+
+    assert gw2.writes == [], gw2.writes
+    assert gw2.model_edits == [], gw2.model_edits
+
+
+def test_pin_reveal_key_matches_the_pin_model_not_just_merchant():
+    """REGRESSION GUARD (audit BLOCKER 2026-10-25). Merchant ids are reused
+    across models — the same merchant sells several SKUs and list_tokens()
+    returns them in API order. Matching on the merchant suffix alone revealed
+    a pin with ANOTHER MODEL's key: the check then reported a swap against the
+    wrong model, refused a healthy pin and bad-marked it, and an operator
+    promote could quarantine the active pin then refuse the standby, leaving
+    the model with zero enabled pins."""
+    m._PIN_KEY_CACHE.clear()
+
+    class A6M:
+        """Merchant 4756 sells BOTH fable-5 and opus-5-5; the opus token is
+        listed first, exactly the ordering that used to win."""
+        def list_tokens(self):
+            return [
+                {"id": 1, "name": "OPUS 5.5 | 4756"},
+                {"id": 2, "name": "FABLE 5 | 4756"},
+            ]
+
+        def reveal_key(self, tid):
+            return {1: "sk-opus55", 2: "sk-fable5"}[tid]
+
+    # The fable pin must get the fable key, not the opus one.
+    assert m._pin_reveal_key(A6M(), "a6pin-fable-5-4756", "claude-fable-5") == "sk-fable5"
+    m._PIN_KEY_CACHE.clear()
+    # And the opus pin gets the opus key.
+    assert m._pin_reveal_key(A6M(), "a6pin-opus-5-5-4756", "claude-opus-5-5") == "sk-opus55"
+    m._PIN_KEY_CACHE.clear()
+    # A pin whose model has no matching token must NOT borrow another
+    # model's key — it returns None so the caller falls back.
+    assert m._pin_reveal_key(A6M(), "a6pin-sonnet-5-4756", "claude-sonnet-5") is None
+    m._PIN_KEY_CACHE.clear()
+
+
 def test_all_failures_rotates_even_with_benign_errors_when_armed():
     """REGRESSION GUARD (audit H2, regression introduced 2026-10-24). When
     the latency flag was armed, pin_is_sick deferred to pin_latency_sick
