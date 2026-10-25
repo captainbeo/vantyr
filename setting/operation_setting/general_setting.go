@@ -19,6 +19,18 @@ type GeneralSetting struct {
 	// timers during the pre-first-token silence; comments do not (A/B verified
 	// 2026-10-23). Off by default — set true to enable.
 	PingEventMode bool `json:"ping_event_mode"`
+	// CacheTtlInject upgrades Anthropic cache_control blocks that carry NO
+	// ttl to "1h" (blocks that already set a ttl are never touched). Why:
+	// the default cache TTL is 5 minutes, and agentic clients with 6–11
+	// minute turn gaps expire their cache every turn — writing 250k tokens
+	// at the write price and never collecting the (5x cheaper) read. The 1h
+	// TTL passes through the whole chain (relay → A6 → Anthropic, verified
+	// live 2026-10-25: 118k write, 100k read 6.5 minutes later). The 1h
+	// write is billed at a higher upstream rate, but a single hit pays it
+	// back (read $0.01/1M vs write $0.05/1M on sonnet-5-5). This only
+	// affects requests whose CLIENT did not choose a TTL; explicit client
+	// preferences are always preserved.
+	CacheTtlInject bool `json:"cache_ttl_inject"`
 	// 当前站点额度展示类型：USD / CNY / TOKENS
 	QuotaDisplayType string `json:"quota_display_type"`
 	// 自定义货币符号，用于 CUSTOM 展示类型
@@ -33,6 +45,7 @@ var generalSetting = GeneralSetting{
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
 	PingEventMode:              false,
+	CacheTtlInject:             false,
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,

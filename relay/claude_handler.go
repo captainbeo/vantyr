@@ -117,6 +117,11 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 		}
 
+		// Cache TTL injection (2026-10-25): upgrade cache_control blocks with
+		// no ttl to "1h" so agentic turn gaps (6-11 min) stop expiring the
+		// cache between turns. Client-set ttl values are never touched.
+		jsonData = service.InjectCacheTtl(jsonData)
+
 		logger.LogDebug(c, "requestBody: %s", jsonData)
 		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
