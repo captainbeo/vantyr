@@ -137,26 +137,12 @@ func PingData(c *gin.Context) error {
 // `ping` is an Anthropic-only event type, so Responses streams get the
 // protocol-native equivalent: a synthetic `response.in_progress` frame.
 //
-// SAFETY (verified 2026-10-24): this frame is written directly to the client
-// under the ping mutex and never passes through the relay's dataHandler, so
-// ResponsesUsageAccumulator.Observe never sees it. Even if it did,
-// Observe only acts on terminal events, delta kinds and output_item.done —
-// `response.in_progress` matches none, and ObserveResponsesOutcome has no
-// case for it either, so it is inert in both. The payload carries only a
-// type (no `response` object), which also means it cannot set started or
-// mutate stream status.
-// PingResponsesEventData is the OpenAI-Responses equivalent of PingEventData.
-// `ping` is an Anthropic-only event type, so Responses streams get the
-// protocol-native equivalent: a synthetic `response.in_progress` frame.
-//
-// SAFETY (verified 2026-10-24): this frame is written directly to the client
-// under the ping mutex and never passes through the relay's dataHandler, so
-// ResponsesUsageAccumulator.Observe never sees it. Even if it did,
-// Observe only acts on terminal events, delta kinds and output_item.done —
-// `response.in_progress` matches none, and ObserveResponsesOutcome has no
-// case for it either, so it is inert in both. The payload carries only a
-// type (no `response` object), which also means it cannot set started or
-// mutate stream status.
+// SAFETY: this frame is written directly to the client under the ping mutex
+// and never passes through the relay's dataHandler, so
+// ResponsesUsageAccumulator.Observe never sees it. Even if a keep-alive were
+// ever routed through Observe, isKeepAliveEvent() recognises the sentinel id
+// and refuses to mark the stream started — otherwise Finish() would bill
+// estimated prompt tokens and charge for a stream that produced nothing.
 //
 // The payload carries a minimal but schema-shaped `response` object (id +
 // status: in_progress) plus a sequence_number. Strictly-typed Responses SDK

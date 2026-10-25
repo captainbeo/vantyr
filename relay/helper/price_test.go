@@ -745,3 +745,57 @@ func (s *priceTestReservation) Refund(*gin.Context)      {}
 func (s *priceTestReservation) NeedsRefund() bool        { return false }
 func (s *priceTestReservation) GetPreConsumedQuota() int { return s.held }
 func (s *priceTestReservation) Reserve(quota int) error  { s.held = max(s.held, quota); return nil }
+
+// TestTieredPriceDataDoesNotInventRatiosForUnconfiguredModels guards audit
+// finding 2026-10-25 (HIGH). The tiered path now populates PriceData ratios
+// for LOGGING, but those fields are consumed by the ratio-branch charge in
+// service/text_quota.go when settlement falls through without a usage
+// object. GetModelRatio returns a 37.5 self-use fallback and GetCacheRatio
+// returns 1.0 for entries that do not exist, so an unconfigured tiered model
+// would gain a large charge (measured 0 -> 187500 quota) where it previously
+// computed zero.
+func TestTieredPriceDataDoesNotInventRatiosForUnconfiguredModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
+
+	// A tiered model with NO entry in ModelRatio / CacheRatio / CreateCacheRatio.
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode": `{"unconfigured-tiered-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"unconfigured-tiered-model":"tier(\"base\", p * 0.15)"}`,
+	}))
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(http.MethodPost, "/api/channel/test/1", nil)
+	req.Header.Set("Content-Type", "application/json")
+	ctx.Request = req
+	ctx.Set("group", "default")
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "unconfigured-tiered-model",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+		RequestHeaders:  map[string]string{"Content-Type": "application/json"},
+	}
+
+	priceData, err := ModelPriceHelper(ctx, info, 5000, &types.TokenCountMeta{})
+	require.NoError(t, err)
+
+	// The displayed/logged ratios must stay ZERO — never the 37.5 / 1.0 /
+	// 1.25 fallbacks — or a fallback settlement would invent a charge.
+	assert.Zero(t, priceData.ModelRatio,
+		"unconfigured model must not inherit the 37.5 self-use fallback ratio")
+	assert.Zero(t, priceData.CacheRatio,
+		"unconfigured model must not inherit the 1.0 cache-ratio fallback")
+	assert.Zero(t, priceData.CacheCreationRatio,
+		"unconfigured model must not inherit the 1.25 cache-create fallback")
+
+	// And the pre-consume still comes from the expression, not the ratios.
+	assert.Equal(t, 375, priceData.QuotaToPreConsume)
+}

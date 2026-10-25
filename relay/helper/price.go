@@ -354,12 +354,28 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		return hosttypes.PriceData{}, err
 	}
 
-	// The expression's $/1M coefficients already carry the model's input
-	// price; expose the config-side model ratio + cache ratios purely for
-	// logging so the dashboard reports them instead of 0.
-	modelRatioForLog, _, _ := ratio_setting.GetModelRatio(billingModelName)
-	tieredCacheRatio, _ := ratio_setting.GetCacheRatio(billingModelName)
-	tieredCacheCreationRatio, _ := ratio_setting.GetCreateCacheRatio(billingModelName)
+	// These fields are populated for LOGGING only — the expression's $/1M
+	// coefficients already carry the price. But they are NOT purely cosmetic:
+	// when a tiered request reaches settlement WITHOUT a usage/billingUsage
+	// object, TryTieredSettle is skipped (service/text_quota.go requires
+	// non-nil usage) and the ratio branch computes the charge from these very
+	// fields. GetModelRatio returns a 37.5 self-use fallback for unconfigured
+	// models, so blindly assigning it would turn a previously-0 charge into a
+	// large one (audit 2026-10-25 measured 0 -> 187500 quota for an
+	// unconfigured tiered model). Honour the ok bool: no configured entry
+	// means leave the field at zero, exactly as before this change.
+	modelRatioForLog, modelRatioOk, _ := ratio_setting.GetModelRatio(billingModelName)
+	if !modelRatioOk {
+		modelRatioForLog = 0
+	}
+	tieredCacheRatio, cacheRatioOk := ratio_setting.GetCacheRatio(billingModelName)
+	if !cacheRatioOk {
+		tieredCacheRatio = 0
+	}
+	tieredCacheCreationRatio, cacheCreationOk := ratio_setting.GetCreateCacheRatio(billingModelName)
+	if !cacheCreationOk {
+		tieredCacheCreationRatio = 0
+	}
 	// Claude splits cache writes into 5m and 1h TTL buckets with different
 	// prices. The per-token path derives them (5m = the base create ratio,
 	// 1h = base * 6/3.75); the tiered path must report the same, or the
