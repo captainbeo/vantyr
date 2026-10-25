@@ -1973,14 +1973,17 @@ def main():
         # catastrophic evidence. Latency/hangs still never trip it alone —
         # only hard (5xx) errors and abandoned streams do, so a slow-but-
         # working primary is not yanked away mid-conversation.
-        "min_samples": max(1, int(os.environ.get("CIRCUIT_MIN_SAMPLES", "15"))),
-        "client_gone_ratio": float(os.environ.get("CIRCUIT_CLIENT_GONE_RATIO", "0.50")),
+        # Defensive parsing (audit L1): a malformed value must not raise
+        # AFTER the status server has started — that produced a restart loop
+        # with a working /status, which looks like a hung monitor.
+        "min_samples": _env_int("CIRCUIT_MIN_SAMPLES", 15),
+        "client_gone_ratio": _env_ratio("CIRCUIT_CLIENT_GONE_RATIO", 0.50),
         "frt_ms_threshold": 10**12,     # latency alone never trips the breaker
         "hang_threshold": 10**9,        # hangs alone never trip it either
-        "error_ratio_threshold": float(os.environ.get("CIRCUIT_ERROR_RATIO", "0.10")),
+        "error_ratio_threshold": _env_ratio("CIRCUIT_ERROR_RATIO", 0.10),
     }
-    circuit_window = max(1, int(os.environ.get("CIRCUIT_WINDOW_MINUTES", "15")))
-    circuit_interval = max(1, int(os.environ.get("CIRCUIT_INTERVAL_MINUTES", "5")))
+    circuit_window = _env_int("CIRCUIT_WINDOW_MINUTES", 15)
+    circuit_interval = _env_int("CIRCUIT_INTERVAL_MINUTES", 5)
     if circuit_cfg["enabled"] and enforce:
         start_circuit_breaker(circuit_cfg, circuit_window, circuit_interval,
                               primary_channels, primary_restore_minutes)

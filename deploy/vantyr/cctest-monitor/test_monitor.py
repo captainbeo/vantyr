@@ -1810,10 +1810,23 @@ def test_breaker_does_not_refresh_cycle_freshness():
     also calls — so a dead hourly cycle looked alive whenever the breaker was
     running. last_cycle_at is the admin page's only external 'cycle is stale'
     signal."""
+    class HealthyGW(FakeGW):
+        # Healthy pin (errors + successes). Must implement the log helpers
+        # pin_latency_sick calls, or the tick crashes before reaching the
+        # freshness write and the test proves nothing.
+        def count_logs(self, log_type, channel_id, window_minutes):
+            return 0 if log_type == 5 else 100
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100, max_rows=1000):
+            return []
+
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+
     chs = [dict(c) for c in PIN_CHANNELS]
     chs[0]["status"] = 1
     chs[0]["id"] = 20
-    gw = FakeGW(chs)
+    gw = HealthyGW(chs)
     state = {"_meta": {"last_cycle_at": "2026-10-01T00:00:00+00:00"}}
 
     class PassCC:
