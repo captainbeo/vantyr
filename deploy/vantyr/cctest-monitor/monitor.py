@@ -327,11 +327,16 @@ class Gateway:
             raise RuntimeError(f"channel group update failed: {http_status} {payload}")
         return True
 
-    def count_logs(self, log_type, channel_id, window_minutes):
+    def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
         """Total log rows of `log_type` (2=consume/success, 5=error) for one
         channel in the window. Returns None on query failure (never
-        misclassifies a channel as sick or healthy on a transport error)."""
-        since = int(time.time()) - int(window_minutes) * 60
+        misclassifies a channel as sick or healthy on a transport error).
+
+        `since_ts` (epoch seconds) overrides the window start — used for the
+        post-restore grace so errors that predate a restore cannot count
+        toward the next disable (they made the primary flap every 5m)."""
+        since = (int(since_ts) if since_ts
+                 else int(time.time()) - int(window_minutes) * 60)
         query = urllib.parse.urlencode({
             "p": 1, "page_size": 1, "type": log_type,
             "channel": channel_id, "start_timestamp": since,
@@ -1039,7 +1044,8 @@ def _parse_other(row):
         return {}
 
 
-def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg):
+def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
+                     since_ts=None):
     """Latency/reliability/degraded-merchant sickness (owner ask 2026-10-22,
     re-applied 2026-10-24): an active pin that serves the REAL model but too
     slowly, too often abandoned, or erroring at a high rate still bleeds
@@ -1072,14 +1078,14 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg):
     # code from `content`; "status_code=502, ..." is the merchant-side
     # failure that matters, the ch74 opus-5 case).
     error_rows = gateway.recent_error_logs(channel_id, window_minutes, limit=100)
-    successes = gateway.count_logs(2, channel_id, window_minutes)
+    successes = gateway.count_logs(2, channel_id, window_minutes, since_ts=since_ts)
     if error_rows is None or successes is None:
         return None
     hard_errors = sum(
         1 for r in error_rows
         if str(r.get("content") or "").lstrip().startswith("status_code=5")
     )
-    total_errors = gateway.count_logs(5, channel_id, window_minutes)
+    total_errors = gateway.count_logs(5, channel_id, window_minutes, since_ts=since_ts)
     if total_errors is None:
         return None
     total = hard_errors + successes
@@ -1127,7 +1133,14 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg):
     else:
         ratio = -1.0
         mean_frt = -1
-    error_sick = total >= min_samples and error_ratio >= error_ratio_threshold
+    # Error-axis trip requires BOTH a ratio AND an absolute count (owner
+    # decision 2026-10-25): at Kiro's bursty volume a quiet 15-minute window
+    # can hold ~30 requests, so 3 failures read as 10% and disabled the
+    # whole primary on noise. min_errors makes a handful of failures
+    # incapable of tripping it no matter how small the denominator.
+    min_errors = latency_cfg.get("min_errors", 0)
+    error_sick = (total >= min_samples and error_ratio >= error_ratio_threshold
+                  and hard_errors >= min_errors)
     sick = latency_sick or error_sick
     LOG.info(
         "[latency] ch %s: hard_err=%d ok=%d (ratio=%.2f, all_err=%d), stream=%d, client_gone=%d (%.0f%%), hangs=%d, mean_frt=%dms -> %s",
@@ -1142,7 +1155,8 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg):
     return sick
 
 
-def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
+def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None,
+                since_ts=None):
     """Sick-pin detection (owner rule 2026-10-19): a pin whose recent
     traffic is all failures and no successes is as unusable as a fake —
     rotate it. With latency_cfg set and enabled, ALSO rotate a pin that
@@ -1150,7 +1164,7 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     often to be usable (degraded-merchant detection). Returns True (sick),
     False (healthy), or None (no evidence/query failed — NEVER rotate on
     missing evidence)."""
-    errors = gateway.count_logs(5, channel_id, window_minutes)
+    errors = gateway.count_logs(5, channel_id, window_minutes, since_ts=since_ts)
     if errors is None:
         return None
     # ALL-FAILURES RULE (owner rule 2026-10-19) applies on EVERY path,
@@ -1164,7 +1178,7 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     # The benign-error exclusion still applies to the RATIO-based checks
     # below, where it prevents false positives on sparse evidence.
     if errors > 0:
-        successes = gateway.count_logs(2, channel_id, window_minutes)
+        successes = gateway.count_logs(2, channel_id, window_minutes, since_ts=since_ts)
         if successes is None:
             return None
         if successes == 0:
@@ -1173,7 +1187,8 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     # (slow / abandoned / hard-5xx ratio), which needs enough samples and
     # deliberately excludes benign 429s and client aborts.
     if latency_cfg and latency_cfg.get("enabled"):
-        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
+        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
+                                since_ts=since_ts)
     return False
 
 
@@ -1981,12 +1996,24 @@ def main():
         "frt_ms_threshold": 10**12,     # latency alone never trips the breaker
         "hang_threshold": 10**9,        # hangs alone never trip it either
         "error_ratio_threshold": _env_ratio("CIRCUIT_ERROR_RATIO", 0.10),
+        # Absolute floor (owner decision 2026-10-25): a percentage alone made
+        # 3 failures in a quiet 30-request window read as 10% and disabled
+        # the whole primary on noise. Require this many hard errors too.
+        "min_errors": _env_int("CIRCUIT_MIN_ERRORS", 10),
     }
     circuit_window = _env_int("CIRCUIT_WINDOW_MINUTES", 15)
     circuit_interval = _env_int("CIRCUIT_INTERVAL_MINUTES", 5)
+    probe_interval = _env_int("PRIMARY_PROBE_INTERVAL_MINUTES", 1)
     if circuit_cfg["enabled"] and enforce:
         start_circuit_breaker(circuit_cfg, circuit_window, circuit_interval,
                               primary_channels, primary_restore_minutes)
+        if primary_channels:
+            threading.Thread(
+                target=primary_probe_loop,
+                args=(circuit_cfg, circuit_window, primary_restore_minutes,
+                      probe_interval),
+                daemon=True, name="cctest-primary-probe",
+            ).start()
     while True:
         try:
             run_cycle(
@@ -2082,7 +2109,39 @@ def probe_primary_live(base_url, api_key, model, timeout=60):
     return True, f"ok (out={usage.get('output_tokens')}, model={payload.get('model')})"
 
 
-def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
+def _primary_sick_since(gateway, channel_id, window_minutes, circuit_cfg, since_ts):
+    """Sick check for the PRIMARY during its post-restore grace: identical
+    scoring, but the log queries start at `since_ts` (the restore time) so
+    errors from before the restore cannot re-trip the breaker.
+
+    Why this exists (owner decision 2026-10-25): the breaker's 15-minute
+    window outlives a 5-minute restore, so the first sweep after a restore
+    kept seeing the SAME failures that caused the outage and disabled Kiro
+    again — a permanent 5-minute disable/restore flap, each flap briefly
+    pushing ~all Claude traffic onto the a6pin backup.
+
+    Needs a minimum sample before judging, otherwise 1 error in 10s would
+    trip it; returns None (no verdict) when the window since the restore is
+    too small — the caller treats None as "not sick", which is correct:
+    the primary just proved itself with a live probe.
+    """
+    min_samples = max(1, int(circuit_cfg.get("min_samples") or 15))
+    errors = gateway.count_logs(5, channel_id, window_minutes, since_ts=since_ts)
+    successes = gateway.count_logs(2, channel_id, window_minutes, since_ts=since_ts)
+    if errors is None or successes is None:
+        return None
+    total = errors + successes
+    if total < min_samples:
+        LOG.info("[primary] post-restore window has %d request(s) (< %d) — no verdict yet",
+                 total, min_samples)
+        return None
+    if errors > 0 and successes == 0:
+        return True
+    return pin_latency_sick(gateway, channel_id, window_minutes, circuit_cfg,
+                            since_ts=since_ts)
+
+
+def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes, restore_only=False):
     """Health-sweep the PRIMARY (non-pin) channels and fail over / restore.
 
     Owner decision 2026-10-25 ("Option A"): kiro-pool is the preferred
@@ -2120,8 +2179,29 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
             enabled = int(ch.get("status") or 0) == CHANNEL_ENABLED
             entry = prim_state.setdefault(name, {"disabled_at": None, "healthy_since": None})
 
+            if enabled and restore_only:
+                # Fast probe pass (every PRIMARY_PROBE_INTERVAL_MINUTES): only
+                # restore disabled primaries; disable decisions stay on the
+                # 5-minute breaker tick so a burst of noise cannot flip the
+                # primary off more often than the evaluation window allows.
+                continue
             if enabled:
-                sick = pin_is_sick(rt["gateway"], cid, window_minutes, latency_cfg=circuit_cfg)
+                # Post-restore grace (owner decision 2026-10-25): after a
+                # restore, errors from BEFORE it are still inside the window
+                # and would immediately re-trip the breaker — the live
+                # 5-minute disable/restore flap. Only evidence gathered since
+                # the restore counts. Measured on the log scan below; the
+                # window still bounds how far back we look.
+                grace_since = entry.get("restored_at")
+                if grace_since and now - grace_since < window_minutes * 60:
+                    LOG.info("[primary] %s in post-restore grace (%ds of %dm) — "
+                             "judging only evidence since the restore",
+                             name, int(now - grace_since), window_minutes)
+                    sick = _primary_sick_since(rt["gateway"], cid, window_minutes,
+                                               circuit_cfg, grace_since)
+                else:
+                    sick = pin_is_sick(rt["gateway"], cid, window_minutes,
+                                       latency_cfg=circuit_cfg)
                 if sick is True:
                     try:
                         rt["gateway"].set_status(cid, CHANNEL_MANUALLY_DISABLED)
@@ -2139,7 +2219,8 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
                     discord_alert(
                         rt["discord"],
                         f"cctest: primary {name} degraded — disabled; a6pin backup now serving. "
-                        f"Auto-restore after {restore_minutes}m of clean traffic.",
+                        f"Restores automatically as soon as a live probe succeeds "
+                        f"(checked every {_env_int('PRIMARY_PROBE_INTERVAL_MINUTES', 1)}m).",
                     )
                 else:
                     entry["healthy_since"] = None
@@ -2191,6 +2272,7 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
                 was_down_for = int(now - (entry.get("disabled_at") or now))
                 entry["disabled_at"] = None
                 entry["healthy_since"] = None
+                entry["restored_at"] = now
                 entry["last_restore"] = {
                     "at": datetime.now(timezone.utc).isoformat(),
                     "down_seconds": was_down_for,
@@ -2267,7 +2349,8 @@ def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes,
     if primary_channels:
         LOG.info(
             "[primary] failover enabled for primary channel(s) %s: disable on severe "
-            "degradation, auto-restore after %dm clean", list(primary_channels), restore_minutes,
+            "degradation; RESTORE requires a passing live probe (max wait %dm)",
+            list(primary_channels), restore_minutes,
         )
     while True:
         time.sleep(interval_minutes * 60)
@@ -2282,6 +2365,35 @@ def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes,
                 sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes)
             except Exception:
                 LOG.exception("[primary] loop tick failed")
+
+
+def primary_probe_loop(circuit_cfg, window_minutes, restore_minutes, interval_minutes):
+    """Fast restore-probe loop (owner decision 2026-10-25: probe every
+    minute, not every 5). Only RESTORES a disabled primary — it never
+    disables, so it cannot add disable churn. A disabled primary is caught
+    by the 5-minute breaker tick (which also probes), and this loop rechecks
+    the live probe far more often so a recovered Kiro comes back within
+    ~1 minute instead of up to 5.
+
+    Cost: each probe is one minimal completion (~6.5k input tokens, the
+    proxy's system prompt), spent ONLY while the primary is disabled. While
+    the primary is enabled this loop does no A6/gateway work at all beyond a
+    channel-list read."""
+    LOG.info("[primary] fast restore probe started: every %dm (disabled primary only)",
+             interval_minutes)
+    while True:
+        time.sleep(interval_minutes * 60)
+        rt = RUNTIME
+        if rt is None or not rt.get("enforce") or not rt.get("primary_channels"):
+            continue
+        prim = rt["state"].get("_primary") or {}
+        if not any((e or {}).get("disabled_at") for e in prim.values()):
+            continue  # nothing disabled — no probe cost
+        try:
+            sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes,
+                                   restore_only=True)
+        except Exception:
+            LOG.exception("[primary] fast probe tick failed")
 
 
 def start_circuit_breaker(circuit_cfg, window_minutes, interval_minutes,

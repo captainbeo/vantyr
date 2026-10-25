@@ -66,7 +66,7 @@ class FakeGW:
                 ch["models"] = models
         return True
 
-    def count_logs(self, log_type, channel_id, window_minutes):
+    def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
         # No traffic in the fake gateway — never sick.
         return 0
 
@@ -1495,7 +1495,7 @@ class SickGW(FakeGW):
         self.error_counts = error_counts
         self.success_counts = success_counts
 
-    def count_logs(self, log_type, channel_id, window_minutes):
+    def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
         if log_type == 5:
             return self.error_counts.get(channel_id)
         return self.success_counts.get(channel_id)
@@ -1709,7 +1709,7 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
             super().__init__(channels)
             self._cid = ch_id
 
-        def count_logs(self, log_type, channel_id, window_minutes):
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
             if channel_id != self._cid:
                 return 0
             return 2 if log_type == 5 else 40
@@ -1814,7 +1814,7 @@ def test_breaker_does_not_refresh_cycle_freshness():
         # Healthy pin (errors + successes). Must implement the log helpers
         # pin_latency_sick calls, or the tick crashes before reaching the
         # freshness write and the test proves nothing.
-        def count_logs(self, log_type, channel_id, window_minutes):
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
             return 0 if log_type == 5 else 100
 
         def recent_error_logs(self, channel_id, window_minutes, limit=100, max_rows=1000):
@@ -2009,7 +2009,7 @@ def test_all_failures_rotates_even_with_benign_errors_when_armed():
         ("502 hard error", "status_code=502, pool exhausted"),
     ):
         class TotalFailGW(FakeGW):
-            def count_logs(self, log_type, channel_id, window_minutes):
+            def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
                 return 200 if log_type == 5 else 0   # errors, ZERO successes
             def recent_error_logs(self, channel_id, window_minutes, limit=100):
                 return [{"content": content}] * 100  # page cap, as prod
@@ -2020,7 +2020,7 @@ def test_all_failures_rotates_even_with_benign_errors_when_armed():
 
     # ...and a healthy pin with a few benign errors stays healthy.
     class HealthyGW(FakeGW):
-        def count_logs(self, log_type, channel_id, window_minutes):
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
             return 2 if log_type == 5 else 60
         def recent_error_logs(self, channel_id, window_minutes, limit=100):
             return [{"content": "status_code=429"}] * 2
@@ -2034,7 +2034,7 @@ class _PrimaryGW(FakeGW):
         super().__init__(channels)
         self._err, self._ok = err, ok
 
-    def count_logs(self, log_type, channel_id, window_minutes):
+    def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
         return self._err if log_type == 5 else self._ok
 
     def recent_error_logs(self, channel_id, window_minutes, limit=100):
@@ -2087,6 +2087,66 @@ def test_primary_channel_fails_over_when_degraded():
     assert state["_primary"]["kiro-pool"]["disabled_at"] is not None
     # NO promotion happened — the pins were already enabled below it
     assert not gw.writes or all(w[0] != 21 for w in gw.writes), gw.writes
+
+
+def test_min_errors_prevents_small_sample_trip():
+    """Owner decision 2026-10-25: a percentage alone let 3 failures in a
+    quiet 30-request window read as 10% and disable the primary on noise.
+    The absolute floor must make that impossible."""
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.10, "min_errors": 10}
+
+    class GW(FakeGW):
+        def __init__(self, err, ok):
+            super().__init__([])
+            self._e, self._o = err, ok
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
+            return self._e if log_type == 5 else self._o
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=500, upstream stream ended before any output"}] * self._e
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+
+    # The live incident: 3 errors / 27 successes = 10% → must NOT trip.
+    assert m.pin_is_sick(GW(3, 27), 95, 15, latency_cfg=cfg) is False
+    # A real outage: 40 errors / 60 successes = 40% and >= 10 errors → trips.
+    assert m.pin_is_sick(GW(40, 60), 95, 15, latency_cfg=cfg) is True
+
+
+def test_post_restore_grace_ignores_pre_restore_errors():
+    """The 5-minute disable/restore flap (2026-10-25): after a restore, the
+    same errors that caused the outage were still inside the 15m window, so
+    the next tick disabled Kiro again. During the grace window the sweep must
+    judge only evidence collected SINCE the restore."""
+    now = time.time()
+    ch = _primary_ch(1)
+    state = {"_primary": {"kiro-pool": {
+        "disabled_at": None, "healthy_since": None,
+        "restored_at": now - 60,          # restored a minute ago
+        "last_restore": {"at": "x", "down_seconds": 300, "attempts": 1, "probe": "ok"},
+    }}}
+
+    class GraceGW(_PrimaryGW):
+        """Pre-restore window is catastrophic; since-restore is clean."""
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
+            if since_ts:                  # since-restore slice: healthy
+                return 0 if log_type == 5 else 20
+            return 90 if log_type == 5 else 10   # full window: looks terrible
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return []                     # nothing since the restore
+
+    gw = GraceGW([ch], err=0, ok=0)
+    _run_primary(gw, state)
+    # Grace respected → still ENABLED, no flap.
+    assert ch["status"] == 1, ch
+
+    # After the grace window expires, the full window counts again.
+    state["_primary"]["kiro-pool"]["restored_at"] = now - 20 * 60
+    gw2 = _PrimaryGW([ch], err=90, ok=10)
+    _run_primary(gw2, state)
+    assert ch["status"] == 2, ch
 
 
 def test_primary_restore_requires_live_probe_pass():
@@ -2168,7 +2228,7 @@ def test_circuit_breaker_rotates_catastrophic_pin_only():
             super().__init__(channels)
             self._cid = ch_id
 
-        def count_logs(self, log_type, channel_id, window_minutes):
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
             return 25 if (log_type == 5 and channel_id == self._cid) else 100
 
         def recent_error_logs(self, channel_id, window_minutes, limit=100):
