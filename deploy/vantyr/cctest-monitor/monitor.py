@@ -1457,15 +1457,31 @@ def _run_action_verify_locked(body, channel_name, model):
         # one-active guard is needed — the pin stays a standby until a
         # promote picks it up.
         release_quarantine(rt["gateway"], ch_state, int(channel["id"]), channel_name, rt["enforce"], rt["discord"])
-    elif not checked_direct and verdict in BAD_VERDICTS:
-        # Only run the failover policy for gateway-attributed checks; a
-        # direct advisory check of a standby must not itself trigger a
-        # quarantine (the operator is inspecting, not routing).
-        process_verdict(
-            rt["gateway"], rt["cctest"], channel, "", "", model,
-            verdict, rt["threshold_for"], rt["enforce"], rt["discord"], rt["state"],
-            channels, rt["seller_registry"],
-        )
+    elif verdict in BAD_VERDICTS:
+        # A direct check of a STANDBY is advisory — the operator is inspecting,
+        # not routing — so it must not quarantine anything. But when the
+        # operator verifies the pin that is ACTUALLY SERVING and the verdict is
+        # bad, discarding it was a real bug (audit M3, 2026-10-25): the UI went
+        # red, the pin stayed enabled, and the fail counter was never touched
+        # because process_verdict is skipped for direct checks.
+        #
+        # For the ACTIVE pin, record the confirmed failure with the normal
+        # threshold accounting (process_verdict) so repeated confirms
+        # quarantine and fail over exactly as a cycle check would. Guarded on
+        # status==enabled so a standby remains advisory.
+        if int(channel.get("status") or 0) == CHANNEL_ENABLED:
+            LOG.warning(
+                "[action] verify found ACTIVE pin %s serving a bad verdict (%s) — "
+                "applying the normal fail threshold and failover policy", channel_name, verdict,
+            )
+            process_verdict(
+                rt["gateway"], rt["cctest"], channel, "", "", model,
+                verdict, rt["threshold_for"], rt["enforce"], rt["discord"], rt["state"],
+                channels, rt["seller_registry"],
+            )
+        else:
+            LOG.info("[action] verify of standby %s returned %s — advisory only, nothing quarantined",
+                     channel_name, verdict)
     save_state(rt["state"])
     return 200, {"success": True, "data": {"verdict": verdict or "inconclusive", "channel": channel_name}}
 
@@ -1896,6 +1912,16 @@ def main():
         n.strip() for n in os.environ.get("PRIMARY_CHANNELS", "").split(",") if n.strip()
     )
     primary_restore_minutes = max(1, int(os.environ.get("PRIMARY_RESTORE_MINUTES", "30")))
+    # Live availability probe used to decide a RESTORE (owner decision
+    # 2026-10-25, option B). Points at the primary's own API surface: the
+    # kiro-proxy speaks Anthropic /v1/messages on :8080. Key is the proxy's
+    # own API key. Without these the monitor cannot prove recovery and
+    # refuses to restore (safe: stays on the a6pin backup).
+    primary_probe = {
+        "base_url": os.environ.get("PRIMARY_PROBE_BASE_URL", "").strip(),
+        "api_key": os.environ.get("PRIMARY_PROBE_KEY", "").strip(),
+        "model": os.environ.get("PRIMARY_PROBE_MODEL", "claude-sonnet-5").strip(),
+    }
 
     # The owner adds keys daily and wants them in the pool fast (owner rule
     # 2026-10-19: as close to real-time as possible). Sync is cheap (token
@@ -1926,6 +1952,7 @@ def main():
         "seller_registry": {},
         "a6m": a6m,
         "primary_channels": primary_channels,
+        "primary_probe": primary_probe,
     }
     # Key sync runs on its own fast loop — new A6 keys join the pool within
     # minutes, independent of the (expensive) per-cycle cctest checks.
@@ -1940,12 +1967,17 @@ def main():
     circuit_cfg = {
         "enabled": latency_cfg.get("enabled") and os.environ.get(
             "CIRCUIT_BREAKER_ENABLED", "true").lower() in ("1", "true", "yes"),
-        # severe-only thresholds: trip only on catastrophic evidence
+        # Owner decision 2026-10-25 (option 1): the FAST breaker trips at a
+        # 10% hard-error rate so a Kiro outage fails over to the a6pin
+        # backup within one 5-minute tick instead of waiting for 80%
+        # catastrophic evidence. Latency/hangs still never trip it alone —
+        # only hard (5xx) errors and abandoned streams do, so a slow-but-
+        # working primary is not yanked away mid-conversation.
         "min_samples": max(1, int(os.environ.get("CIRCUIT_MIN_SAMPLES", "15"))),
         "client_gone_ratio": float(os.environ.get("CIRCUIT_CLIENT_GONE_RATIO", "0.50")),
         "frt_ms_threshold": 10**12,     # latency alone never trips the breaker
         "hang_threshold": 10**9,        # hangs alone never trip it either
-        "error_ratio_threshold": float(os.environ.get("CIRCUIT_ERROR_RATIO", "0.80")),
+        "error_ratio_threshold": float(os.environ.get("CIRCUIT_ERROR_RATIO", "0.10")),
     }
     circuit_window = max(1, int(os.environ.get("CIRCUIT_WINDOW_MINUTES", "15")))
     circuit_interval = max(1, int(os.environ.get("CIRCUIT_INTERVAL_MINUTES", "5")))
@@ -1990,6 +2022,61 @@ def start_sync_loop(a6m, interval_minutes):
         daemon=True, name="cctest-a6-sync",
     ).start()
     LOG.info("A6 key sync loop started (every %dm)", interval_minutes)
+
+
+def probe_primary_live(base_url, api_key, model, timeout=60):
+    """LIVE availability probe for a disabled primary (owner decision
+    2026-10-25, "Option B"): send the smallest real completion and require a
+    valid assistant message back.
+
+    Why not /health: the kiro-proxy's /health reports PROCESS liveness only
+    ({"status":"ok","uptime":...}). During the 2026-10-24 outage — 429s and
+    stalled upstream reads for 300s — /health was green the whole time while
+    every request failed. Proving "Kiro is available again" means exercising
+    the real path: auth → upstream → a returned message.
+
+    Cost note: the kiro-proxy injects a ~6.5k-token system prompt, so each
+    probe costs ~6.5k input tokens. Probes run ONLY while the primary is
+    disabled, at most once per cycle — bounded and negligible.
+
+    Returns (ok: bool, detail: str). ok=True ONLY on a 2xx carrying a
+    well-formed assistant message; every other outcome (timeout, 429, 5xx,
+    malformed body) is ok=False so the primary stays disabled. Never raises.
+    """
+    import json as _json
+    body = _json.dumps({
+        "model": model,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "hi"}],
+    }).encode()
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/messages",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if not (200 <= resp.status < 300):
+                return False, f"http {resp.status}"
+            payload = _json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        # 429/5xx from the proxy = still unavailable. This is the signature
+        # of the outage we are guarding against.
+        return False, f"http {e.code}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {str(e)[:120]}"
+    if not isinstance(payload, dict):
+        return False, "malformed body"
+    content = payload.get("content")
+    if payload.get("type") != "message" or not isinstance(content, list) or not content:
+        return False, "no assistant message in response"
+    usage = payload.get("usage") or {}
+    return True, f"ok (out={usage.get('output_tokens')}, model={payload.get('model')})"
 
 
 def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
@@ -2058,20 +2145,39 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
                 if entry.get("disabled_at") is None:
                     LOG.debug("[primary] %s is disabled but not by us — leaving it", name)
                     continue
-                healthy = pin_is_sick(rt["gateway"], cid, window_minutes, latency_cfg=circuit_cfg)
-                if healthy is True:
+                # Restore requires a LIVE proof (owner decision 2026-10-25).
+                # A disabled primary serves no traffic, so its log window is
+                # empty — the old code treated that emptiness as "evidence"
+                # and re-enabled after the timer with nothing proven, which
+                # flaps: re-enable a still-broken Kiro, it fails, disable,
+                # wait, repeat. Instead, send one real minimal completion and
+                # require a valid message back. One passing probe restores
+                # (owner: single proof); a failing probe keeps it disabled and
+                # resets the clock.
+                probe_cfg = rt.get("primary_probe") or {}
+                base_url = probe_cfg.get("base_url")
+                api_key = probe_cfg.get("api_key")
+                probe_model = probe_cfg.get("model") or "claude-sonnet-5"
+                if not base_url or not api_key:
+                    LOG.warning(
+                        "[primary] %s disabled but no probe configured "
+                        "(PRIMARY_PROBE_BASE_URL / PRIMARY_PROBE_KEY) — cannot "
+                        "prove availability, leaving it off", name,
+                    )
                     entry["healthy_since"] = None
                     continue
-                if healthy is None:
-                    # No evidence while disabled (it serves no traffic, so the
-                    # logs are silent). That is expected — start the clock on
-                    # the first tick that has data rather than blocking restore
-                    # forever. Evidence-backed healthy (False) also starts it.
-                    pass
-                if entry.get("healthy_since") is None:
-                    entry["healthy_since"] = now
-                    continue
-                if now - entry["healthy_since"] < restore_minutes * 60:
+                entry["attempts"] = int(entry.get("attempts") or 0) + 1
+                ok, detail = probe_primary_live(base_url, api_key, probe_model)
+                entry["last_probe"] = {
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "ok": ok, "detail": detail, "attempts": entry["attempts"],
+                }
+                LOG.info("[primary] probe %s -> %s (%s) [attempt %d]",
+                         name, "AVAILABLE" if ok else "still down", detail, entry["attempts"])
+                if not ok:
+                    # Still unavailable — evidence-backed, so no timer starts.
+                    entry["healthy_since"] = None
+                    acted += 1  # persist the probe result for the dashboard
                     continue
                 try:
                     rt["gateway"].set_status(cid, CHANNEL_ENABLED)
@@ -2079,14 +2185,24 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes):
                 except Exception as e:
                     LOG.error("[primary] FAILED to restore %s: %s", name, e)
                     continue
+                was_down_for = int(now - (entry.get("disabled_at") or now))
                 entry["disabled_at"] = None
                 entry["healthy_since"] = None
+                entry["last_restore"] = {
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "down_seconds": was_down_for,
+                    "attempts": entry.pop("attempts", 0),
+                    "probe": detail,
+                }
                 acted += 1
-                LOG.warning("[primary] %s (ch %s) clean for %dm — RESTORED as primary",
-                            name, cid, restore_minutes)
+                LOG.warning(
+                    "[primary] %s (ch %s) RESTORED after %dm down / %d probe(s): %s",
+                    name, cid, max(1, was_down_for // 60), entry["last_restore"]["attempts"], detail,
+                )
                 discord_alert(
                     rt["discord"],
-                    f"cctest: primary {name} restored after {restore_minutes}m clean.",
+                    f"cctest: primary {name} is AVAILABLE again (live probe passed after "
+                    f"{max(1, was_down_for // 60)}m down) — restored as primary.",
                 )
 
         if acted:
@@ -2331,6 +2447,16 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry, latency_cfg=latency_cfg)
             finally:
                 _MUTATION_LOCK.release()
+    # Freshness marker for the status server: an old last_cycle_at (vs
+    # cycle_minutes) visibly signals a broken cycle on the admin page. Written
+    # HERE, at the true end of the hourly cycle, and NOT in
+    # _run_sick_rotation — the 5-minute circuit breaker calls that function
+    # too, which used to make the stamp fresh whenever the breaker was alive
+    # and hide a dead cycle (audit M2, 2026-10-25). Not written on the
+    # exception path (main() catches before this point), so a crashed cycle
+    # keeps the previous stamp — exactly the staleness we want to expose.
+    state["_meta"] = {"last_cycle_at": datetime.now(timezone.utc).isoformat()}
+    save_state(state)
 
 
 def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None, latency_cfg=None):
@@ -2396,11 +2522,12 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
             except Exception as e:
                 LOG.error("[sick] rotation FAILED for %s (stays active): %s", pin_name, e)
             save_state(state)
-    # Freshness marker for the status server: an old last_cycle_at (vs
-    # cycle_minutes) visibly signals a broken cycle on the admin page. Not
-    # written on the exception path — a crashed cycle keeps the previous
-    # stamp, which is exactly the staleness we want to expose.
-    state["_meta"] = {"last_cycle_at": datetime.now(timezone.utc).isoformat()}
+    # NOTE: the _meta freshness marker is written by run_cycle, NOT here.
+    # _run_sick_rotation is also called by the 5-minute circuit breaker, and
+    # stamping it here made last_cycle_at look fresh whenever the breaker was
+    # alive — the admin page's "cycle is stale" signal, the only external sign
+    # that the hourly cctest cycle has died, went permanently green (audit
+    # M2, 2026-10-25).
     save_state(state)
 
 
@@ -2854,8 +2981,14 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
             LOG.info("[%s] quarantine re-check skipped — no A6 key for merchant", name)
             return
         pin_base = channel.get("base_url") or "https://api.a6api.com"
-        verdict = do_check(cctest, pin_base, pin_key, candidate)
-        LOG.info("[%s] quarantine re-check %s direct -> %s", name, candidate, verdict)
+        # A6 registers the UPSTREAM spelling (e.g. gpt-6.1-sol), not our SKU
+        # (gpt-6-1-sol); asking for the SKU gets 403 model_not_allowed, which
+        # returns None and means the pin is NEVER released from quarantine —
+        # re-checked and refused forever. Same mapping the verify path uses
+        # (audit M5, 2026-10-25).
+        check_model = parse_model_mapping(channel.get("model_mapping")).get(candidate, candidate)
+        verdict = do_check(cctest, pin_base, pin_key, check_model)
+        LOG.info("[%s] quarantine re-check %s direct -> %s", name, check_model, verdict)
         record_verdict(ch_state, candidate, verdict)
         ch_state["last_quarantine_check"] = now
         if verdict in PASS_VERDICTS:

@@ -1804,6 +1804,89 @@ def test_dual_spelling_pin_can_be_quarantined():
     assert ch_state.get("quarantined") is True, ch_state
 
 
+def test_breaker_does_not_refresh_cycle_freshness():
+    """REGRESSION GUARD (audit M2, 2026-10-25). The _meta.last_cycle_at
+    freshness stamp lived in _run_sick_rotation, which the 5-minute breaker
+    also calls — so a dead hourly cycle looked alive whenever the breaker was
+    running. last_cycle_at is the admin page's only external 'cycle is stale'
+    signal."""
+    chs = [dict(c) for c in PIN_CHANNELS]
+    chs[0]["status"] = 1
+    chs[0]["id"] = 20
+    gw = FakeGW(chs)
+    state = {"_meta": {"last_cycle_at": "2026-10-01T00:00:00+00:00"}}
+
+    class PassCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "official"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    m.RUNTIME = {
+        "gateway": gw, "cctest": PassCC(),
+        "sellers": [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+        "enforce": True, "discord": None, "state": state, "seller_registry": {},
+    }
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.80}
+    try:
+        with hermetic_market():
+            m.circuit_breaker_tick(cfg, 15)
+    finally:
+        m.RUNTIME = None
+    # The breaker must NOT have moved the cycle stamp.
+    assert state["_meta"]["last_cycle_at"] == "2026-10-01T00:00:00+00:00", state["_meta"]
+
+
+def test_active_pin_verify_bad_verdict_is_not_discarded():
+    """REGRESSION GUARD (audit M3, 2026-10-25). Verify on an ACTIVE pin that
+    returned a bad verdict only turned the UI red: the pin stayed enabled and
+    the fail counter was never touched, because process_verdict is skipped for
+    direct checks. A confirmed-bad active pin must count toward the normal
+    fail threshold."""
+    ch = {"id": 70, "name": "a6pin-fable-5-4665", "status": 1,
+          "group": "default", "models": "claude-fable-5", "model_mapping": ""}
+    standby = {"id": 71, "name": "a6pin-fable-5-3825", "status": 2,
+               "group": "default", "models": "claude-fable-5", "model_mapping": ""}
+    gw = FakeGW([ch, standby])
+    state = {}
+
+    class BadCC:
+        @staticmethod
+        def check(b, k, mo):
+            return {"verdict": "attr_swapped"}
+
+        @staticmethod
+        def verdict_category(r):
+            return r["verdict"]
+
+    class A6M:
+        def list_tokens(self):
+            return [{"id": 1, "name": "FABLE 5 | 4665"}]
+
+        def reveal_key(self, tid):
+            return "sk-fable"
+
+    m._PIN_KEY_CACHE.clear()
+    m.RUNTIME = {"gateway": gw, "cctest": BadCC(), "sellers": [],
+                 "enforce": True, "discord": None, "state": state,
+                 "seller_registry": {}, "a6m": A6M(),
+                 "threshold_for": lambda name: 1}
+    try:
+        status, payload = m.run_action_verify({"model": "claude-fable-5",
+                                               "channel": "a6pin-fable-5-4665"})
+    finally:
+        m.RUNTIME = None
+    assert status == 200, (status, payload)
+    # The confirmed failure was recorded on the active pin (not discarded).
+    fails = state.get("a6pin-fable-5-4665", {}).get("fails", 0)
+    assert fails >= 1, state.get("a6pin-fable-5-4665")
+
+
 def test_cycle_channel_processing_respects_mutation_lock():
     """REGRESSION GUARD (audit BLOCKER 2026-10-25). The cycle's dedup and
     per-channel processing used to run WITHOUT the mutation lock, so an
@@ -1933,79 +2016,120 @@ def test_all_failures_rotates_even_with_benign_errors_when_armed():
     assert m.pin_is_sick(HealthyGW([]), 1, 60, latency_cfg=cfg) is False
 
 
-def test_primary_channel_fails_over_when_degraded():
-    """Owner decision 2026-10-25 (Option A): kiro-pool is the primary
-    supplier for its models and the a6pin pins are the backup. Because the
-    primary outranks the pins, failover = disable it so priority routing
-    falls through to the already-enabled pin. It must ALSO be restored
-    automatically, or one bad window leaves the primary off forever."""
+class _PrimaryGW(FakeGW):
+    def __init__(self, channels, err, ok):
+        super().__init__(channels)
+        self._err, self._ok = err, ok
 
-    class PrimaryGW(FakeGW):
-        def __init__(self, channels, err, ok):
-            super().__init__(channels)
-            self._err, self._ok = err, ok
+    def count_logs(self, log_type, channel_id, window_minutes):
+        return self._err if log_type == 5 else self._ok
 
-        def count_logs(self, log_type, channel_id, window_minutes):
-            return self._err if log_type == 5 else self._ok
+    def recent_error_logs(self, channel_id, window_minutes, limit=100):
+        return [{"content": "status_code=502"}] * self._err
 
-        def recent_error_logs(self, channel_id, window_minutes, limit=100):
-            return [{"content": "status_code=502"}] * self._err
+    def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+        return []
 
-        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
-            return []
 
-    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
-           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
-           "error_ratio_threshold": 0.80}
+PRIMARY_CFG = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+               "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+               "error_ratio_threshold": 0.10}
 
-    def make(ch_status):
-        return {"id": 95, "name": "kiro-pool", "status": ch_status,
-                "group": "default", "models": "claude-opus-5-5", "model_mapping": ""}
 
-    def run(gw, state):
-        m.RUNTIME = {"gateway": gw, "cctest": None, "sellers": [], "enforce": True,
-                     "discord": None, "state": state, "seller_registry": {},
-                     "primary_channels": ("kiro-pool",)}
+def _primary_ch(status):
+    return {"id": 95, "name": "kiro-pool", "status": status,
+            "group": "default", "models": "claude-opus-5-5", "model_mapping": ""}
+
+
+def _run_primary(gw, state, probe=None):
+    m.RUNTIME = {"gateway": gw, "cctest": None, "sellers": [], "enforce": True,
+                 "discord": None, "state": state, "seller_registry": {},
+                 "primary_channels": ("kiro-pool",),
+                 "primary_probe": probe or {"base_url": "http://kiro:8080",
+                                            "api_key": "sk-x",
+                                            "model": "claude-sonnet-5"}}
+    try:
+        return m.sweep_primary_channels(PRIMARY_CFG, 15, 30)
+    finally:
+        m.RUNTIME = None
+        # The sweep calls save_state(), which persists to the shared
+        # state_test.json. Drop it so this test's _primary/kiro-pool state
+        # cannot leak into a later test (observed: broke
+        # test_last_verdicts_recorded only when run in-suite).
         try:
-            return m.sweep_primary_channels(cfg, 15, 30)
-        finally:
-            m.RUNTIME = None
+            os.remove(m.STATE_PATH)
+        except OSError:
+            pass
 
-    # 1. Degraded primary -> DISABLED (traffic falls to the a6pin backup)
-    ch = make(1)
-    gw = PrimaryGW([ch], err=90, ok=10)          # 90% hard errors
+
+def test_primary_channel_fails_over_when_degraded():
+    """Owner decision 2026-10-25: kiro-pool is the primary and the a6pin pins
+    are the backup. Because the primary outranks the pins, failover = disable
+    it so priority routing falls through to the already-enabled pin."""
+    ch = _primary_ch(1)
+    gw = _PrimaryGW([ch], err=90, ok=10)          # 90% hard errors
     state = {}
-    acted = run(gw, state)
-    assert acted == 1, acted
+    assert _run_primary(gw, state) == 1
     assert ch["status"] == 2, ch                 # disabled
     assert state["_primary"]["kiro-pool"]["disabled_at"] is not None
     # NO promotion happened — the pins were already enabled below it
     assert not gw.writes or all(w[0] != 21 for w in gw.writes), gw.writes
 
-    # 2. Still degraded while disabled -> stays disabled, no restore
-    gw2 = PrimaryGW([ch], err=90, ok=10)
-    run(gw2, state)
+
+def test_primary_restore_requires_live_probe_pass():
+    """Restore is proven by a LIVE request, not by an empty log window
+    (owner decision 2026-10-25, option B). A disabled primary serves no
+    traffic, so absence of errors proves nothing — the old code re-enabled
+    on silence and flapped."""
+    ch = _primary_ch(2)
+    state = {"_primary": {"kiro-pool": {"disabled_at": time.time() - 3600,
+                                        "healthy_since": None}}}
+    gw = _PrimaryGW([ch], err=0, ok=0)            # silent: no traffic either way
+
+    calls = []
+
+    def failing_probe(base_url, api_key, model, timeout=60):
+        calls.append(model)
+        return False, "http 429"
+
+    original = m.probe_primary_live
+    m.probe_primary_live = failing_probe
+    try:
+        _run_primary(gw, state)
+        # Failing probe → stays disabled, no clock started
+        assert ch["status"] == 2, ch
+        assert calls == ["claude-sonnet-5"], calls
+        assert state["_primary"]["kiro-pool"]["healthy_since"] is None
+        assert state["_primary"]["kiro-pool"]["last_probe"]["ok"] is False
+
+        # Passing probe → restores immediately (owner: ONE proof)
+        m.probe_primary_live = lambda *a, **k: (True, "ok (out=1)")
+        _run_primary(gw, state)
+        assert ch["status"] == 1, ch
+        assert state["_primary"]["kiro-pool"]["disabled_at"] is None
+        assert state["_primary"]["kiro-pool"]["last_restore"]["probe"] == "ok (out=1)"
+    finally:
+        m.probe_primary_live = original
+
+
+def test_primary_restore_refuses_without_probe_config():
+    """With no probe configured the monitor cannot prove recovery, so it
+    must NOT restore on silence — it stays on the backup (safe)."""
+    ch = _primary_ch(2)
+    state = {"_primary": {"kiro-pool": {"disabled_at": time.time() - 3600,
+                                        "healthy_since": None}}}
+    gw = _PrimaryGW([ch], err=0, ok=0)
+    _run_primary(gw, state, probe={"base_url": "", "api_key": "", "model": "x"})
     assert ch["status"] == 2, ch
 
-    # 3. Healthy while disabled, but restore window not elapsed -> stays off
-    gw3 = PrimaryGW([ch], err=0, ok=100)
-    run(gw3, state)
+
+def test_primary_left_alone_when_not_ours():
+    ch = _primary_ch(2)
+    st = {}
+    gw = _PrimaryGW([ch], err=0, ok=100)
+    _run_primary(gw, st)
     assert ch["status"] == 2, ch
-    assert state["_primary"]["kiro-pool"]["healthy_since"] is not None
-
-    # 4. Healthy past the restore window -> re-enabled as primary
-    state["_primary"]["kiro-pool"]["healthy_since"] = time.time() - 31 * 60
-    run(gw3, state)
-    assert ch["status"] == 1, ch
-    assert state["_primary"]["kiro-pool"]["disabled_at"] is None
-
-    # 5. A channel we never disabled is left alone
-    chx = make(2)
-    st2 = {}
-    gw4 = PrimaryGW([chx], err=0, ok=100)
-    run(gw4, st2)
-    assert chx["status"] == 2, chx
-    assert st2["_primary"]["kiro-pool"]["disabled_at"] is None
+    assert st["_primary"]["kiro-pool"]["disabled_at"] is None
 
 
 def test_circuit_breaker_rotates_catastrophic_pin_only():
