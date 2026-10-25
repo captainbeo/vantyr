@@ -1108,22 +1108,27 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None):
     errors = gateway.count_logs(5, channel_id, window_minutes)
     if errors is None:
         return None
-    # When a latency config is enabled, the all-failures early-return must NOT
-    # fire: raw type=5 counts include benign 429s / client aborts that New API
-    # already retried (3,692 such rows exist in production). A healthy pin in
-    # a quiet window with one benign 429 would otherwise be rotated. With the
-    # config armed, defer to pin_latency_sick, which counts only hard 5xx
-    # content — that is the "catastrophic evidence" the circuit breaker's
-    # severe-only promise depends on (audit finding 2026-10-24). The raw
-    # early-return stays for the legacy config-less path only.
-    if latency_cfg and latency_cfg.get("enabled"):
-        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
+    # ALL-FAILURES RULE (owner rule 2026-10-19) applies on EVERY path,
+    # armed or not: a pin with errors and ZERO successes in the window is
+    # unusable no matter what the errors say — an expired key (401), quota
+    # exhaustion, or a transport reset is just as fatal as a 5xx. This runs
+    # BEFORE the latency branch deliberately: an earlier version deferred to
+    # pin_latency_sick first, and because that only counts hard 5xx content,
+    # a pin failing 100% of requests with 429/401/transport errors was never
+    # rotated at all (regression introduced 2026-10-24, caught by audit).
+    # The benign-error exclusion still applies to the RATIO-based checks
+    # below, where it prevents false positives on sparse evidence.
     if errors > 0:
         successes = gateway.count_logs(2, channel_id, window_minutes)
         if successes is None:
             return None
         if successes == 0:
             return True
+    # No all-failures verdict: fall through to the degraded-merchant signal
+    # (slow / abandoned / hard-5xx ratio), which needs enough samples and
+    # deliberately excludes benign 429s and client aborts.
+    if latency_cfg and latency_cfg.get("enabled"):
+        return pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg)
     return False
 
 

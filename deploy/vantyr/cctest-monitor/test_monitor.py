@@ -1698,7 +1698,13 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
            "error_ratio_threshold": 0.80}
 
     class QuietBenignGW(FakeGW):
-        # 2 benign 429s, 1 success — a healthy pin having a quiet 15 min.
+        # A healthy pin having a quiet window: a couple of benign 429s among
+        # successful traffic. NOTE (audit H5): with ZERO successes this would
+        # no longer be "benign noise" — it would be a total failure, which the
+        # all-failures rule rotates (see
+        # test_all_failures_rotates_even_with_benign_errors_when_armed). So a
+        # benign-errors test necessarily has successes present, and what it
+        # guards is that the RATIO checks ignore 4xx noise.
         def __init__(self, channels, ch_id):
             super().__init__(channels)
             self._cid = ch_id
@@ -1706,7 +1712,7 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
         def count_logs(self, log_type, channel_id, window_minutes):
             if channel_id != self._cid:
                 return 0
-            return 2 if log_type == 5 else 1
+            return 2 if log_type == 5 else 40
 
         def recent_error_logs(self, channel_id, window_minutes, limit=100):
             return [{"content": "status_code=429, rate limited"}] * 2
@@ -1741,6 +1747,47 @@ def test_circuit_breaker_ignores_sparse_benign_errors():
     # healthy pin must still be active; nothing was rotated
     assert chs[0]["status"] == 1, chs[0]
     assert (21, 1) not in gw.writes, gw.writes
+
+
+def test_all_failures_rotates_even_with_benign_errors_when_armed():
+    """REGRESSION GUARD (audit H2, regression introduced 2026-10-24). When
+    the latency flag was armed, pin_is_sick deferred to pin_latency_sick
+    FIRST — which only counts hard 5xx content — so a pin failing 100% of
+    requests with 429 / 401 / transport errors was never rotated. That made
+    arming the catastrophic-detection feature DISABLE catastrophic
+    detection for expired keys and quota exhaustion.
+
+    The all-failures rule (errors > 0 AND zero successes) must apply on the
+    armed path too, whatever the error content."""
+    cfg = {"enabled": True, "min_samples": 15, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.50, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.05}
+
+    for label, content in (
+        ("429 rate limit", "status_code=429, rate limited"),
+        ("401 expired key", "status_code=401, invalid api key"),
+        ("transport reset", "upstream connection reset"),
+        ("502 hard error", "status_code=502, pool exhausted"),
+    ):
+        class TotalFailGW(FakeGW):
+            def count_logs(self, log_type, channel_id, window_minutes):
+                return 200 if log_type == 5 else 0   # errors, ZERO successes
+            def recent_error_logs(self, channel_id, window_minutes, limit=100):
+                return [{"content": content}] * 100  # page cap, as prod
+            def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+                return []
+
+        assert m.pin_is_sick(TotalFailGW([]), 1, 60, latency_cfg=cfg) is True,             f"{label}: a 100%-failing pin must be sick even when armed"
+
+    # ...and a healthy pin with a few benign errors stays healthy.
+    class HealthyGW(FakeGW):
+        def count_logs(self, log_type, channel_id, window_minutes):
+            return 2 if log_type == 5 else 60
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            return [{"content": "status_code=429"}] * 2
+        def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+            return []
+    assert m.pin_is_sick(HealthyGW([]), 1, 60, latency_cfg=cfg) is False
 
 
 def test_primary_channel_fails_over_when_degraded():
