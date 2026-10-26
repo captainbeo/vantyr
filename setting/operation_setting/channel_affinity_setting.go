@@ -216,17 +216,23 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			UserAgentInclude:      nil,
 		},
 		{
-			// Cache affinity: route users back to the channel where they
-			// built a cache (2026-10-26). Prefer mode (not strict): if merchant
-			// A dies, failover immediately and record the new channel.
+			// Catch-all per-user stickiness (2026-10-26). Despite the name,
+			// this does not track where a cache was written: like the rules
+			// above it pins a user+model to the channel of their last
+			// successful request (SwitchOnSuccess), which is what keeps them
+			// on the merchant holding their cache.
 			//
-			// TTL must match the cache lifetime the relay actually creates.
-			// The relay upgrades cache_control blocks with no client ttl to
-			// "1h" (relay/claude_handler.go:123 -> InjectCacheTtl), so a 5 min
-			// affinity window dropped the pin long before the cache expired.
-			// 3600 s is the default TTL; note that because rules are
-			// first-match-wins this rule only decides requests no earlier rule
-			// matched, and those earlier rules keep a 20 min TTL.
+			// Rules are first-match-wins, so this only decides requests the
+			// three trace rules above do not cover: GPT models on
+			// /v1/messages or /v1/chat/completions, Claude on /v1/responses,
+			// and GPT /v1/responses without prompt_cache_key (~3.5k
+			// requests/week as of 2026-10-26). While each GPT model has a
+			// single enabled channel it changes nothing (0.4% switch rate on
+			// that traffic); it matters once a model has two channels live.
+			// Prefer mode: a failed channel still fails over.
+			//
+			// TTL 3600 s matches the 1h cache the relay creates for clients
+			// that set no ttl (relay/claude_handler.go -> InjectCacheTtl).
 			Name:       "cache affinity",
 			ModelRegex: []string{"^claude-.*$", "^gpt-.*$"},
 			PathRegex:  []string{"/v1/messages", "/v1/chat/completions", "/v1/responses"},
