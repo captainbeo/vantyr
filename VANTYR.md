@@ -5620,3 +5620,22 @@ do not plan to lower it "once pings prove out": the evidence now says kiro-pool
 `client_gone` is mostly clients with a 60s total-duration limit, which is client
 behaviour, not channel health. That is exactly what 0.75 stops the monitor from
 acting on. A dead channel still trips the hard-error ratio, FRT and hang checks.
+
+## 2026-10-26e — cache-write price raised to 1.6x for opus-5 / sonnet-5 (LIVE)
+
+Owner decision: 1.6x the cheapest A6 merchant write price (not 2x). Changed the
+`CreateCacheRatio` option live, no deploy: `claude-opus-5` 0.8 -> 1.0,
+`claude-sonnet-5` 0.4 -> 0.5. Backup on the server at
+`/tmp/ccr.bak-opus5-sonnet5-20261026-200752`. The public pricing API shows the
+new values, so the gateway has loaded them.
+
+| model | 5m write before | after | merchant | 1h write after | merchant 1h |
+|---|---|---|---|---|---|
+| opus-5 | $0.08 | $0.10 | $0.060 | $0.16 | $0.096 |
+| sonnet-5 | $0.04 | $0.05 | $0.030 | $0.08 | $0.048 |
+
+Reads are unchanged. Margin only matters on A6 traffic: as of 2026-10-26 both
+models run almost entirely on kiro-pool (opus-5 176 kiro / 1 A6, sonnet-5 268 /
+5 that day), a flat subscription, because kiro-pool only came online
+2026-10-24. Before that every request went to A6, which is why a 7-day window
+made these models look A6-heavy.
