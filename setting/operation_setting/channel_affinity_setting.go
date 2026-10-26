@@ -217,11 +217,16 @@ var channelAffinitySetting = ChannelAffinitySetting{
 		},
 		{
 			// Cache affinity: route users back to the channel where they
-			// built a cache (2026-10-26). If a user wrote cache on merchant A
-			// in the last 5 min, route them back to A on the next request so
-			// they hit the cache instead of losing it. Prefer mode (not strict):
-			// if merchant A dies, failover immediately and record the new
-			// channel as the cache location.
+			// built a cache (2026-10-26). Prefer mode (not strict): if merchant
+			// A dies, failover immediately and record the new channel.
+			//
+			// TTL must match the cache lifetime the relay actually creates.
+			// The relay upgrades cache_control blocks with no client ttl to
+			// "1h" (relay/claude_handler.go:123 -> InjectCacheTtl), so a 5 min
+			// affinity window dropped the pin long before the cache expired.
+			// 3600 s is the default TTL; note that because rules are
+			// first-match-wins this rule only decides requests no earlier rule
+			// matched, and those earlier rules keep a 20 min TTL.
 			Name:       "cache affinity",
 			ModelRegex: []string{"^claude-.*$", "^gpt-.*$"},
 			PathRegex:  []string{"/v1/messages", "/v1/chat/completions", "/v1/responses"},
@@ -231,7 +236,7 @@ var channelAffinitySetting = ChannelAffinitySetting{
 				{Type: "context_int", Key: "token_id"},
 			},
 			ValueRegex:            "",
-			TTLSeconds:            300, // 5 min: typical cache TTL (Anthropic 5m default)
+			TTLSeconds:            3600, // 1h: matches the relay-injected cache TTL
 			ParamOverrideTemplate: map[string]any{},
 			SkipRetryOnFailure:    false,
 			SessionMode:           "prefer",
