@@ -51,3 +51,10 @@ deploy/vantyr/data/
 
 # Claude Code local config
 .claude/launch.json
+
+# Scratch workspaces and vendored module caches (2026-10-26: 18.7k files
+# were committed by accident; keep them out of the tree).
+.tmp*
+.scratch*
+-1
+node_modules/
