@@ -122,8 +122,9 @@ fi
 echo "== context on disk verified against the archive"
 
 # VERIFY_ONLY=1 stops here. A build on this 4-vCPU host pushes the gateway past
-# its 90% CPU gate and real users get 503 system_cpu_overloaded (2026-10-26:
-# two at 17:43 during a build), so test the verify/extract path without one.
+# its 90% CPU gate and real users get 503 system_cpu_overloaded (confirmed by
+# response body at 16:21 on 2026-10-26; two more at 17:43 during a build match
+# the signature), so test the verify/extract path without one.
 if [ "${VERIFY_ONLY:-0}" = "1" ]; then
     echo "== VERIFY_ONLY: stopping before the build"
     exit 0

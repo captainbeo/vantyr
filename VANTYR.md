@@ -5337,10 +5337,15 @@ against a 90% threshold), which returned `system_cpu_overloaded` to real
 requests. Stopped; load returned to normal. Worth knowing that guard exists and
 that a stray build is enough to trigger it.
 
-**Any gateway build on this host costs users a few 503s.** It is not only
-runaway builds: the normal 17:45 UTC build (`vt-42af91d64`) also crossed the
-90% gate, and user 111 got two `503` at 17:43:31-32 (`sar` shows the 17:50
-bucket at 70% idle against ~91% before). Build in a quiet window, or off the
+**Any gateway build on this host probably costs users a few 503s.** It is not
+only runaway builds: during the normal build of `vt-42af91d64` (started 17:42:12,
+image written 17:45:08 UTC) user 111 got two `503` at 17:43:31-32. Inferred, not
+confirmed: no response body was captured. The 16:21 rejections were confirmed by
+body (`system cpu overloaded`); the 17:43 pair match their signature (sub-ms 503,
+no ERR line, CPU gate runs before auth on `/v1`), kiro-pool was not disabled, and
+affinity is `prefer` not `strict`, which rules out the other two 503 producers.
+`sar` 10-minute averages (70% idle in the 17:50 bucket) are too coarse to show
+the peak. Build in a quiet window, or off the
 host. `build-gateway.sh` has `VERIFY_ONLY=1` so the verify/extract path can be
 tested without building.
 
