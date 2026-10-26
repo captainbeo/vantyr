@@ -1,0 +1,170 @@
+name: commercial-mvp
+
+x-mock-build: &mock-build
+  context: ${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}
+  dockerfile: deploy/mvp/mock/Dockerfile
+
+services:
+  gateway:
+    image: commercial-mvp-gateway:${MVP_SOURCE_REVISION:?run prepare-gateway-context.sh first}
+    build:
+      context: ${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}
+      dockerfile: Dockerfile
+      args:
+        SOURCE_REVISION: ${MVP_SOURCE_REVISION:?run prepare-gateway-context.sh first}
+        VITE_CORRESPONDING_SOURCE_URL: ${MVP_CORRESPONDING_SOURCE_URL:?run prepare-gateway-context.sh first}
+    entrypoint: ["/bin/sh", "/opt/mvp/gateway-entrypoint.sh"]
+    command: ["--log-dir", "/data/logs"]
+    environment:
+      PORT: "3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: new_api
+      POSTGRES_DB: new_api
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PRIVATE_MVP_MODE: "1"
+      COMMERCIAL_MOCK_CHANNEL_SEED_FILE: /opt/mvp/mock-channels.json
+      COMMERCIAL_MOCK_HOST_ALLOWLIST: mock-primary,mock-secondary
+      TZ: UTC
+    secrets:
+      - postgres_password
+      - redis_password
+      - session_secret
+      - gateway_key_pepper
+      - mock_primary_relay_credential
+      - mock_secondary_relay_credential
+    volumes:
+      - gateway_data:/data
+    tmpfs:
+      - /tmp
+    ports:
+      - 127.0.0.1:${MVP_GATEWAY_PORT:-3000}:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock-primary:
+        condition: service_healthy
+      mock-secondary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:17.5-alpine@sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa
+    environment:
+      POSTGRES_USER: new_api
+      POSTGRES_DB: new_api
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U new_api -d new_api -h 127.0.0.1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - backend
+
+  redis:
+    image: commercial-mvp-redis:${MVP_SOURCE_REVISION:?run prepare-gateway-context.sh first}
+    build:
+      context: ${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}
+      dockerfile: deploy/mvp/redis.Dockerfile
+    secrets:
+      - redis_password
+    volumes:
+      - redis_data:/data
+    tmpfs:
+      - /run/mvp:mode=0700
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli --no-auth-warning ping | grep -qx PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+    networks:
+      - backend
+
+  mock-primary:
+    image: commercial-mvp-mock:${MVP_SOURCE_REVISION:?run prepare-gateway-context.sh first}
+    build: *mock-build
+    environment:
+      MOCK_STATION_ID: primary
+      MOCK_UPSTREAM_MODEL: primary-fixture-model
+      MOCK_CONTROL_TOKEN_FILE: /run/secrets/mock_primary_control_token
+      MOCK_RELAY_TOKEN_FILE: /run/secrets/mock_primary_relay_credential
+    secrets:
+      - mock_primary_control_token
+      - mock_primary_relay_credential
+    ports:
+      - 127.0.0.1:${MVP_MOCK_PRIMARY_CONTROL_PORT:-18081}:8081
+    healthcheck:
+      test: ["CMD", "/mock-transfer-station", "--healthcheck"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    tmpfs:
+      - /tmp
+    networks:
+      - backend
+
+  mock-secondary:
+    image: commercial-mvp-mock:${MVP_SOURCE_REVISION:?run prepare-gateway-context.sh first}
+    environment:
+      MOCK_STATION_ID: secondary
+      MOCK_UPSTREAM_MODEL: secondary-fixture-model
+      MOCK_CONTROL_TOKEN_FILE: /run/secrets/mock_secondary_control_token
+      MOCK_RELAY_TOKEN_FILE: /run/secrets/mock_secondary_relay_credential
+    secrets:
+      - mock_secondary_control_token
+      - mock_secondary_relay_credential
+    ports:
+      - 127.0.0.1:${MVP_MOCK_SECONDARY_CONTROL_PORT:-18082}:8081
+    healthcheck:
+      test: ["CMD", "/mock-transfer-station", "--healthcheck"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    tmpfs:
+      - /tmp
+    networks:
+      - backend
+
+secrets:
+  postgres_password:
+    environment: MVP_POSTGRES_PASSWORD
+  redis_password:
+    environment: MVP_REDIS_PASSWORD
+  session_secret:
+    environment: MVP_SESSION_SECRET
+  gateway_key_pepper:
+    environment: MVP_GATEWAY_KEY_PEPPER
+  mock_primary_control_token:
+    environment: MVP_MOCK_PRIMARY_CONTROL_TOKEN
+  mock_secondary_control_token:
+    environment: MVP_MOCK_SECONDARY_CONTROL_TOKEN
+  mock_primary_relay_credential:
+    environment: MVP_MOCK_PRIMARY_RELAY_CREDENTIAL
+  mock_secondary_relay_credential:
+    environment: MVP_MOCK_SECONDARY_RELAY_CREDENTIAL
+
+volumes:
+  gateway_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  backend:
+    driver: bridge

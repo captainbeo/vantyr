@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-5-compose-current-tree-blocked-2026-08-16",
+  "type": "compose-build-and-postgresql-evidence-gap",
+  "source": "WSL Docker attempt `wsl.exe bash -lc \"cd /mnt/c/Users/z/Documents/worktrees/commercial-mvp; bash deploy/mvp/verify-compose.sh up\"` on 2026-08-16",
+  "summary": "Compose configuration rendered without literal secret values, but the immutable gateway build archived committed HEAD only and failed before startup because current uncommitted/untracked Phase 2 files were absent (`gatewayPublicIDPattern`, `normalizeCatalogDefinition`, and `infoKeyCount` undefined). A subsequent WSL probe returned `Wsl/Service/CreateInstance/E_ACCESSDENIED` with LxssManager stopped, so disposable PostgreSQL and Linux race proofs could not be rerun. No repository, linked Git metadata, WSL distribution, or Proxy Server metadata was changed.",
+  "verifier": "Primary agent on 2026-08-16"
+}

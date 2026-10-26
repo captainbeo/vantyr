@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-7-zero-drain-guard-final-2026-08-16",
+  "type": "bounded-recovery-hardening-final",
+  "source": "Cached Go 1.25.1 Windows runner and direct WSL/service probes on 2026-08-16",
+  "summary": "Final local slice verification passed: focused non-positive-drain RED/GREEN tests, the full affected Go package suite, go vet, gofmt, and staged/unstaged diff checks. Independent Go/database/security review found no Critical or Important findings. The guards reject zero or negative drain intervals before database access and before closing admission; the PostgreSQL regression verifies zero leaves epoch/state/version unchanged. Windows -race is unavailable with CGO_ENABLED=0 and WSL remains E_ACCESSDENIED with LxssManager stopped, so PostgreSQL runtime, Compose current-tree, and Linux-race evidence remain open.",
+  "verifier": "Primary agent with independent drain-guard review on 2026-08-16"
+}

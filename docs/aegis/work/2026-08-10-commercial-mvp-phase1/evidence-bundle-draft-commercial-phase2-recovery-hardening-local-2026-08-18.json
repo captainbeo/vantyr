@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-recovery-hardening-local-2026-08-18",
+  "type": "local-recovery-hardening-verification",
+  "source": "Current codex/commercial-mvp worktree; read-only Docker golang:1.26.1-bookworm runner with disposable cache volumes on 2026-08-18",
+  "summary": "Added Redis-first atomic admission fencing, CAS epoch projection initialization, minimum recovery drain and lease-duration bounds, manager preflight, and max-epoch overflow rejection. RED/GREEN regression covered MaxInt64 recovery/parser rejection; affected package tests, vet, focused Linux race filters, container gofmt, and staged/unstaged diff checks passed. The preserved empty .tmp-recovery-driver.go was overlaid only inside the read-only test container because the migration inventory scanner parses every root Go file. Independent fence/security review found no Critical or Important production-path defect. Stale-present Redis repair and the exported active initializer race remain trusted-operator hardening gaps and are documented fail-closed; no files were staged, committed, reset, deleted, or written under the protected Proxy Server path.",
+  "verifier": "Primary agent with independent max-epoch and fence/security review on 2026-08-18"
+}

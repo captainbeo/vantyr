@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-redis-outage-gateway-2026-08-17",
+  "type": "runtime-redis-outage-fail-closed-integration-proof",
+  "source": "Disposable Compose project commercial-mvp-needs-verification-0817b with cached golang:1.26.1-bookworm driver build on 2026-08-17; control counts queried inside each mock container by a self-removing helper",
+  "summary": "Real gateway integration proof on a healthy five-service stack. The existing baseline had primary=1 authorized mock attempt and secondary=0. Redis stop then an authenticated request returned HTTP 503 with server_is_overloaded/new_api_error, zero upstream attempts, and no reservation, commit, or amount_used mutation. Empty epoch, stale epoch, malformed concurrency hash, and malformed concurrency limit injections each produced the same sanitized 503 with unchanged durable counters and unchanged mock counts. The stopped Redis container was restarted healthy; the subsequent injection restores reinitialized Redis at epoch 2 and readiness passed. The final healthy request returned 200 with exactly one new reservation, commit, and quota unit; mock counts ended primary=2 authorized and secondary=0. The disposable driver skipped only its startup Redis PING for the outage action so the request reached the gateway. Important evidence gaps remain: production recovery/readiness functions and live-lease drain behavior were not invoked, the stack is local current-tree evidence rather than an authorized immutable branch commit, and no raw replay log was retained. No repository or protected linked metadata changed; Phase 2 remains needs-verification.",
+  "verifier": "Primary agent with independent Redis runtime probe and outage-proof review on 2026-08-17"
+}

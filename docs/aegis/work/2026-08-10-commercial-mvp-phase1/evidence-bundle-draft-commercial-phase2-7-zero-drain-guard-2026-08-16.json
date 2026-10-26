@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-7-zero-drain-guard-2026-08-16",
+  "type": "bounded-recovery-hardening",
+  "source": "Cached Go 1.25.1 Windows runner on 2026-08-16; direct WSL probe on 2026-08-16",
+  "summary": "Added RED/GREEN regressions and minimal guards so the operator recovery path rejects a non-positive drain interval before closing admission, and the epoch bump rejects non-positive intervals before database access. The positive backdated PostgreSQL fixture was updated; affected Go tests, vet, formatting, and diff checks passed. Windows race remains unavailable with CGO_ENABLED=0, and direct WSL still returns Wsl/Service/CreateInstance/E_ACCESSDENIED, so fresh PostgreSQL runtime and Linux-race proof remain open.",
+  "verifier": "Primary agent with independent drain-guard review on 2026-08-16"
+}

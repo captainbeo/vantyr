@@ -1,0 +1,33 @@
+  # cctest model-authenticity monitor — observe-only until CCTEST_ENFORCE=true
+  # in .env. Quarantines a channel (status 2) on bad cctest verdicts; the
+  # native test loop skips status-2 channels, so only this service re-enables
+  # them. Needs CCTEST_* vars in .env or it parks (no restart storm).
+  cctest-monitor:
+    build:
+      context: ./cctest-monitor
+      dockerfile: Dockerfile
+    image: vantyr/cctest-monitor:latest
+    container_name: vantyr-cctest-monitor
+    restart: unless-stopped
+    environment:
+      - GATEWAY_URL=http://gateway:3000
+      - GATEWAY_TOKEN=${CCTEST_GATEWAY_TOKEN:-}
+      - CCTEST_KEY=${CCTEST_KEY:-}
+      - CCTEST_BASE=${CCTEST_BASE:-https://cctest.ai}
+      - CCTEST_FULL_CHECK=${CCTEST_FULL_CHECK:-false}
+      - SELLER_CHANNELS=${CCTEST_SELLER_CHANNELS:-}
+      - MODEL_PREFIXES=${CCTEST_MODEL_PREFIXES:-claude,gpt}
+      - USAGE_WINDOW_HOURS=${CCTEST_USAGE_WINDOW_HOURS:-168}
+      - CYCLE_MINUTES=${CCTEST_CYCLE_MINUTES:-10}
+      - ENFORCE=${CCTEST_ENFORCE:-false}
+      - FAIL_THRESHOLD_SELORA=${CCTEST_FAIL_THRESHOLD_SELORA:-1}
+      - FAIL_THRESHOLD_A6=${CCTEST_FAIL_THRESHOLD_A6:-2}
+      - PERMANENT_FAILS=${CCTEST_PERMANENT_FAILS:-3}
+      - DISCORD_WEBHOOK=${CCTEST_DISCORD_WEBHOOK:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+    volumes:
+      - ./data/cctest:/data
+    networks:
+      - vantyr

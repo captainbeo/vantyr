@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "thin-new-api-private-mvp-http-proof-overlay-2026-08-15",
+  "type": "reproducible-gateway-http-proof",
+  "source": "WSL Docker disposable HEAD plus three production overlays 2026-08-15",
+  "summary": "Fresh disposable proof passed with HEAD 504f8f4d plus the three verified production overlays: deterministic private model ordering, compact mock route/model preservation, and compact channel/ability seeding. gateway_config_secrets, gateway_model_pricing_seed, gateway_channel_seed counts=2|2|2|8, gateway_compact_seed counts=2|2, gateway_native_token_seed, gateway_models, gateway_responses_json, gateway_responses_sse, gateway_responses_compact, gateway_rejections, gateway_prebyte_failover, and gateway_http_proof all passed. The proof used a temporary /tmp build context and unique Compose project; no repository, linked Git index, or Proxy Server metadata was touched. Docker Bake/buildx warning was non-blocking.",
+  "verifier": "Primary agent on 2026-08-15"
+}

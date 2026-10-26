@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase3-6-anomaly-verification-2026-08-21",
+  "type": "phase3-6-focused-verification",
+  "source": "service/commercial_anomaly.go; service/commercial_anomaly_test.go; model/system_task.go; fresh WSL/Docker commands on 2026-08-21",
+  "summary": "Fresh verification passed: anomaly-focused service tests, model system-task tests, affected service/controller/OpenAI/relay tests, focused race selections for Commercial/PrivateMVP/Responses, service/controller/OpenAI/relay vet, model vet, Docker gofmt for anomaly/system-task files, and staged/unstaged git diff checks. No source, payment, deployment, provider, or linked-metadata state was changed.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-21"
+}

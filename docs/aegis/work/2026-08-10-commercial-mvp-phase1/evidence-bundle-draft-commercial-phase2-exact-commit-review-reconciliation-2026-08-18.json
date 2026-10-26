@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-exact-commit-review-reconciliation-2026-08-18",
+  "type": "phase2-review-and-runtime-reconciliation",
+  "source": "Exact revision 03b5482775dc84204fb1141405d6e8c42b02ae95; C:\\Users\\z\\tmp\\commercial-mvp-exact-outage-proof-03b54827-0818n.log; C:\\Users\\z\\tmp\\commercial-mvp-recovery-proof-03b54827-0818b.log; docs/plans/2026-07-31-commercial-mvp.md",
+  "summary": "Current exact-revision component markers cover PostgreSQL outage, production recovery, Redis stop/injection fail-closed behavior, readiness restoration, and post-restore accounting; the aggregate marker was independently replayed because the original harness log has no single-process exit marker. The Redis driver prints upstream_attempts=0 literally and does not query mock counters, so Redis no-upstream claims are not independently supported by that driver. Historical records that describe the pre-hardening race or open Redis-stop replay remain historical and are superseded for the 03b54827 slice by the current reconciliation sidecars. A fresh exact-HEAD HTTP proof now closes that compatibility boundary; Phase 2 remains needs-verification pending production-shaped performance and simultaneous-cap evidence.",
+  "verifier": "Primary agent; post-proof coverage review on 2026-08-18"
+}

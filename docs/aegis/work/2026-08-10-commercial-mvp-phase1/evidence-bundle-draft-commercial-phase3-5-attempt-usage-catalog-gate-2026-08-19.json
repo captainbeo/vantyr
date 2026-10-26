@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase3-5-attempt-usage-catalog-gate-2026-08-19",
+  "type": "phase3-5-postgresql-attempt-usage-migration",
+  "source": "model/commercial_attempt_usage.go; model/commercial_attempt_usage_migration_test.go; docs/migrations/2026-08-19-commercial-phase3-5-attempt-usage.md; disposable PostgreSQL 17.5 WSL/Docker run",
+  "summary": "Phase 3.5 migration tests passed against disposable PostgreSQL 17.5 after exact ledger-schema verification, immutable pending/final evidence, reservation commercial/status binding, bounded error classes, exact foreign-key/trigger/function/index catalog checks, pg_temp verifier cleanup, planned-index crash resumption, atomic final validation/ledger marking, bounded lock setup, and a deterministic two-connection reservation-lock proof. The proof holds the reservation FOR SHARE (compatible with the reservation FK), confirms the trigger FOR UPDATE causes a lock-timeout until commit, then confirms the insert succeeds; the second transaction rolls back before signaling. The no-lock mutation failed as expected, and the restored implementation passed. go vet ./model and Docker gofmt checks passed. This is local disposable PostgreSQL evidence only; no production migration, payment, deployment, launch, supplier activation, or unrelated work was changed.",
+  "verifier": "Primary agent with independent code-review/database-review findings reconciled on 2026-08-19"
+}

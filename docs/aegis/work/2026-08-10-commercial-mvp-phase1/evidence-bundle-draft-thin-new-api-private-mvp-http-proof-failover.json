@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "thin-new-api-private-mvp-http-proof-failover",
+  "type": "reproducible-gateway-http-proof",
+  "source": "WSL Docker proof 2026-08-14; HEAD 504f8f4d plus three verified source overlays",
+  "summary": "Fresh 2026-08-14 rebuilt private-gateway HTTP proof passed using a narrowly scoped disposable source context made from HEAD plus the verified compact/order files. gateway_config_secrets, channel seed, compact seed, native token seed, deterministic models, JSON Responses, SSE Responses, compact, direct rejections, and pre-byte failover all passed; RetryTimes=1 was seeded so an unavailable primary produced a successful secondary attempt. The standard proof script was restored to --build and its temporary diagnostics were removed. The unfiltered inherited Linux race gap and inability to stage through the linked worktree index remain outside this proof.",
+  "verifier": "Primary agent on 2026-08-14"
+}

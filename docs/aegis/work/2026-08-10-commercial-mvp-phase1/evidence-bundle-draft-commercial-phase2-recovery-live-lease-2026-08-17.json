@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-recovery-live-lease-2026-08-17",
+  "type": "runtime-production-recovery-live-lease-integration-proof",
+  "source": "Disposable Compose project commercial-mvp-needs-verification-0817b; recovery driver rebuilt from the current worktree with cached golang:1.26.1-bookworm and run inside the gateway on 2026-08-17, followed by the authenticated post-recovery gateway request",
+  "summary": "The production recovery path was exercised directly with a real PostgreSQL epoch row, Redis, and a live test lease. Output: driver_ping=passed readiness_initial=passed epoch=2; live_lease_acquired=passed epoch=2; recovery_first=drain_incomplete state=draining live_lease_entries=1; recovery_retry=passed epoch=3; old_lease_fencing=passed renew=stale release=stale; post_recovery_new_lease=passed epoch=3; stale_epoch_injection=passed readiness_rejected_and_restored; driver_proof=passed. During draining, readiness and new acquisition were rejected while the live lease remained present. The follow-up gateway request returned HTTP 200 with exactly one reservation, commit, and quota unit. The driver intentionally used a 2-second test-only maximum lease duration and positive drain, so this does not prove the configured production maximum request/lease TTL. The stack is disposable current-tree evidence rather than an authorized immutable branch commit; no repository, staged work, untracked user work, or protected linked metadata changed. Phase 2 remains needs-verification.",
+  "verifier": "Primary agent with independent recovery-runtime inspection and outage-proof review on 2026-08-17"
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "thin-new-api-private-mvp-http-proof-committed-2026-08-15",
+  "type": "committed-revision-gateway-http-proof",
+  "source": "WSL Docker normal deploy/mvp/verify-gateway.sh up at commit 62229312fe8b56c4ba8fab7ecb5ce3ff6d2d42bb",
+  "summary": "Fresh committed-revision proof passed from immutable source revision 62229312fe8b56c4ba8fab7ecb5ce3ff6d2d42bb. gateway_config_secrets, gateway_model_pricing_seed, gateway_channel_seed counts=2|2|2|8, gateway_compact_seed counts=2|2, gateway_native_token_seed, gateway_models, gateway_responses_json, gateway_responses_sse, gateway_responses_compact, gateway_rejections, gateway_prebyte_failover, and gateway_http_proof all passed. The scoped commit contains exactly seven verified compact/order production, regression-test, and proof-harness files. The pre-existing staged gateway-key/UI foundation binary diff remained unchanged at SHA-256 aff7d3ec092fdfb536e8b52d9eaac0b75c1c4553d953bcc4cbee01a36b3de90f. Docker Compose emitted a non-blocking buildx warning and an initial local mock-image pull warning before building successfully.",
+  "verifier": "Primary agent on 2026-08-15"
+}

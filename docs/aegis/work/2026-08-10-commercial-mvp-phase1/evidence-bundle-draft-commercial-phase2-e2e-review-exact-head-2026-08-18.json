@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-e2e-review-exact-head-2026-08-18",
+  "type": "phase2-e2e-harness-review",
+  "source": "Exact HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95; C:\\Users\\z\\tmp\\commercial-mvp-exact-outage-proof-03b54827-0818n.log; C:\\Users\\z\\tmp\\commercial-mvp-recovery-proof-03b54827-0818b.log; docs/plans/2026-07-31-commercial-mvp.md",
+  "summary": "Independent exact-HEAD E2E/harness review confirmed component markers for Compose provenance/health, commercial seed and activation, baseline accounting, PostgreSQL outage fail-closed behavior, 600-second drain, production recovery fencing, Redis stop/epoch/hash/limit fail-closed cases, restoration, and final accounting. The original exact log ends after the post-restore marker without a same-process aggregate marker; the aggregate was independently asserted but its replay provenance is not retained in the 03b record. The Redis driver prints upstream_attempts=0 as a literal and does not query mock counters, so no-upstream claims for Redis failures are unsupported by that harness. A fresh exact-HEAD HTTP proof now covers model discovery, JSON/SSE/compact, rejection, and pre-byte failover, but no exact-HEAD real gateway simultaneous cap-4 or image-route E2E was retained; unit/miniredis coverage is strong. Phase 2 remains needs-verification pending production-shaped performance evidence and simultaneous-cap proof.",
+  "verifier": "Independent phase2_e2e_review agent; read-only review pinned to 03b5482775dc84204fb1141405d6e8c42b02ae95 on 2026-08-18"
+}

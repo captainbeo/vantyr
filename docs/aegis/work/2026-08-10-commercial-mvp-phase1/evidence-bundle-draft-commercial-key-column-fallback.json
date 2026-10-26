@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-key-column-fallback",
+  "type": "regression-and-affected-gate-verification",
+  "source": "codex-commercial-mvp-worktree-2026-08-14",
+  "summary": "The focused RED controller and deterministic model regressions reproduced SELECT id,,commercial_key when commonKeyCol was unset. A local quoted-key fallback then made both focused tests pass. The affected package test gate, disposable PostgreSQL migration round-trip/preflight tests, go vet, touched-file gofmt, and race-enabled focused model/controller tests all passed. The inherited unfiltered service race remains deferred; no files were staged or committed.",
+  "verifier": "Primary agent on 2026-08-14"
+}

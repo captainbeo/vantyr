@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-gate-reconciliation-2026-08-18",
+  "type": "phase2-gate-evidence-reconciliation",
+  "source": "docs/aegis/work/2026-08-10-commercial-mvp-phase1/evidence-bundle-draft-commercial-phase2-exact-commit-cap4-performance-2026-08-18.json; docs/aegis/work/2026-08-10-commercial-mvp-phase1/evidence-bundle-draft-commercial-phase2-exact-commit-redis-counter-replay-2026-08-18.json; docs/aegis/work/2026-08-10-commercial-mvp-phase1/evidence-bundle-draft-commercial-phase2-exact-commit-gateway-http-2026-08-18.json; docs/plans/2026-07-31-commercial-mvp.md",
+  "summary": "Reconciliation of the Phase 2 access/quota/Redis gateway gate at exact HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95. Proofs 2-4 are covered by exact-HEAD direct access/quota and accounting evidence; proof 5 is now closed by the fresh real-gateway simultaneous cap-4 proof (four leases, fifth sanitized 429, four successful completions, no fifth upstream attempt, exact reservation/commit/accounting totals); proof 6 is covered by the corrected Redis counter replay and outage/recovery evidence; proof 7 remains fail-closed and globally disabled with independent image-limiter coverage. Exact-HEAD HTTP compatibility/pre-byte failover, recovery fencing, and specialist database/security/performance/E2E reviews are recorded in sibling artifacts. No payment, deployment, launch, linked metadata, or unrelated user work is in scope. Phase 3 and Phase 4 remain gated by their own plans.",
+  "verifier": "Primary agent; exact-HEAD runtime output and Aegis records read directly on 2026-08-18; independent database/security/performance/E2E reviews retained"
+}

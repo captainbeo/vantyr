@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-auth-outage-2026-08-17",
+  "type": "commercial-auth-fail-closed-regression-and-review",
+  "source": "Current codex/commercial-mvp worktree; cached golang:1.26.1-bookworm Docker runner on 2026-08-17",
+  "summary": "Focused RED reproduced commercial TokenAuth user-cache failure returning HTTP 500 instead of 503. The minimal GREEN change maps commercial token lookup and user-cache failures in TokenAuth and TokenAuthReadOnly to sanitized HTTP 503/server_is_overloaded while preserving legacy 500 behavior; GetCommercialTokenByPublicID now returns ErrDatabase when model.DB is nil. Focused auth tests, the full affected package suite, go vet, focused Linux -race, container gofmt, and staged/unstaged diff checks passed. The independent auth outage review found no Critical or Important findings; raw internal database error logging and the full real concurrent PostgreSQL outage/recovery proof remain explicit follow-ups. No files were staged, committed, reset, deleted, or written under the protected Proxy Server metadata.",
+  "verifier": "Primary agent with independent auth/code/security review on 2026-08-17"
+}

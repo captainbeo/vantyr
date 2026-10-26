@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase3-4-health-repair-regressions-2026-08-20",
+  "taskId": "2026-08-10-commercial-mvp-phase1",
+  "type": "phase3-4-channel-health-admission-and-lifecycle-regression",
+  "source": [
+    "service/commercial_channel_health.go",
+    "service/commercial_channel_health_test.go",
+    "controller/relay.go",
+    "controller/relay_commercial_stream_error_test.go",
+    "relay/responses_handler.go",
+    "service/commercial_attempt_usage.go",
+    "relay/channel/openai/relay_responses.go",
+    "relay/channel/openai/relay_responses_public_alias_test.go"
+  ],
+  "summary": "The repaired health owner now admits the selected private commercial channel before dispatch, treats malformed Redis state as corrupt, keeps open/half-open quarantine state persistent, opens on configured low-volume consecutive failures and fatal channel credential/config failures, bounds and reclaims expired half-open probe leases, releases a probe on customer validation before attempt creation, separates Responses stream/JSON/compact dimensions, and records TTFT rather than total duration for health latency. The design-required channel-wide 401/403 rollup is explicitly deferred: the current classifier collapses 401/403/404 and the single-key admission contract cannot safely provide dual-scope probe ownership without a status-aware extension.",
+  "verification": [
+    "Docker go test -mod=readonly ./service -run 'TestCommercial(Health|AttemptLifecycleUsesTTFT)' -count=1",
+    "Docker go test -mod=readonly ./service ./controller ./relay/channel/openai ./relay -count=1",
+    "Docker go test -race -mod=readonly ./service ./controller -count=1 (inherited task-polling/logger races remain)",
+    "Docker go test -race -mod=readonly ./relay/channel/openai ./relay -count=1",
+    "Docker go test -mod=readonly ./controller ./relay/channel/openai -run 'TestCommercialHealthUsesPreservedPublicAliasAfterMapping|TestCommercialResponses(JSON|SSE)ExposesOnlyPublicModelAlias' -count=1",
+    "Docker go vet -mod=readonly ./service ./controller ./relay/channel/openai ./relay",
+    "Docker gofmt -l on touched Go files",
+    "git diff --check"
+  ],
+  "result": "Local focused health/lifecycle verification passed, including the public-alias rewrite and health-key alias regressions. The channel-wide 401/403 rollup remains a documented hardening deferral with a trigger before shared credentials/additional aliases or a channel-wide quarantine claim. PostgreSQL runtime policy-boundary evidence, anomaly-signal proof, authorized real transfer-station behavior, billing/payment, release, deployment, and launch remain open.",
+  "review": "Fresh independent review completed: alias rewrite and health-key alias fixes are accepted; the absent channel-wide 401/403 Redis rollup is a Medium design finding explicitly deferred with the trigger above.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-20",
+  "preservation": "All pre-existing staged, unstaged, and untracked work was preserved; no commit, reset, delete, push, deployment, payment activation, linked metadata, or protected Proxy Server path access occurred."
+}

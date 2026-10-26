@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-immutable-committed-compose-2026-08-17",
+  "type": "integration",
+  "source": "wsl.exe bash -lc \"cd /mnt/c/Users/z/AppData/Local/Temp/commercial-mvp-proof-repo-92e2b1287be74645a3895df249476e88; bash deploy/mvp/verify-compose.sh up\"",
+  "summary": "Isolated local snapshot commit 907a75815a09addcca8dba1ce2f4ec882e4c9356 (73-path backend/deployment allowlist over HEAD a76876f1) passed config and full Compose proof: all five services healthy, mock seed counts 2|2|2|8, control identity and relay credential isolation passed, rendered config had zero secret hits. Protected linked index SHA-256 043F47F69A650F8B2DE56E7D870B350E8E72F1FC6CA9EBE5977D70DE90282595 and linked HEAD were unchanged. Local-only snapshot; not an authorized branch commit or publication proof.",
+  "verifier": "Codex read command output and compared before/after linked metadata hashes"
+}

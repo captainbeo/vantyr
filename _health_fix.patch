@@ -1,0 +1,23 @@
+diff --git a/service/commercial_channel_health_test.go b/service/commercial_channel_health_test.go
+--- a/service/commercial_channel_health_test.go
++++ b/service/commercial_channel_health_test.go
+@@ -66,6 +66,23 @@ func TestCommercialHealthPolicyRequiresPositiveVersionAndLatencyBuckets(t *testing.T) {
+ 	require.ErrorIs(t, validateCommercialChannelHealthPolicy(policy), ErrCommercialChannelHealthInvalid)
+ }
+ 
++func TestParseCommercialInt32ArrayText(t *testing.T) {
++	parsed, err := parseCommercialInt32ArrayText("{50, 100, 250, 500, 1000}")
++	require.NoError(t, err)
++	require.Equal(t, []int32{50, 100, 250, 500, 1000}, parsed)
++
++	parsed, err = parseCommercialInt32ArrayText("{}")
++	require.NoError(t, err)
++	require.Empty(t, parsed)
++
++	for _, input := range []string{"", "50,100", "{50,,100}", "{2147483648}", "{null}"} {
++		_, err := parseCommercialInt32ArrayText(input)
++		require.Error(t, err, input)
++	}
++}
++
+ func newCommercialHealthTestManager(t *testing.T) (*CommercialChannelHealthManager, *miniredis.Miniredis, *time.Time) {

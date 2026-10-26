@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-exact-commit-cap4-performance-2026-08-18",
+  "type": "immutable-branch-revision-cap4-performance-integration",
+  "source": "C:\\Users\\z\\tmp\\commercial-mvp-03b54827-cap4-sidecar-183828.log",
+  "summary": "Fresh exact-HEAD real-gateway cap-4 and performance proof from clean full-history clone at revision 03b5482775dc84204fb1141405d6e8c42b02ae95. Secret-free Compose config and five healthy services passed; pricing/retry options were seeded before the final gateway restart; activation and Redis readiness passed. Four simultaneous requests acquired exactly four Redis leases for one entitlement, a fifth request returned sanitized HTTP 429 concurrency_limit_exceeded, four requests completed with HTTP 200 after release, lease hash returned to zero, mock counters changed primary +4/secondary +0, and PostgreSQL accounting was exactly 4 reservations, 4 committed, 0 pending/refunded, amount_used=4. A 20-request fixture benchmark at concurrency 4 measured 13.441 requests/s, p50 274.959 ms, p95 333.364 ms, max 420.240 ms, with gateway/PostgreSQL/Redis/mock resource samples. Final marker gateway_cap4_performance_proof=passed. The disposable harness was corrected only for pricing seed ordering and Compose stats reporting; no product source, protected metadata, staged/unstaged/untracked repository work, payment, deployment, or launch state changed.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-18; exact revision and clean clone provenance checked"
+}

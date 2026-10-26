@@ -4666,3 +4666,434 @@ NOT DEPLOYED. Deploy = commit + push monitor.py/compose/.env.example to
 the VPS cctest-monitor dir + docker compose up -d cctest-monitor --no-deps
 --build. LATENCY_ROTATION_ENABLED default false — arm after watching
 [latency] lines.
+
+## 2026-10-24 — fleet audit + owner ruling: no rotation cap
+
+Fleet health audit (connection + models + market, 01:30 UTC):
+- sonnet-5/3755: attr_swapped once at 01:06 — NOT yet quarantined because
+  owner threshold is 2 consecutive fails (FAIL_THRESHOLD_A6PIN=2): one
+  strike logged (fails:1), second verdict on a later round-robin cycle
+  confirms + quarantines + promotes. Deliberate double-confirmation, not
+  a monitor bug. Exposure small (21 reqs/24h).
+- 5 pins read SICK on the 6h latency window (59 sol, 42 fable-5-1, 74
+  opus-5, 27 opus-5-5, 76 sonnet-5-5) — but the ARMED rotation evaluates
+  the 60m window, currently below min_samples (20), so it fails open and
+  rotates nothing yet. Expected to fire within hours on the degraded
+  models once an hour carries enough traffic.
+- ch11 fable-5 / ch57 astra / ch70 gpt-6-sol clean on all axes. astra
+  attr_uncertain (inconclusive — no action), sol dot-alias healthy.
+- Standby pool depth: every model 1 active + 4-12 standbys — a fleet-wide
+  rotation is well-supported.
+
+OWNER RULING: NO per-cycle rotation cap. If everything looks bad at once,
+the monitor swaps everything at once (current behavior — loop has no cap;
+swaps serialized under the mutation lock, each verified before serving).
+Proposed cap of 2/cycle rejected; cascade risk accepted in exchange for
+immediate full recovery.
+
+Update 2026-10-24 02:39 UTC — sick/latency window widened to 6h:
+- SICK_WINDOW_MINUTES: 60 → 360 (CCTEST_SICK_WINDOW_MINUTES=360 in .env;
+  note compose reads the CCTEST_-prefixed name only — an unprefixed
+  SICK_WINDOW_MINUTES line was dead and got removed). Monitor recreated
+  (--force-recreate; plain up -d did not re-read .env).
+- Rationale: at ~40 req/h per pin, the 60m window rarely reached the
+  20-sample minimum and failed open exactly when it mattered. 6h gives
+  ~12x evidence per pin per check.
+- Effect: the armed rotation now sees the 6h SICK readings already
+  measured (ch59 30% gone / ch74 23% hard-err / ch27 8% hard-err /
+  ch76 36% gone) — first rotation events expected within the hour.
+
+Error-landscape ground truth (customer-only, monitor self-traffic
+excluded): 8.0% customer error rate (136/1706 in 24h). Concentrated in
+opus-5-5 (ch27: 38), opus-5 (ch74: 28), sonnet-5-5 (ch76: 21). The
+"dead astra merchants" (ch29/30) were 95% monitor self-check noise, not
+customer traffic.
+
+## 2026-10-24 — real-event SSE keep-alive LIVE (pinned-next50)
+
+60s-client-timeout fix (Broq/fanyqe "stream disconnected before completion"
+complaint). Root cause: slow merchants' pre-first-token silence exceeds the
+client's hard 60s idle budget; the comment ping (": PING") shipped earlier
+keeps TCP alive but is invisible to client liveness timers (SSE comments are
+transport framing, not events).
+
+A/B experiment on the VPS (ping_experiment.py, throwaway container):
+90s silent first-token window, 60s client read timeout — client with
+`event: ping` every 15s survived to first token at 90s; without pings it
+died at 60.1s (the exact production signature).
+
+Fix: PingEventData emits a real `event: ping` frame (Anthropic wire-protocol
+keep-alive). Both ping paths (stream_scanner mid-stream + api_request
+pre-first-token) dispatch to it when general_setting.ping_event_mode=true
+AND RelayFormat==claude. Gated OFF by default. Claude-only — Codex/responses
+would need synthetic response.in_progress (touches the usage accumulator;
+separate change). Commit 08cba379c on feat/payment-rails; new test
+ping_event_test.go covers both ping flavors + frame termination.
+
+Deploy: pinned-next50 built on-server (fd07c9eaafa5), `pinned` retagged to
+it (the compose `image: vantyr/new-api:pinned` line means the pinned tag IS
+the deploy pointer — retag, don't edit the tag name in compose), recreated,
+healthy. compose.yaml.bak-pre-ping-event + /tmp/sync/*.bak on VPS. Armed via
+options table general_setting.ping_event_mode=true (live-synced). Live-verified
+via curl /v1/messages: first frame is `event: ping` before message_start.
+Rollback: `docker tag vantyr/new-api:pinned-next49 vantyr/new-api:pinned` +
+`docker compose up -d --no-deps gateway`, then set ping_event_mode=false.
+
+Same session: merged monitor.py = teammate e5c289c8c + crash guard
+(f0c6a98f6, deployed) for the state.json list-verdict crash
+(a6pin-6-astra-3016 held [None,None]); state entry repaired. Monitor armed
+LATENCY_ROTATION_ENABLED=true (owner decision; overrides fork session's
+observe-only default).
+
+Update 2026-10-24 — real-event ping extended to OpenAI Responses (pinned-next51):
+The Claude fix (08cba379c) only covered /v1/messages; GPT/responses streams
+still died at client timeouts (6.7% client_gone vs Claude 1.5% post-fix;
+60s + 133-270s tail). PingResponsesEventData emits synthetic
+`response.in_progress` (type-only payload) — the protocol-native Responses
+keep-alive — chosen by RelayFormat in both ping paths. Committed 20b98febc.
+Safety: pinger bypasses the dataHandler, so the frame never reaches the
+ResponsesUsageAccumulator; regression test TestResponsesPingEventIsInertIn
+Accumulator feeds 100 synthetic pings around a real completed stream and
+asserts usage/stream-status unchanged. ping_event_mode already armed, covers
+both formats now. pinned-next51 (0c1a6e72264e) built on-server, `pinned`
+retagged, recreated, healthy. Live-verified: a high-effort gpt-6.1-sol
+stream emitted the upstream's own in_progress (seq 1, full object) then 8
+minimal synthetic in_progress frames during the reasoning silence. Rollback:
+tag pinned-next50 as pinned + recreate. Verify-window: watch gpt-*
+client_gone rate vs the 1.5% Claude baseline.
+
+Merge note (2026-10-24): monitor.py merged = fork e5c289c8c (verify never
+pins / 5xx error ratio / sole-pin re-check recovery) + f0c6a98f6 (verdict
+list crash guard), deployed armed (LATENCY_ROTATION_ENABLED=true per owner).
+Teammate fork session also owns 1626465be (hermetic promote tests, 70/70).
+Rotation has no per-cycle cap (owner decision — swap everything at once).
+
+## 2026-10-24 — monitor tuple-unpack bug: bad merchants re-promoted as "PASSED"
+
+User 502 on claude-opus-5-5 (`智能路由候选均请求失败`, merchant pool
+exhausted). Root cause was a MONITOR BUG, not just a bad merchant:
+
+`do_check()` returns `(verdict, prediction)`. Every caller unpacks it EXCEPT
+the pre-promotion verify (line ~2277), which did `pre_verdict = do_check(...)`
+— the whole tuple. A tuple is truthy and never in BAD_VERDICTS, so:
+  - the "FAILED — NOT enabled" guard never fired
+  - `if pre_verdict:` logged "PASSED pre-promotion verification" and marked
+    the pin active
+=> ANY standby promoted unconditionally, including known-bad merchants.
+Same bug wrote `[None,None]` into state.json last_verdicts, which crashed the
+release scan (guarded in f0c6a98f6 — this is the cause behind that symptom).
+
+Live impact: ch25 (a6pin-opus-5-5-4756) re-promoted at 14:27 onto traffic
+failing 96% (65 err / 3 ok in one hour), while healthy ch27 was rotated
+away. Customers got 502s.
+
+Fix: `pre_verdict, _pred = do_check(...)` (4457fe9b0). Monitor rebuilt +
+redeployed, still armed. Immediately rotated opus-5-5 to 3859 via
+POST /api/cctest/promote {model, merchant} — response verified
+`{"promoted":"a6pin-opus-5-5-3859","verdict":"attr_match","demoted":"...4756"}`,
+ch27 now the sole active pin.
+
+Ops notes: the status server /api/cctest/* is container-internal (8787) — call
+it through Caddy at https://vantyr.xyz/api/cctest/... with the sidecar PAT
+(GATEWAY_TOKEN, role 10) as Bearer. Direct localhost:8787 from the host
+returns 000.
+
+## 2026-10-24 — 3-agent audit + sonnet-5-5 outage fix (pre-promotion fallback)
+
+Three independent audits ran over the day's changes. Two real defects found
+and fixed, plus one live outage.
+
+MONITOR (audit of monitor.py):
+- HIGH: breaker rotated healthy pins on sparse benign errors. pin_is_sick's
+  raw all-failures early-return ran before latency config was consulted;
+  type=5 logs include 3692 benign 429s in prod. With latency config armed,
+  now defers to hard-5xx-only evidence. Guard: test_circuit_breaker_ignores
+  _sparse_benign_errors.
+- HIGH + LIVE OUTAGE: inconclusive direct pre-verify refused promotion, and
+  sonnet-5-5's A6 keys lack model permission (403 model_not_allowed), so
+  every standby was refused and the model went DARK (0 enabled pins,
+  0 enabled abilities) at 15:46. With no active pin, the self-heal path
+  never re-tried. Fixed: inconclusive direct check now falls through to the
+  gateway-routed enable-then-verify path (pre-direct-check behavior);
+  confirmed-BAD still refuses, PASS still recorded. Restored live:
+  POST /api/cctest/promote {claude-sonnet-5-5, merchant 3825} ->
+  attr_match, ch49 active, traffic flowing. Commit 56a345dd2.
+
+GATEWAY ping audit: billing/concurrency sound; synthetic in_progress never
+reaches the accumulator. Two MEDIUM follow-ups NOT yet done (defer):
+  (a) a type-only in_progress sets accumulator.started — harmless today
+  (frame bypasses Observe) but the test doesn't lock it; if anyone later
+  routes pings through Observe, a ping-only stream could bill estimated
+  prompt tokens. Strengthen TestResponsesPingEventIsInertInAccumulator to
+  assert started stays false + ping-only Finish() bills zero.
+  (b) synthetic in_progress payload is schema-minimal (no response object /
+  sequence_number); a strictly-typed SDK client could reject it. Consider a
+  fuller payload + suppressing pings after terminal event observed.
+  Also LOW: pre-first-token pinger commits 200+SSE headers before the
+  upstream status is known (pre-existing).
+
+LIVE state at 16:05 UTC: all models have exactly one active pin; ch75
+(fable-5-1) has a 60% recent error rate but under the breaker trip (9
+samples < 15 min_samples) — watch it. No 5xx after 15:42. Gateway healthy.
+
+## 2026-10-24 — deferred audit items shipped (pinned-next52)
+
+Both deferred gateway findings from the 3-agent audit are now fixed:
+- Billing invariant: ResponsesUsageAccumulator.Observe no longer marks a
+  stream started for keep-alive frames. The synthetic response.in_progress
+  carries sentinel id service.KeepAliveResponseID ("resp_ping_keepalive");
+  started only flips for real events. Locked by
+  TestResponsesPingOnlyStreamBillsNothing (ping-only stream bills zero —
+  verified to FAIL without the guard) + strengthened
+  TestResponsesPingEventIsInertInAccumulator (asserts started stays false).
+- Schema-complete payload: response.in_progress now carries
+  {id: resp_ping_keepalive, status: in_progress, sequence_number: -1} so
+  strictly-typed Responses SDK clients don't reject the frame.
+- Pingers stop once the stream is terminal (new StreamStatus.IsTerminal),
+  so no keep-alive lands after response.completed / message_stop.
+
+Committed 169b2bba3 on feat/payment-rails. pinned-next52 (7161ab5c6beb)
+built on-server, `pinned` retagged, recreated, healthy; live-verified: a
+high-effort gpt-6.1-sol stream emitted the new payload shape during the
+reasoning silence. Rollback: tag pinned-next51 as pinned + recreate.
+
+## 2026-10-25 — cache billing: correct, display fixed (pinned-next53)
+
+User report (Broq): "cache doesn't work on sonnet-5-5, drains money, panel
+shows no cache." Investigation outcome, verified against production rows:
+
+- CACHE BILLING IS CORRECT. A real sonnet-5-5 row (prompt 37360,
+  cache-read 92602, cache-write 19533, completion 789) billed exactly
+  p*0.15 + c*0.35 + cc*0.05 + cr*0.01 -> quota 3891, matching the formula.
+  Cache-read is 15x cheaper than input ($0.01/1M vs $0.15/1M).
+- The operator's CacheRatio/CreateCacheRatio config (sonnet-5-5 read 0.0667,
+  write 0.333) exactly matches the formula's coefficients once converted
+  (config ratio -> $/1M: ratio * modelRatio * 2; 0.0667*0.075*2 = 0.01).
+  No under- or overcharge. My earlier $5/1M claim was a conversion error.
+
+The REAL bug was logging: the tiered path (modelPriceHelperTiered) returned
+before populating PriceData.CacheRatio/ModelRatio, so the log wrote
+cache_ratio=0 and the panel showed "no cache". Fixed: the tiered path now
+populates them from the same config maps the per-token path uses (display
+only, billing untouched). Commit c7f5ab679. pinned-next53 (0eaef07101fe)
+deployed; live logs now show sonnet-5-5 cr=0.0667 mr=0.075, opus-5-5
+cr=0.1333.
+
+Safeguard: TestTieredCacheBillingMatchesProductionFormula pins the live
+expression against a real row and pins the 15x discount so coefficient
+drift fails the build. Open follow-up: the Claude-conversion log path
+(GenerateClaudeOtherInfo) passes its own ratio args and still writes 0 on
+one row shape — same class, separate fix if it matters.
+
+## 2026-10-25 — Option A (kiro primary) + 2 blockers + 1 regression from audit
+
+**Option A implemented (c995fb118).** Owner decision: kiro-pool (ch95, P30)
+is the PREFERRED supplier; a6pin pins (P20) are the backup. The monitor only
+ever inspected `a6pin*` channels, so the primary was invisible — never
+health-swept, never failed over — while carrying ~98% of Claude traffic
+(172/175 opus-5-5 requests in 20 min). New sweep_primary_channels():
+primary trips the severe thresholds -> DISABLE it (nothing is promoted; the
+pins are already enabled below it, so priority routing falls through);
+auto-restore after PRIMARY_RESTORE_MINUTES=30 of clean traffic, tracked in
+state['_primary'] so a restart cannot leave it stuck off. Config:
+PRIMARY_CHANNELS=kiro-pool. NOTE: sellers now show ['a6pin','kiro'] —
+a kiro seller entry exists and should be reviewed.
+
+**Regression I introduced, found by audit, fixed (a62d9f2e6).** 56a345dd2
+moved the all-failures early-return BELOW the latency branch so benign 429s
+would not rotate healthy pins. Side effect: with the flag armed (production),
+a pin failing 100% of requests with 429 / 401 / transport errors was NEVER
+rotated — arming catastrophic detection disabled it for expired keys, quota
+exhaustion and connection resets. The all-failures rule now runs on every
+path again; benign exclusion still applies to the RATIO checks only. Also
+fixed test_circuit_breaker_ignores_sparse_benign_errors, whose fixture had a
+success present and so never exercised the early-return (audit H5).
+
+**BLOCKER 1 fixed (eca31ba2d).** `_pin_reveal_key` matched on merchant id
+only, ignoring the model. Merchant ids are reused across SKUs (4756 sells
+fable-5 AND opus-5-5) and list_tokens() returns API order, so a pin could be
+revealed with ANOTHER MODEL's key -> the check reported a swap against the
+wrong model -> healthy pin refused and bad-marked for 3h. Worst case an
+operator promote quarantined the active pin first and then refused the
+standby: ZERO enabled pins, HTTP 200 returned. Now matches the token's SKU
+against the pin's model pool (model_pool_names), exact channel name first.
+All 3 call sites pass the model.
+
+**BLOCKER 2 fixed (eca31ba2d).** The cycle mutated gateway state outside
+_MUTATION_LOCK (dedup + per-channel process_channel), so the one-active-pin
+invariant was not actually enforced: the auditor reproduced TWO enabled pins
+for one model via a cycle/operator race, and a quarantine+promote that
+ignored a lock held elsewhere. Both now take the lock, per channel rather
+than per cycle so a long cycle does not block the 5-min breaker or the
+operator; a busy lock skips and the next cycle re-checks.
+
+Remaining audit backlog (NOT done): H1 error-ratio undercounts past the
+100-row page cap (breaker unreachable on busy channels); H3 inconclusive
+promotion is unbounded (no attempt counter/alert); H4 dual-spelling pins can
+never be quarantined; M2 the breaker overwrites the cycle freshness marker;
+M3 Verify on an active pin discards a bad verdict; M5 quarantine re-check
+ignores model_mapping; L2 CIRCUIT_* envs not mapped in compose.
+79/79 tests green.
+
+## 2026-10-25 (cont.) — HIGH audit items H1 + H4 fixed (8ea2f3e69)
+
+H1 — error-ratio page cap. recent_error_logs fetched ONE capped page (100
+rows) while pin_latency_sick divided by count_logs(5) (the true total), so
+hard errors were truncated and the ratio understated. The severe breaker
+could never trip on a busy channel: 200 errors / 40 successes (83% failing)
+read as 'not sick'; likewise 400/50 (89%) and 1000/300 (77%). Now pages until
+the window is exhausted, bounded by max_rows=1000 so one pathological channel
+cannot stall the sweep. Guard drives the real pagination (a fake GW would
+bypass it — my first attempt did exactly that and passed on the buggy code).
+
+H4 — dual-spelling pins could never be quarantined. sync_a6_keys deliberately
+creates pins listing BOTH gpt-6-1-sol and gpt-6.1-sol. Removing one spelling
+left the other, so the list stayed non-empty and the code took the
+model-removal path; the coverage gate then saw its own channel still listing
+the sibling spelling and blocked removal — every cycle, forever. A
+confirmed-fake dual-spelling pin served indefinitely with only 'FAILOVER
+BLOCKED' warnings. Both the only-entry test and the coverage gate are now
+pool-aware (model_pool_names). Both guards verified to FAIL on the old code.
+
+81/81 green, deployed. Remaining backlog: H3 (inconclusive promotion has no
+attempt counter/alert), M2 (breaker overwrites cycle freshness marker),
+M3 (Verify on active pin discards a bad verdict), M5 (quarantine re-check
+ignores model_mapping), L2 (CIRCUIT_* envs not mapped in compose).
+
+## 2026-10-25 (cont.) — gateway audit HIGH: tiered log ratios could invent charges (4e87fa74d)
+
+CORRECTION to my earlier claim that the cache-ratio commit was "display
+only". It is not. modelPriceHelperTiered populates PriceData.ModelRatio /
+CacheRatio / CacheCreationRatio for logging, but those fields are ALSO read
+by the ratio-branch charge in service/text_quota.go when settlement falls
+through without a usage object (TryTieredSettle requires non-nil
+billingUsage; zhipu's stream handler can pass a typed-nil usage). Because
+GetModelRatio returns a 37.5 self-use fallback and GetCacheRatio returns 1.0
+for absent entries, an UNCONFIGURED tiered model gained a charge where it
+previously computed zero — audit measured 0 -> 187500 quota vs the correct
+tiered 375, plus cache ratios 1.25/1.0 instead of 0.
+
+Fix: honour the ok bool on all three lookups; leave the fields at 0 when the
+model has no configured entry (byte-identical to pre-change behaviour for
+unconfigured models). Guard:
+TestTieredPriceDataDoesNotInventRatiosForUnconfiguredModels — verified to
+FAIL without it. Live-verified after deploy: claude-sonnet-5-5 still logs
+cr=0.0667 / mr=0.075, opus-5-5 cr=0.1333, so configured models are
+unaffected.
+
+Also de-duplicated the PingResponsesEventData doc comment (two verbatim
+copies, one still describing the pre-schema payload).
+
+pinned-next55 (4ab9ba072ef7) built on-server, `pinned` retagged, recreated,
+healthy, site 200. Rollback: tag pinned-next54 as pinned + recreate.
+
+Still open from the gateway audit (informational/low): ping_event_mode has no
+admin UI (arming needs a DB write); terminal ping suppression is
+check-then-act (benign — the terminal write holds the same mutex);
+sequence_number -1 is outside the spec's 0-based monotonic range.
+
+## 2026-10-25 (cont.) — audit M2/M3/M5/L1 fixed (d3d8c4933)
+
+M2 — the _meta.last_cycle_at freshness stamp lived at the end of
+_run_sick_rotation, which the 5-MINUTE BREAKER also calls, so a dead hourly
+cycle looked fresh whenever the breaker was alive. That stamp is the admin
+page's only external "cycle is stale" signal. Moved to the true end of
+run_cycle (still absent on the exception path).
+M3 — "Verify" on an ACTIVE pin returning a bad verdict only turned the UI
+red: pin stayed enabled, fail counter untouched (process_verdict is skipped
+for direct checks). A confirmed failure on the SERVING pin now runs the
+normal threshold/failover policy; a standby's direct check stays advisory.
+M5 — quarantine re-check passed our SKU to the direct A6 check, but A6
+registers the upstream spelling (gpt-6.1-sol vs gpt-6-1-sol) -> 403 ->
+None -> the pin was never released from quarantine. Now resolves the
+channel's model_mapping first.
+L1 — CIRCUIT_* used raw int()/float(); a malformed value raised AFTER the
+status server started (restart loop with a working /status = looks hung).
+Now uses the defensive _env_int/_env_ratio helpers.
+L2 — added the missing CIRCUIT_BREAKER_ENABLED / MIN_SAMPLES /
+CLIENT_GONE_RATIO / WINDOW_MINUTES / INTERVAL_MINUTES mappings to
+compose.yaml (backup: compose.yaml.bak-l2env).
+
+NOTE: the breaker's error threshold is now 10% (was 80% when I first built
+it) — tightened deliberately for Option A so a Kiro outage fails over on the
+next 5-minute tick. Latency/hangs still never trip it alone.
+
+Both guards verified to FAIL pre-fix. The first M2 fixture crashed before
+reaching the stamp (missing log helpers on the fake gateway) and passed for
+the wrong reason — rewritten. 86/86 green, deployed.
+
+Remaining (informational): ping_event_mode has no admin UI; terminal ping
+suppression is check-then-act (benign); sequence_number -1 outside spec.
+
+## 2026-10-25 (cont.) — chat-completions session affinity LIVE (pinned-next56)
+
+User-report fix (user 74 / 644076105): OpenAI-format Claude callers had no
+channel stickiness — 114 requests over 17 channels/day, cache reads ~1.5k
+crumbs because the upstream prompt cache is per-merchant. Root cause of BOTH
+his complaints (cost unchanged with cache "on" + 3-minute turns): random
+routing invalidated the cache every request, and random merchants included
+the slow streamers (31 tok/s vs 115 tok/s across the pool — 3.7x spread).
+
+New built-in rule "chat completions trace" (commit a94a8a788):
+- /v1/chat/completions, ^claude-.*$, session key = OpenAI `user` field with
+  token_id context fallback (every request from one API key pins together).
+- PREFER mode: dead merchant fails over immediately; the fallback becomes
+  the new pin automatically (clear-on-fail + RecordChannelAffinity-on-
+  success = LiteLLM repin_on_failover for free).
+- Passes OpenAI-format client headers. TTL 3600s.
+
+Research note: no GitHub project has a relay-side prompt cache (physically
+impossible — the cache IS the provider's GPU state). LiteLLM's session
+affinity is the same design we built; its cache-aware routing is K8s-pod
+only. Kiro proxies' issue trackers confirm Kiro throttling/expiry/silent
+drops are inherent to the product — validates the Option A failover design.
+
+Live-verified: 3 same-token chat-completions requests all pinned to ch95
+with the rule tagged. The affinity answer to "cache never survives" for
+OpenAI-format users. Still pending: 1h TTL injection test; cache-read price
+drop (A6 fleet charges uniformly 5% of input for reads — verified; a near-
+zero read price is safe pool-wide). Rollback: tag pinned-next55 as pinned.
+
+## 2026-10-25 (cont.) — 1h cache TTL passes through (VERIFIED)
+
+Live test through the full chain (relay -> A6 merchant -> Anthropic):
+- 05:39 wrote a 118,085-token cache with cache_control {"type":"ephemeral",
+  "ttl":"1h"} (HTTP 200, ttl accepted).
+- 05:46 — 6.5 minutes later, past the default 5-min TTL — identical prompt
+  READ 100,372 cached tokens (HTTP 200, hit confirmed).
+
+The 1h TTL is honored end-to-end. No relay changes were needed: CacheControl
+is json.RawMessage on the wire structs and round-trips verbatim; the client
+simply has to ask for it. Claude-clients that set it get 12x-longer cache
+survival today.
+
+Cost note: 1h writes bill at the 1h rate (2x the 5m write rate upstream),
+but a hit still reads at 0.01/1M vs 0.15/1M input — the read saved ~93% on
+those tokens vs fresh input. Open option: relay-side injection of
+ttl:"1h" for clients that don't set it (would need a setting + decision on
+who absorbs the higher write cost). Tomorrow's affinity check will show
+user 74's real cache behavior under the new sticky routing.
+
+## 2026-10-25 (cont.) — 1h cache TTL injection LIVE (pinned-next57)
+
+Owner-approved. InjectCacheTtl (service/cache_ttl_inject.go, commit
+8c65c31e7): a generic JSON walk that adds ttl:"1h" ONLY to cache_control
+blocks lacking one — client-set ttl values are NEVER touched (explicit
+preference wins). Bodies without cache_control pass through byte-identical;
+malformed bodies untouched. Gated by general_setting.cache_ttl_inject
+(default OFF, live-reloaded; ARMED in prod options table 2026-10-25).
+Wired in relay/claude_handler.go after RemoveDisabledFields/param-override.
+NOTE: relaykit is a separate Go module — the injection CANNOT live there
+(no imports from the main module); it lives in service/.
+
+Live-verified end-to-end (11:57 -> 12:05, 6 min gap, past the default TTL):
+request 1 with NO client ttl wrote 80,082 cache tokens; request 2 (identical
+prompt) READ 68,069. The injection worked through relay -> A6 -> Anthropic.
+Billing note: the higher 1h write rate is billed to the USER (Anthropic
+upstream), not us; from turn 2 onward the user is strictly better off
+(read 0.01 vs write 0.05 $/1M on sonnet-5-5).
+
+With this + the chat-completions affinity rule, the cache story for agentic
+users is: pinned merchant (survives rotation via re-pin) + 1h TTL (survives
+turn gaps) + 5x-cheaper reads. Rollback: set cache_ttl_inject=false in
+options (no rebuild needed) or tag pinned-next56 as pinned.

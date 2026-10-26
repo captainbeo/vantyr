@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-quota-phase2-3-native-preconsume-red-2026-08-16",
+  "type": "postgresql-characterization-red",
+  "source": "disposable PostgreSQL 17.5 container plus cached golang:1.26.1-bookworm runner on 2026-08-16",
+  "summary": "The opt-in command go test -mod=readonly ./model -run 'TestPreConsumeUserSubscriptionCharacterization' -count=1 ran against disposable PostgreSQL and failed in the two intended native-gap fixtures. The mismatched model/quota case received nil instead of an error, proving native preconsume ignores model/quota inputs. The plan-binding case selected subscription 2101 instead of requested 2102, proving the active-subscription scan is not bound to an authoritative plan. Expired filtering and concurrent exact-cap characterization remained green. The temporary PostgreSQL container was removed; no source, staged files, or protected linked Git metadata were changed.",
+  "verifier": "Primary agent on 2026-08-16"
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-quota-phase2-3-quota-type-constraint-2026-08-16",
+  "type": "postgresql-quota-type-migration-rollback-regression",
+  "source": "Disposable PostgreSQL 17.5 with cached golang:1.26.1-bookworm runner via elevated WSL on 2026-08-16; focused quota_type regression command",
+  "summary": "Fresh PostgreSQL proof passed all three quota_type regressions: migration repairs a weaker commercial check, rolls back the upgrade when invalid rows exist, and rejects direct non-request quota_type writes. Output: PASS; ok github.com/QuantumNous/new-api/model 3.449s.",
+  "verifier": "Primary agent on 2026-08-16"
+}

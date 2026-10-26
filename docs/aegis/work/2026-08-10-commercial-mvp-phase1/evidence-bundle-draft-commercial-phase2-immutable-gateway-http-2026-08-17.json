@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-immutable-gateway-http-2026-08-17",
+  "type": "immutable-snapshot-gateway-http-integration",
+  "source": "wsl.exe bash -lc \"bash /mnt/c/Users/z/tmp/commercial_mvp_start_fresh_0817h.sh\"",
+  "summary": "Fresh disposable project commercial-mvp-needs-verification-0817h ran from immutable local snapshot 5f3c8f9241c0c37ee0075a6dbcb39da099dd213d on 2026-08-17. Compose configuration had no literal secret values; all five services became healthy; pricing/retry options were seeded; the gateway restart crossed the commercial channel activation fence; enforcement epoch 1 activated with readiness passed. The fresh commercial fixture then passed gateway_models, gateway_responses_json, gateway_responses_sse, gateway_responses_compact, gateway_rejections, gateway_prebyte_failover, and gateway_http_proof. The proof exercised canonical and root aliases, JSON/SSE/compact responses, expired/disabled/exhausted/wrong-group/wrong-model rejection without mock attempts, and one safe pre-byte primary-to-secondary failover. This is immutable local-snapshot evidence only, not an authorized codex/commercial-mvp branch commit or release proof; no repository, linked Git metadata, protected Proxy Server path, payment, deployment, or launch work was touched.",
+  "verifier": "Primary agent on 2026-08-17; fresh WSL/Docker output read directly"
+}

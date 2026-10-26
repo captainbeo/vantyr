@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-e2e-review-reconciliation-2026-08-18",
+  "type": "phase2-e2e-evidence-reconciliation",
+  "source": "Exact HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95; C:\\Users\\z\\tmp\\commercial-mvp-committed-proof-03b54827-0818q.log; C:\\Users\\z\\tmp\\commercial-mvp-exact-outage-proof-03b54827-0818n.log; C:\\Users\\z\\tmp\\commercial-mvp-recovery-proof-03b54827-0818b.log",
+  "summary": "Reconciliation update supersedes the preceding E2E review wording: a fresh exact-HEAD gateway HTTP proof now passed and exited 0, closing the route compatibility/pre-byte failover boundary. The Redis failure driver does not query mock attempt counters and prints upstream_attempts=0 literally, so Redis no-upstream behavior remains unverified. The original outage log has component markers and an independently asserted aggregate marker but no same-process exit marker. Remaining Phase 2 gaps are production-shaped performance and simultaneous cap evidence.",
+  "verifier": "Primary agent; exact-HEAD E2E review reconciliation on 2026-08-18"
+}

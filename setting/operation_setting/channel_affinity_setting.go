@@ -161,17 +161,20 @@ var channelAffinitySetting = ChannelAffinitySetting{
 				{Type: "gjson", Path: "metadata.user_id"},
 			},
 			ValueRegex:            "",
-			TTLSeconds:            3600,
+			TTLSeconds:            1200,
 			ParamOverrideTemplate: buildPassHeaderTemplate(claudeCliPassThroughHeaders),
 			// Prefer, not strict: see the codex rule above. Incident
 			// 2026-10-25 12:15-12:18 — a /v1/messages session pinned to a
 			// dead fable-5 merchant got 8 straight 502s with
 			// reason=strict_session instead of a retry.
-			// TTL set to 1 hour (was 0/infinite) so sessions naturally
+			// TTL set to 20 min (was 0/infinite) so sessions naturally
 			// migrate back to the primary (Kiro) after it recovers from
-			// an outage, rather than staying pinned to A6 backup forever.
-			// This allows Kiro→A6→Kiro automatic restore while preserving
-			// cache reuse during the failover window.
+			// short outages (median 1-2 min), rather than staying pinned
+			// to A6 backup forever. Balances cache reuse (20 min on A6)
+			// vs fast restore (Kiro typically recovers in 1-2 min, rarely
+			// 30+ min). Analysis 2026-10-26: 7 outages/12h, 6 were 1min,
+			// 1 was 33min. This allows Kiro→A6→Kiro automatic restore
+			// while preserving cache reuse during the failover window.
 			SkipRetryOnFailure: false,
 			SessionMode:        "prefer",
 			IncludeUsingGroup:  true,

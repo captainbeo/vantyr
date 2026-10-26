@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-immutable-committed-candidate-2026-08-17",
+  "type": "integration",
+  "source": "External clone b1ae2b32163ad048efff5cbb33e4b94a2e576b25; prepared immutable context; new Compose project commercial-mvp-committed-0817m; commercial_mvp_immutable_gateway_proof_fresh.sh",
+  "summary": "The clean external clone at synthetic root commit b1ae2b32163ad048efff5cbb33e4b94a2e576b25 built a consistent immutable gateway context and passed secret-free Compose config, five healthy services, commercial pricing seed, restart activation fence, enforcement epoch 1 readiness, and the fresh commercial gateway proof: model discovery, canonical/root Responses JSON, SSE and compact routes, rejected missing/expired/disabled/exhausted/wrong-group/wrong-model credentials without mock attempts, and one pre-byte primary-to-secondary failover. This is local committed-candidate evidence only; the root snapshot has no authorized codex/commercial-mvp ancestry/history and does not close Phase 2.",
+  "verifier": "Primary agent on 2026-08-17; output read directly from WSL/Docker with standalone-commit review"
+}

@@ -556,3 +556,17 @@ func TestChatCompletionsRuleEndToEndStickiness(t *testing.T) {
 	require.True(t, found)
 	assert.Equal(t, 83, channelID)
 }
+
+// Owner decision 2026-10-25: no built-in affinity rule may strand a session
+// on a failed channel. The legacy codex/claude cli trace rules ran strict
+// (SkipRetryOnFailure) and returned 8 straight 502s to a user while the
+// pinned merchant was dead; every default rule must now resolve to prefer.
+func TestDefaultAffinityRulesResolveToPrefer(t *testing.T) {
+	setting := operation_setting.GetChannelAffinitySetting()
+	require.NotEmpty(t, setting.Rules)
+	for _, rule := range setting.Rules {
+		mode, _ := EffectiveSessionMode(setting, rule)
+		assert.Equal(t, "prefer", mode, "rule %q must not run strict", rule.Name)
+		assert.False(t, rule.SkipRetryOnFailure, "rule %q must not skip retry", rule.Name)
+	}
+}

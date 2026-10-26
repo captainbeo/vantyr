@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-exact-commit-cap4-attempt-2026-08-18",
+  "type": "immutable-branch-revision-cap4-proof-attempt",
+  "source": "C:\\Users\\z\\tmp\\commercial-mvp-03b54827-cap4-sidecar-164407.log",
+  "summary": "A bounded exact-HEAD real-gateway cap-4 attempt reached five-service startup, delay-sidecar setup, gateway restart, commercial activation, fixture seed, and Redis readiness. The external harness then produced four immediate HTTP 400 responses because ModelPrice and RetryTimes were seeded after the gateway cache restart; no Redis leases or cap assertion were observed. This is a harness sequencing failure, not a source result, and does not close production-shaped throughput, p95/resource, or simultaneous-cap evidence. No repository or linked metadata changed.",
+  "verifier": "Primary agent; raw log read directly on 2026-08-18; exact revision and clean clone status checked"
+}

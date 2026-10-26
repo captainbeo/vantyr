@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-5-focused-host-green-2026-08-16",
+  "type": "focused-redis-admission-and-affected-gate-verification",
+  "source": "Cached Go 1.25.1 Windows runner with miniredis on 2026-08-16; current codex/commercial-mvp worktree",
+  "summary": "Focused middleware concurrency, service concurrency lease, image limiter, epoch/contract, raw-key query, and channel-reader inventory tests passed. The full affected command `go test -mod=readonly ./model ./service ./middleware ./controller ./router ./relay/channel/openai ./docs/contracts ./docs/migrations ./relay/helper ./deploy/mvp -count=1` passed for every package. `go vet -mod=readonly` over the same packages passed; targeted gofmt and staged/unstaged diff checks passed. The owner query now projects `(key IS NULL) AS key_is_null` instead of loading raw token key material, and task billing reads the legacy key once. PostgreSQL runtime and race-capable Linux evidence remain separate pending gates.",
+  "verifier": "Primary agent on 2026-08-16 with independent Phase 2.5 and epoch reviews"
+}

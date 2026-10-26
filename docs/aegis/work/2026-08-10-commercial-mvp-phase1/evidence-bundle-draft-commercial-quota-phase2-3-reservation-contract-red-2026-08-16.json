@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-quota-phase2-3-reservation-contract-red-2026-08-16",
+  "type": "focused-test-red",
+  "source": "cached golang:1.26.1-bookworm disposable container on 2026-08-16",
+  "summary": "The new focused command go test -mod=readonly ./model -run 'TestCommercialSubscriptionReservation' -count=1 failed to compile because the typed reservation input, fingerprint helper, and invalid-input sentinel are not implemented yet. This is the expected RED result before the production reservation path is written. No persistent container or linked Git metadata was touched.",
+  "verifier": "Primary agent on 2026-08-16"
+}

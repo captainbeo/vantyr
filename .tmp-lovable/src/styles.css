@@ -1,0 +1,195 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Vantyr "control room" design system. All colors oklch. */
+
+@theme inline {
+  --font-display: "Chakra Petch", ui-sans-serif, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-signal: var(--signal);
+  --color-ok: var(--ok);
+  --color-grid: var(--grid);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.25rem;
+  --background: oklch(0.155 0.018 255);
+  --foreground: oklch(0.93 0.008 250);
+  --card: oklch(0.19 0.02 255);
+  --card-foreground: oklch(0.93 0.008 250);
+  --popover: oklch(0.19 0.02 255);
+  --popover-foreground: oklch(0.93 0.008 250);
+  --primary: oklch(0.7 0.19 45);
+  --primary-foreground: oklch(0.15 0.02 255);
+  --secondary: oklch(0.23 0.022 255);
+  --secondary-foreground: oklch(0.93 0.008 250);
+  --muted: oklch(0.21 0.02 255);
+  --muted-foreground: oklch(0.65 0.02 250);
+  --accent: oklch(0.25 0.025 255);
+  --accent-foreground: oklch(0.93 0.008 250);
+  --destructive: oklch(0.62 0.21 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.3 0.022 255);
+  --input: oklch(0.3 0.022 255);
+  --ring: oklch(0.7 0.19 45);
+  --signal: oklch(0.7 0.19 45);
+  --ok: oklch(0.78 0.16 150);
+  --grid: oklch(0.93 0.008 250 / 5%);
+  --chart-1: oklch(0.7 0.19 45);
+  --chart-2: oklch(0.78 0.16 150);
+  --chart-3: oklch(0.65 0.02 250);
+  --chart-4: oklch(0.8 0.15 85);
+  --chart-5: oklch(0.6 0.15 260);
+  --sidebar: oklch(0.19 0.02 255);
+  --sidebar-foreground: oklch(0.93 0.008 250);
+  --sidebar-primary: oklch(0.7 0.19 45);
+  --sidebar-primary-foreground: oklch(0.15 0.02 255);
+  --sidebar-accent: oklch(0.25 0.025 255);
+  --sidebar-accent-foreground: oklch(0.93 0.008 250);
+  --sidebar-border: oklch(0.3 0.022 255);
+  --sidebar-ring: oklch(0.7 0.19 45);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--signal);
+    color: var(--primary-foreground);
+  }
+}
+
+@utility bg-gridlines {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+@keyframes blink {
+  50% { opacity: 0.25; }
+}
+@keyframes flow {
+  from { stroke-dashoffset: 40; }
+  to { stroke-dashoffset: 0; }
+}
+@utility animate-blink {
+  animation: blink 1.6s steps(2, start) infinite;
+}
+@utility animate-flow {
+  stroke-dasharray: 4 6;
+  animation: flow 1.2s linear infinite;
+}
+
+/* ── Ambient background (sitewide, decorative, very low contrast) ── */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 45%, #000 40%, transparent 100%);
+}
+.ambient-drift {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 35% at 30% 30%, oklch(0.32 0.04 255 / 35%), transparent 70%),
+    radial-gradient(35% 30% at 75% 70%, oklch(0.28 0.035 250 / 30%), transparent 70%);
+  animation: ambient-drift 48s ease-in-out infinite alternate;
+}
+.ambient-traces {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.ambient-trace {
+  animation: ambient-slide linear infinite;
+}
+.ambient-trace-rev {
+  animation-direction: reverse;
+}
+.ambient-line,
+.ambient-line-accent {
+  fill: none;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ambient-line {
+  stroke: oklch(0.93 0.008 250 / 7%);
+}
+.ambient-line-accent {
+  stroke: color-mix(in oklch, var(--signal) 22%, transparent);
+}
+@keyframes ambient-drift {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to { transform: translate3d(3%, 2%, 0) scale(1.06); }
+}
+@keyframes ambient-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(-1440px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-drift,
+  .ambient-trace {
+    animation: none;
+  }
+}

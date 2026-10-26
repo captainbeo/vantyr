@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase3-7-sandbox-mock-2026-08-21",
+  "type": "phase3-7-sandbox-transfer-station",
+  "source": "deploy/mvp/verify-gateway.sh up; disposable WSL/Docker Compose project at exact source revision 03b5482775dc84204fb1141405d6e8c42b02ae95",
+  "summary": "Fresh local sandbox proof passed with mock transfer-station channels and no real provider credits. Disposable gateway, PostgreSQL, Redis, and both mock services became healthy; secret-free Compose rendering, model pricing, single-channel commercial seed, compact seed, active access/epoch projection, model discovery, canonical/root Responses JSON, SSE, compact, rejection isolation, and sanitized single-channel outage all passed. The outage produced exactly one primary attempt and zero secondary attempts. The harness exited 0 and removed temporary resources. This does not prove real supplier authorization, real provider billing/latency, or live channel behavior.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-21"
+}

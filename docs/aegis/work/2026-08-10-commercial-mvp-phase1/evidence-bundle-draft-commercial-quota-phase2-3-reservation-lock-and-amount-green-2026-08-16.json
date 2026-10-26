@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-quota-phase2-3-reservation-lock-and-amount-green-2026-08-16",
+  "type": "postgresql-reservation-red-green-and-review",
+  "source": "Disposable PostgreSQL 17.5 container commercial-mvp-reservation-pg-0816 plus cached golang:1.26.1-bookworm runner via elevated WSL on 2026-08-16",
+  "summary": "The focused zero-amount regression first reached RED after the advisory-lock overload was reproduced: PostgreSQL rejected pg_advisory_xact_lock(bigint,bigint). The minimal integer-cast fix then reached the intended RED assertion (commercial pre_consumed=0 accepted), and the tightened commercial check requiring pre_consumed=1 made it GREEN. Fresh complete TestCommercialSubscriptionReservation, full ./model, go vet ./model, focused -race reservation, and container gofmt checks passed. Independent database and architecture reviews found no Critical or Important finding in this slice; security/test review recorded Step 2.4 terminal-status/lock-order follow-ups and a minor direct-call period-start check.",
+  "verifier": "Primary agent with independent database, architecture, and security/test-surface reviews on 2026-08-16"
+}

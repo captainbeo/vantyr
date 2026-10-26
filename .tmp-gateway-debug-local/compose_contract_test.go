@@ -1,0 +1,310 @@
+package mvp_test
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+type composeDocument struct {
+	Services map[string]composeService `yaml:"services"`
+	Secrets  map[string]composeSecret  `yaml:"secrets"`
+}
+
+type composeService struct {
+	Image       string                 `yaml:"image"`
+	Build       map[string]interface{} `yaml:"build"`
+	Environment map[string]string      `yaml:"environment"`
+	Secrets     []interface{}          `yaml:"secrets"`
+	Volumes     []string               `yaml:"volumes"`
+	Healthcheck map[string]interface{} `yaml:"healthcheck"`
+	DependsOn   map[string]struct {
+		Condition string `yaml:"condition"`
+	} `yaml:"depends_on"`
+	Ports []string `yaml:"ports"`
+}
+
+type composeSecret struct {
+	Environment string `yaml:"environment"`
+}
+
+func loadCompose(t *testing.T) (composeDocument, string) {
+	t.Helper()
+	raw, err := os.ReadFile("compose.yaml")
+	require.NoError(t, err)
+
+	var document composeDocument
+	require.NoError(t, yaml.Unmarshal(raw, &document))
+	return document, string(raw)
+}
+
+func TestComposeDefinesOnlyTheMVPTopology(t *testing.T) {
+	document, _ := loadCompose(t)
+	want := []string{"gateway", "mock-primary", "mock-secondary", "postgres", "redis"}
+	got := make([]string, 0, len(document.Services))
+	for name, service := range document.Services {
+		got = append(got, name)
+		require.NotEmpty(t, service.Healthcheck, "%s needs a healthcheck", name)
+	}
+	sort.Strings(got)
+	require.Equal(t, want, got)
+
+	for _, dependency := range []string{"postgres", "redis", "mock-primary", "mock-secondary"} {
+		require.Equal(t, "service_healthy", document.Services["gateway"].DependsOn[dependency].Condition)
+	}
+}
+
+func TestComposeUsesOnlyEnvironmentBackedSecrets(t *testing.T) {
+	document, raw := loadCompose(t)
+	require.NotEmpty(t, document.Secrets)
+	for name, secret := range document.Secrets {
+		require.True(t, strings.HasPrefix(secret.Environment, "MVP_"), "%s must name an MVP environment source", name)
+	}
+
+	lower := strings.ToLower(raw)
+	for _, forbidden := range []string{"123456", "changeme", "random_string", "redis://:", "postgresql://"} {
+		require.NotContains(t, lower, forbidden)
+	}
+
+	for name, service := range document.Services {
+		require.NotContains(t, fmt.Sprint(service.Environment), "PASSWORD=")
+		require.NotContains(t, fmt.Sprint(service.Environment), "SECRET=")
+		require.NotContains(t, fmt.Sprint(service.Environment), "SQL_DSN")
+		require.NotContains(t, fmt.Sprint(service.Environment), "REDIS_CONN_STRING")
+		require.NotEmpty(t, service.Secrets, "%s must receive its runtime secret through Compose secrets", name)
+	}
+}
+
+func TestImagesAndMockControlsAreBounded(t *testing.T) {
+	document, _ := loadCompose(t)
+	postgresImage := document.Services["postgres"].Image
+	require.NotEmpty(t, postgresImage)
+	require.NotContains(t, postgresImage, ":latest")
+	require.Contains(t, postgresImage, "@sha256:")
+
+	redis := document.Services["redis"]
+	require.Equal(t, "${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}", redis.Build["context"])
+	require.Equal(t, "deploy/mvp/redis.Dockerfile", redis.Build["dockerfile"])
+	redisDockerfile, err := os.ReadFile("redis.Dockerfile")
+	require.NoError(t, err)
+	require.Contains(t, string(redisDockerfile), "FROM redis:7.4.5-alpine@sha256:")
+	require.Contains(t, string(redisDockerfile), "COPY deploy/mvp/redis-entrypoint.sh /opt/mvp/redis-entrypoint.sh")
+
+	primary := document.Services["mock-primary"]
+	secondary := document.Services["mock-secondary"]
+	require.NotEmpty(t, primary.Build, "the primary mock owns the single reusable image build")
+	require.Equal(t, "${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}", primary.Build["context"])
+	require.Empty(t, secondary.Build, "the secondary mock must reuse the already built image")
+	require.Equal(t, primary.Image, secondary.Image)
+	require.Len(t, primary.Ports, 1)
+	require.Len(t, secondary.Ports, 1)
+	require.True(t, strings.HasPrefix(primary.Ports[0], "127.0.0.1:"))
+	require.True(t, strings.HasPrefix(secondary.Ports[0], "127.0.0.1:"))
+}
+
+func TestMockChannelSeedAndRelayCredentialsAreDeploymentConfigured(t *testing.T) {
+	document, _ := loadCompose(t)
+	gateway := document.Services["gateway"]
+	require.Equal(t, "1", gateway.Environment["PRIVATE_MVP_MODE"])
+	require.Equal(t, "/opt/mvp/mock-channels.json", gateway.Environment["COMMERCIAL_MOCK_CHANNEL_SEED_FILE"])
+	require.Equal(t, "mock-primary,mock-secondary", gateway.Environment["COMMERCIAL_MOCK_HOST_ALLOWLIST"])
+
+	for _, secret := range []string{"mock_primary_relay_credential", "mock_secondary_relay_credential"} {
+		configured, ok := document.Secrets[secret]
+		require.True(t, ok, secret)
+		require.True(t, strings.HasPrefix(configured.Environment, "MVP_"), secret)
+		require.Contains(t, fmt.Sprint(gateway.Secrets), secret)
+	}
+	require.Contains(t, fmt.Sprint(document.Services["mock-primary"].Secrets), "mock_primary_relay_credential")
+	require.Contains(t, fmt.Sprint(document.Services["mock-secondary"].Secrets), "mock_secondary_relay_credential")
+	require.Equal(t, "/run/secrets/mock_primary_relay_credential", document.Services["mock-primary"].Environment["MOCK_RELAY_TOKEN_FILE"])
+	require.Equal(t, "/run/secrets/mock_secondary_relay_credential", document.Services["mock-secondary"].Environment["MOCK_RELAY_TOKEN_FILE"])
+
+	pepper, ok := document.Secrets["gateway_key_pepper"]
+	require.True(t, ok)
+	require.Equal(t, "MVP_GATEWAY_KEY_PEPPER", pepper.Environment)
+	require.Contains(t, fmt.Sprint(gateway.Secrets), "gateway_key_pepper")
+
+	raw, err := os.ReadFile("mock-channels.json")
+	require.NoError(t, err)
+	seed := string(raw)
+	for _, required := range []string{
+		`"id": 910001`, `"id": 910002`,
+		`"priority": 100`, `"priority": 50`,
+		`"weight": 100`, `"public_model_alias": "gpt-5.4"`,
+		`"upstream_model": "primary-fixture-model"`, `"upstream_model": "secondary-fixture-model"`,
+		`"secret_ref": "env://MVP_MOCK_PRIMARY_RELAY_CREDENTIAL"`,
+		`"secret_ref": "env://MVP_MOCK_SECONDARY_RELAY_CREDENTIAL"`,
+		`"failure_domain": "compose-mock-provider"`,
+	} {
+		require.Contains(t, seed, required)
+	}
+}
+
+func TestGatewayEntrypointLoadsCommercialKeyPepperFromSecret(t *testing.T) {
+	raw, err := os.ReadFile("gateway-entrypoint.sh")
+	require.NoError(t, err)
+	entrypoint := string(raw)
+	require.Contains(t, entrypoint, `read_secret /run/secrets/gateway_key_pepper`)
+	require.Contains(t, entrypoint, `export GATEWAY_KEY_PEPPER="$gateway_key_pepper"`)
+	require.Contains(t, entrypoint, "unset postgres_password redis_password session_secret gateway_key_pepper")
+}
+
+func TestGatewayBuildPreservesReleaseContextFence(t *testing.T) {
+	document, _ := loadCompose(t)
+	gateway := document.Services["gateway"]
+	require.Equal(t, "${MVP_GATEWAY_BUILD_CONTEXT:?run prepare-gateway-context.sh first}", gateway.Build["context"])
+
+	for name, service := range document.Services {
+		for _, volume := range service.Volumes {
+			require.NotContains(t, volume, "./", "%s must not inject mutable worktree files at runtime", name)
+		}
+	}
+
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	require.NoError(t, err)
+	require.Contains(t, string(dockerfile), "COPY --from=builder2 /build/deploy/mvp/gateway-entrypoint.sh /opt/mvp/gateway-entrypoint.sh")
+
+	dockerignore, err := os.ReadFile(filepath.Join("..", "..", ".dockerignore"))
+	require.NoError(t, err)
+	for _, required := range []string{
+		"!docs/contracts/sse_validator.go",
+		"!docs/contracts/customer-api.schemas.yaml",
+		"!docs/contracts/customer-api.sse.schemas.yaml",
+	} {
+		require.Contains(t, string(dockerignore), required)
+	}
+
+	for _, path := range []string{"gateway-entrypoint.sh", "redis-entrypoint.sh", "prepare-gateway-context.sh", "verify-compose.sh"} {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.NotContains(t, string(raw), "123456")
+	}
+	verifyCompose, err := os.ReadFile("verify-compose.sh")
+	require.NoError(t, err)
+	require.Contains(t, string(verifyCompose), `cat "/run/secrets/$1"`)
+	require.Contains(t, string(verifyCompose), `--config="$auth_config"`)
+	require.NotContains(t, string(verifyCompose), `printenv "$1"`)
+
+	prepare, err := os.ReadFile("prepare-gateway-context.sh")
+	require.NoError(t, err)
+	require.Contains(t, string(prepare), "git -C")
+	require.Contains(t, string(prepare), "archive \"$source_revision\"")
+	require.Contains(t, string(prepare), ".release-source-revision")
+}
+
+func TestGatewayRuntimeDependenciesAreReproduciblyPinned(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	require.NoError(t, err)
+	dockerfile := string(raw)
+
+	require.Contains(t, dockerfile, "http://snapshot.debian.org/archive/debian/20260316T000000Z/")
+	require.Contains(t, dockerfile, "http://snapshot.debian.org/archive/debian-security/20260316T000000Z/")
+	require.Contains(t, dockerfile, "Check-Valid-Until: no")
+	for _, dependency := range []string{
+		"ca-certificates=20230311+deb12u1",
+		"libasan8=12.2.0-14+deb12u1",
+		"tzdata=2025b-0+deb12u2",
+		"wget=1.21.3-1+deb12u1",
+	} {
+		require.Contains(t, dockerfile, dependency)
+	}
+}
+
+func TestMockOpenAPIContractOwnsEveryTestEndpoint(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("mock", "openapi.yaml"))
+	require.NoError(t, err)
+	var contract struct {
+		Paths map[string]map[string]interface{} `yaml:"paths"`
+	}
+	require.NoError(t, yaml.Unmarshal(raw, &contract))
+	require.ElementsMatch(t, []string{"/healthz", "/v1/responses", "/control/mode", "/control/attempts"}, mapKeys(contract.Paths))
+	require.Contains(t, contract.Paths["/healthz"], "get")
+	require.Contains(t, contract.Paths["/v1/responses"], "post")
+	require.Contains(t, contract.Paths["/control/mode"], "put")
+	require.Contains(t, contract.Paths["/control/attempts"], "get")
+	post, ok := contract.Paths["/v1/responses"]["post"].(map[string]interface{})
+	require.True(t, ok)
+	responses, ok := post["responses"].(map[string]interface{})
+	require.True(t, ok)
+	response200, ok := responses["200"].(map[string]interface{})
+	require.True(t, ok)
+	responseContent, ok := response200["content"].(map[string]interface{})
+	require.True(t, ok)
+	require.Contains(t, responseContent, "application/json")
+	require.Contains(t, responseContent, "text/event-stream")
+}
+
+func TestComposeProofExercisesBothMockResponseFormats(t *testing.T) {
+	raw, err := os.ReadFile("verify-compose.sh")
+	require.NoError(t, err)
+	proof := string(raw)
+
+	for _, required := range []string{
+		`fetch_mock "$station" "$credential_file" "$model" false "$json_output"`,
+		`fetch_mock "$station" "$credential_file" "$model" true "$sse_output"`,
+		`mock-relay-$station.json`,
+		`mock-relay-$station.sse`,
+		`response.created`,
+		`response.completed`,
+		`last.get("stream") is not True`,
+	} {
+		require.Contains(t, proof, required)
+	}
+	require.Contains(t, proof, "MVP_GATEWAY_KEY_PEPPER=$(openssl rand -hex 32)")
+	require.Contains(t, proof, `"$MVP_GATEWAY_KEY_PEPPER"`)
+}
+
+func TestGatewayProofConfiguresSingleAttemptOutageProof(t *testing.T) {
+	raw, err := os.ReadFile("verify-gateway.sh")
+	require.NoError(t, err)
+	proof := string(raw)
+	require.Contains(t, proof, `('RetryTimes', '0') ON CONFLICT`)
+	require.Contains(t, proof, `"${compose[@]}" build mock-primary >/dev/null`)
+	require.Contains(t, proof, `"${compose[@]}" up --build --wait >/dev/null`)
+	require.Contains(t, proof, `network_name="${project_name}_backend"`)
+	require.Contains(t, proof, `docker network create`)
+	require.Contains(t, proof, "gateway_single_channel_outage=passed")
+	require.Contains(t, proof, "secondary_after_outage")
+	require.NotContains(t, proof, "gateway_prebyte_failover")
+	require.NotContains(t, proof, "failover_json")
+}
+
+func TestGatewayProofSeedsCommercialAccessFixture(t *testing.T) {
+	raw, err := os.ReadFile("verify-gateway.sh")
+	require.NoError(t, err)
+	proof := string(raw)
+	for _, required := range []string{
+		"sk-pxv1.",
+		"gateway_verifier_digest",
+		"commercial_key",
+		"commercial_plan_versions",
+		"commercial_billing_periods",
+		"commercial_plan_entitlements",
+		"commercial_access_projections",
+		"commercial:enforcement:epoch:v1",
+		"MVP_GATEWAY_KEY_PEPPER",
+		"status = 2 WHERE id = 910002",
+		"enabled = FALSE WHERE channel_id = 910002",
+	} {
+		require.Contains(t, proof, required)
+	}
+	require.Contains(t, proof, "key IS NULL")
+	require.Contains(t, proof, "state = 'active'")
+	require.NotContains(t, proof, `python3 - "$commercial_keys_env" "$MVP_GATEWAY_KEY_PEPPER"`)
+	require.NotContains(t, proof, "set -a\n. \"$commercial_keys_env\"")
+}
+
+func mapKeys(values map[string]map[string]interface{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
+}

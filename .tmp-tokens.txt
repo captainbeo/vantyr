@@ -1,0 +1,2 @@
+1|smoke-test-key|JFN8bItmRLNCc2o4uy65Z5hUP6XDQyokWa5JlR577vCp16rd
+2|smoke-key-2|UGiq2R6IGemCG9wVZ5U0yDXNvtwxjV9fnPpYodKx5thYMyRJ

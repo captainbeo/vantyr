@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-wallet-payg-postgresql-proof-2026-08-22",
+  "type": "commercial-wallet-payg-postgresql-migration-and-concurrency",
+  "source": "model/commercial_wallet_payg.go; model/commercial_wallet_payg_postgres_test.go; docs/migrations/2026-08-21-commercial-wallet-payg.md; disposable PostgreSQL 17.5 Docker run on 2026-08-22",
+  "summary": "Fresh disposable PostgreSQL 17.5 proof passed wallet migration replay, target-table schema-drift rejection using a decoy unique index, foreign-key and CHECK rejection, concurrent duplicate request reservation with one row and one native-wallet debit, empty-state guarded DOWN preserving prerequisite tables, and non-empty DOWN refusal. The verifier now scopes unique indexes to the target relation and normalizes PostgreSQL structural parentheses, casts, and optional public qualification without weakening the required fields/values. Focused TestCommercialWallet and service/controller billing tests, model/service/controller go vet, gofmt, and git diff checks passed. No production database, payment, deployment, launch, supplier activation, linked metadata, protected Proxy Server path, or unrelated worktree state was changed.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-22"
+}

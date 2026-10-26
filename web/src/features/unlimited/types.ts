@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 /**
  * Slot availability for the admin-granted unlimited plan, served by
  * GET /api/user/unlimited/info.

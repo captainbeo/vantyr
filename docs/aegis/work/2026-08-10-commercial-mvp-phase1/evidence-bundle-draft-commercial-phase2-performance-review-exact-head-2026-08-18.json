@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-performance-review-exact-head-2026-08-18",
+  "type": "phase2-performance-concurrency-review",
+  "source": "Exact HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95; service/commercial_concurrency.go; service/commercial_image_limiter.go; C:\\Users\\z\\tmp\\commercial-mvp-exact-outage-proof-03b54827-0818n.log; C:\\Users\\z\\tmp\\commercial-mvp-recovery-proof-03b54827-0818b.log",
+  "summary": "Independent exact-HEAD performance/concurrency review found no Critical correctness defect. Redis Lua admission is atomic, owner/epoch bound, and fail-closed; focused tests cover exact caps, quota concurrency, duplicate handling, renewal hard limits, cancellation, and fencing, while exact runtime logs cover outage/recovery. The Phase 2 performance gate remains needs-verification because no production-shaped throughput, p95 latency, or resource benchmark was retained and the 12-request outage launch has no strict simultaneous-start barrier. Current enabled plans use concurrency cap 4; full lease-hash scans, per-admission PostgreSQL epoch reads, and broader schema limits are recorded as bounded hardening follow-up.",
+  "verifier": "Independent phase2_performance_review agent; read-only review pinned to 03b5482775dc84204fb1141405d6e8c42b02ae95 on 2026-08-18"
+}

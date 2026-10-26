@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-quota-phase2-4-settlement-cas-green-2026-08-16",
+  "type": "postgresql-reservation-settlement-red-green-and-affected-gate-verification",
+  "source": "Disposable PostgreSQL 17.5 container commercial-mvp-reservation-pg-0816 plus cached golang:1.26.1-bookworm runner via elevated WSL on 2026-08-16",
+  "summary": "Phase 2.4 settlement CAS and reconciliation proofs passed. Fresh full model, vet, focused race, gofmt, and diff checks passed. Full Phase 2 remains pending Redis, outage, billing, and deployment gates.",
+  "verifier": "Primary agent with independent architecture and security/test-surface reviews on 2026-08-16"
+}

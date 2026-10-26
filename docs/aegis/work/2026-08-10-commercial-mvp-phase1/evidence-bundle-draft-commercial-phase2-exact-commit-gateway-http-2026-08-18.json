@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-exact-commit-gateway-http-2026-08-18",
+  "type": "immutable-branch-revision-gateway-http-integration",
+  "source": "Clean full-history clone C:\\Users\\z\\tmp\\commercial-mvp-committed-clone-03b54827 at HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95; WSL process-substitution replay of C:\\Users\\z\\tmp\\run_committed_gateway_proof_637_0818a.sh; raw log C:\\Users\\z\\tmp\\commercial-mvp-committed-proof-03b54827-0818q.log",
+  "summary": "Fresh disposable Compose proof from the clean full-history clone at exact HEAD 03b5482775dc84204fb1141405d6e8c42b02ae95 passed secret-free Compose configuration, five healthy services, model-pricing seed, gateway restart/activation/readiness, commercial fixture seed, model discovery, canonical/root Responses JSON, SSE, compact, rejection matrix, pre-byte primary-to-secondary failover, and secondary counter assertions. The proof exited 0 and retained raw output outside the repository. This closes the exact-HEAD HTTP compatibility and pre-byte failover evidence boundary; performance-shaped throughput and simultaneous cap evidence remain separate.",
+  "verifier": "Primary agent; direct WSL/Docker output read on 2026-08-18"
+}

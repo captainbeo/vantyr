@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase3-6-anomaly-signal-2026-08-21",
+  "type": "phase3-6-anomaly-signal",
+  "source": "service/commercial_anomaly.go; service/commercial_anomaly_test.go; model/system_task.go; focused WSL/Docker Go test and independent review",
+  "summary": "Implemented a read-only scheduled/admin anomaly scan over active/trialing customer keys. It groups by immutable plan version and distinct customer peers, excludes the subject from the peer average, includes zero-use peers, enforces a minimum cohort and absolute token floor, alerts at an integer approximately 3x threshold, caps samples and alerts with deterministic ordering, and never mutates access, quota, suspension, or ban state. Focused tests and independent review passed; live provider, production database, payment, deployment, and release evidence remain open.",
+  "verifier": "Primary agent with independent Phase 3.6 code/security review reconciled on 2026-08-21"
+}

@@ -37,10 +37,21 @@ SkipRetryOnFailure: false,
 
 ### 2. Set reasonable TTL (this commit)
 ```go
-TTLSeconds: 3600,  // was 0 (infinite)
+TTLSeconds: 1200,  // was 0 (infinite), 20 minutes
 ```
 
-**Effect:** After Kiro recovers, sessions gradually migrate back within 1 hour instead of staying on A6 forever
+**Effect:** After Kiro recovers, sessions gradually migrate back within 20 minutes instead of staying on A6 forever
+
+**Why 20 minutes:** Analysis of Kiro outages (2026-10-26, 12h window) shows:
+- 7 outages total
+- 6 outages resolved in 1 minute (monitor probe interval)
+- 1 outage took 33 minutes
+- Median restore: 1-2 minutes
+
+20 minutes balances:
+- Fast return to Kiro for typical 1-2 min outages
+- Reasonable A6 cache reuse during failover
+- Not too aggressive (avoids cache thrashing if Kiro flaps)
 
 ### 3. Add cache affinity rule (commit from earlier)
 ```go

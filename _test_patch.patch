@@ -1,0 +1,6 @@
+diff --git a/test_patch_probe.tmp b/test_patch_probe.tmp
+--- a/test_patch_probe.tmp
++++ b/test_patch_probe.tmp
+@@ -1 +1 @@
+-probe
++probe2

@@ -1,3 +1,20 @@
+# www alias: Google Search Console property was created as
+# https://www.vantyr.xyz — serve the verification file on www too, and
+# permanently redirect everything else to the canonical apex.
+# (Caddy only fetches the www certificate once the CNAME resolves.)
+www.vantyr.xyz {
+    handle /google*.html {
+        root * /srv/vantyr-static/verification
+        file_server
+    }
+    redir https://vantyr.xyz{uri} 308
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        -Server
+    }
+}
+
 vantyr.xyz {
     # Corresponding Source (AGPL) archive + notices served from ./static/.
     # The SPA's own /static/js/* assets are NOT intercepted: these handles
@@ -22,6 +39,28 @@ vantyr.xyz {
         uri strip_prefix /static
         file_server
     }
+    # Google Search Console HTML-file verification (root-level
+    # google<token>.html, placed in static/verification/).
+    handle /google*.html {
+        root * /srv/vantyr-static/verification
+        file_server
+    }
+
+    # Prerendered per-locale landing shells (SEO Phase B): serve the static
+    # translated pages at /<locale>/ from static/locale/<locale>/index.html.
+    # Everything else under the locale prefix (assets, sub-paths) falls through
+    # to the SPA below. The root-level matcher keeps the apex and unknown
+    # paths on the SPA untouched.
+    @locales path /fr/ /ru/ /zh/ /zh-TW/ /vi/ /ja/ /de/ /nl/ /tr/ /es/ /ar/
+    handle @locales {
+        rewrite * /locale{uri}index.html
+        root * /srv/vantyr-static
+        file_server
+    }
+    # /fr (no trailing slash) -> /fr/ so the locale shell matches.
+    @localesBare path /fr /ru /zh /zh-TW /vi /ja /de /nl /tr /es /ar
+    redir @localesBare {uri}/ 308
+
     # Setup & pricing guide (static HTML in Control Room styling).
     # /docs -> /docs/ (canonical trailing slash); /docs/* serves
     # static/docs/ directly so relative font paths resolve.
@@ -67,6 +106,18 @@ vantyr.xyz {
 # full hosted page with absolute URLs built from app_uri=https://pay.vantyr.xyz.
 pay.vantyr.xyz {
     reverse_proxy gmpay:8000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        -Server
+    }
+}
+
+# BEpusdt (secondary crypto rail, USDT on Aptos/Plasma etc.). The owner
+# dashboard names the channel after the network (BASE/Plasma/...); Caddy
+# route missing since the deployment — restored here.
+pay2.vantyr.xyz {
+    reverse_proxy bepusdt:8080
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options nosniff

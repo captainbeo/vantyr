@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-runtime-postgresql-race-compose-2026-08-16",
+  "type": "phase2-runtime-postgresql-race-compose-verification",
+  "source": "D-backed Ubuntu WSL2 Docker 29.1.3 with golang:1.26.1-bookworm, PostgreSQL 17.5, and current worktree read-only proof context on 2026-08-16",
+  "summary": "Fresh PostgreSQL 17.5 model proofs for enforcement epoch, subscription reservation, access projection, and plan entitlement passed; the commercial service billing integration proof passed. The Linux focused race selection passed model, service, middleware, controller, router, and relay/channel/openai. The affected package tests and go vet passed, and the corrected container gofmt check passed after formatting only model/subscription_preconsume_postgres_test.go and router/relay-router.go. A temporary Git context assembled from HEAD plus tracked worktree modifications and source untracked files built all five Compose services and passed config_port_bindings, secret_value_hits=0, mock_channel_seed counts=2|2|2|8, mock_control_identity, mock_relay_isolation, and compose_up_proof. The Compose revision 41922083d079fc1babe5b9187d6c3c302189a654 is synthetic and does not authorize staging or an immutable Phase 2 commit.",
+  "verifier": "Primary agent on 2026-08-16 with independent limiter, epoch, database, and security/test reviews"
+}

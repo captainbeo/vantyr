@@ -1,0 +1,73 @@
+*** Begin Patch
+*** Update File: model/commercial_wallet_payg_test.go
+@@
+ func TestCommercialWalletPAYGMigrationDDLUsesNativeWalletAndUniqueReferences(t *testing.T) {
+ 	require.Contains(t, commercialWalletPAYGDDL, "public.users(id)")
+ 	require.Contains(t, commercialWalletPAYGDDL, "public.tokens(id)")
++	// Native New API identity columns are INTEGER on PostgreSQL. The wallet
++	// tables must use the same type so production foreign keys can be created
++	// (SQLite AutoMigrate does not catch this mismatch).
++	require.Contains(t, commercialWalletPAYGDDL, "user_id INTEGER NOT NULL REFERENCES public.users(id)")
++	require.Contains(t, commercialWalletPAYGDDL, "gateway_key_id INTEGER REFERENCES public.tokens(id)")
+ 	require.Contains(t, commercialWalletPAYGDDL, "request_id VARCHAR(128) NOT NULL UNIQUE")
+@@
+ 	require.NotContains(t, commercialWalletPAYGDDL, "commercial_wallet_balances")
+ }
++
++func TestCommercialWalletValuesRespectNativeQuotaBound(t *testing.T) {
++	price := validCommercialPriceVersion()
++	price.WalletCreditUnits = int64(common.MaxQuota) + 1
++	require.ErrorIs(t, price.Validate(), ErrCommercialWalletPAYGInvalid)
++
++	reservation := CommercialWalletReservation{
++		RequestID: "native-quota-bound", UserID: 1, PriceVersionID: 1,
++		ReservedUnits: int64(common.MaxQuota) + 1,
++		State: CommercialWalletReservationPending, DeliveryStatus: CommercialWalletDeliveryNone,
++	}
++	require.ErrorIs(t, reservation.Validate(), ErrCommercialWalletPAYGInvalid)
++
++	adjustment := CommercialWalletAdjustment{
++		AdjustmentKey: "native-quota-bound", UserID: 1,
++		Kind: CommercialWalletAdjustmentRefund,
++		Units: int64(common.MaxQuota) + 1, BalanceBefore: 0, BalanceAfter: int64(common.MaxQuota) + 1,
++	}
++	require.ErrorIs(t, adjustment.Validate(), ErrCommercialWalletPAYGInvalid)
++}
+*** Update File: model/commercial_wallet_stripe_test.go
+@@
+ func TestApplyCommercialWalletRefundRejectsInsufficientBalance(t *testing.T) {
+@@
+ }
++
++func TestApplyCommercialWalletRefundIsBoundToOriginalCreditAcrossEvents(t *testing.T) {
++	db, user, command, creditEvent := newCommercialWalletStripeTestDB(t, 1000)
++	require.NoError(t, ApplyCommercialWalletCredit(CommercialWalletCreditInput{
++		EventInboxID: creditEvent.ID, EventID: creditEvent.ProviderEventID, CommandID: command.ID,
++		UserID: user.Id, TradeNo: fmt.Sprintf("commercial-wallet-command-%d", command.ID),
++		StripeCustomer: "cus_test", PriceVersionID: 7, Units: 40,
++	}))
++	firstRefundEvent, err := RecordStripeEvent(StripeEventInbox{
++		Provider: StripeEventProvider, ProviderEventID: "evt_refund_original", ProviderAccountID: "self",
++		EventType: "charge.refunded", OccurredAt: time.Now().UTC(), PayloadHash: testStripeHash("refund-original"), NormalizedEffectData: "refund-original",
++	})
++	require.NoError(t, err)
++	secondRefundEvent, err := RecordStripeEvent(StripeEventInbox{
++		Provider: StripeEventProvider, ProviderEventID: "evt_refund_duplicate_charge", ProviderAccountID: "self",
++		EventType: "charge.refunded", OccurredAt: time.Now().UTC(), PayloadHash: testStripeHash("refund-duplicate-charge"), NormalizedEffectData: "refund-duplicate-charge",
++	})
++	require.NoError(t, err)
++
++	refund := CommercialWalletRefundInput{EventInboxID: firstRefundEvent.ID, EventID: firstRefundEvent.ProviderEventID, CommandID: command.ID, UserID: user.Id, StripeCustomer: "cus_test"}
++	require.NoError(t, ApplyCommercialWalletRefund(refund))
++	refund.EventInboxID = secondRefundEvent.ID
++	refund.EventID = secondRefundEvent.ProviderEventID
++	require.ErrorIs(t, ApplyCommercialWalletRefund(refund), ErrStripeEventConflict)
++
++	var stored User
++	require.NoError(t, db.First(&stored, user.Id).Error)
++	require.Equal(t, 1000, stored.Quota)
++	var refunds int64
++	require.NoError(t, db.Model(&CommercialWalletAdjustment{}).Where("kind = ?", CommercialWalletAdjustmentRefund).Count(&refunds).Error)
++	require.Equal(t, int64(1), refunds)
++}
+*** End Patch

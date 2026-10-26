@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "artifactKey": "commercial-phase2-exact-commit-redis-counter-replay-2026-08-18",
+  "type": "immutable-branch-revision-redis-fail-closed-counter-replay",
+  "source": "C:\\Users\\z\\tmp\\commercial-mvp-redis-counter-proof-03b54827-0818v.log",
+  "summary": "Fresh exact-HEAD Redis replay passed five-service startup, provenance, epoch activation, baseline routing, Redis stop, empty/stale/hash/limit injections, restores, and final accounting. Failure cases returned sanitized 503 with computed primary and secondary mock-counter deltas of zero; final request returned 200 with primary delta one and secondary delta zero. The log contains the aggregate passed marker and no literal upstream_attempts placeholder. No repository or protected metadata changed.",
+  "verifier": "Primary agent; raw log read directly on 2026-08-18"
+}
