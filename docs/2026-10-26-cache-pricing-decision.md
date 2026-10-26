@@ -52,6 +52,11 @@ They already sit at 10-25% of input on all Claude models and 2-7x the merchant f
 Haiku-5-5 is the one model where we charge 0.010 read vs 0.0031 A6 — 3.2x is fine, so
 also leave it. No read price changes.
 
+> **Superseded 2026-10-26 23:01 UTC (owner decision, interim).** Reads were cut on all
+> 10 models to the no-loss floor: the highest cache-read price among the listed
+> merchants in each model's pin pool, rounded up. They hold until the owner picks the
+> long-term cache model. Values and rollback: VANTYR.md 2026-10-26i.
+
 **2. Cache writes: raise the four Claude models that run under 1.5x.**
 Target: charge at least 1.6x the merchant floor, so a write is worth more than its
 cost but a read is still ~5x cheaper than a write (the incentive to reuse).
@@ -77,7 +82,9 @@ the same markup as astra's input price. Volume is small: 53,639 write tokens in 
 
 **3. The cache-loss problem is not a pricing problem.**
 A merchant switch costs one cache rebuild. Affinity already pins a session to its
-merchant: matched requests switched 0.1-0.2% of the time; unmatched ones 24%. The
+merchant: matched requests switched 0.1-0.2% of the time. (The 24% figure first quoted
+for unmatched requests came from a window before prefer mode was deployed; after it,
+unmatched customer requests were only 6 of 1,178. See VANTYR.md 2026-10-26.) The
 lever is match coverage, which the token_id fallback (deployed today) addresses. No
 pricing scheme can make a lost cache free, so do not price writes high on the theory
 that users will avoid switches — they cannot, and a high price just makes the
@@ -85,15 +92,25 @@ unavoidable rebuild expensive.
 
 ## Applied
 
-The two changes that stop active losses were applied live to the production options:
+State as of 2026-10-27:
 
-- `CreateCacheRatio` for the two expression-model names, so a future switch back to
-  ratio mode does not reintroduce the loss: opus-5-5 0.666666666667 -> 2.4,
-  sonnet-5-5 0.333333333333 -> 1.2 (Backup: `/tmp/ccr.bak` on the server.)
-- The expression-model formulas were corrected earlier today for 1h writes.
+- **opus-5 and sonnet-5:** raised to 1.6x as in the table (owner approved 1.6x, not
+  2x). `CreateCacheRatio` 0.8 -> 1.0 and 0.4 -> 0.5. VANTYR.md 2026-10-26e.
+- **opus-5-5 and sonnet-5-5: NOT raised.** These two bill from their expressions
+  (`cc * 0.1`, `cc * 0.05`, `cc1h * 0.16`, `cc1h * 0.08`), which were never changed for
+  5m writes. An earlier version of this section listed a `CreateCacheRatio` change
+  (2.4 / 1.2) as the fix; that setting does not affect expression billing, so it fixed
+  nothing, and it has since been replaced by values that mirror the expressions
+  (1.0 / 0.333, VANTYR.md 2026-10-26j). Billed 5m writes remain 0.10 vs A6 0.0742
+  (1.35x) and 0.05 vs 0.0440 (1.14x). Raising them means editing the `cc` / `cc1h`
+  coefficients and mirroring them into `CreateCacheRatio`. Pending an owner decision.
+- The expression-model formulas were corrected earlier on 2026-10-26 for 1h writes
+  (`cc1h` had been billed $0).
 
-The remaining raises (opus-5 5m/1h, sonnet-5 5m/1h) are in the ratio options and can
-be applied on approval; they are small in absolute terms at current volume.
+Rollback note for the 2026-10-26i read cut: its backup predates the 2026-10-26j ratio
+alignment. If reads are restored from it, set opus-5-5 `CacheRatio` to 0.2 (old read
+0.02 on the new 0.10 input basis), not the backup's 0.133333333333, and do not restore
+`CreateCacheRatio` from it, or the ratio view and Discord show wrong prices again.
 
 ## What to watch
 
