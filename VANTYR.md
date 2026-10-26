@@ -5184,6 +5184,12 @@ never called; the native framework already records and prefers the cache-holding
 channel. Deleted, along with 18.7k scratch/build files that commit edf0b2418 had
 swept into git (`.tmp*`, `.scratch*`, `node_modules/`, a stray `-1`, and a
 `.tmp-tokens.txt` holding two smoke-test keys). `.gitignore` now covers them.
+Both keys were verified revoked on 2026-10-26. Neither matches any row in
+`tokens`, including deleted rows. `smoke-test-key` was last used 2026-10-04
+03:42 UTC (5 launch-day requests), and `smoke-key-2` never appears in logs. The
+latency session's live probe returned 401 for both. The file is still in private
+origin history (edf0b2418). That is clutter, not exposure, so cleaning it before
+any push to `public` is a tidiness choice, not a security one.
 
 **Watch.** Re-run the switch-rate query after a few days. The number that
 matters is the split between matched and unmatched traffic, not the raw rate:
@@ -5535,29 +5541,71 @@ against a pre-deploy average of 18359 for the same path. Aborted streams are
 billed by the estimated path both before and after; the ping frames did not add
 a charge or a new billing path.
 
-## 2026-10-26d — client_gone 60s deaths collapse after the ping fix (LIVE)
+## 2026-10-26d — vt-42af91d64 deploy; 60s client_gone is a client limit, not pings (LIVE)
 
 Image `vantyr/new-api:vt-42af91d64` (87d7a7295598, commit 42af91d64) deployed
 18:58 UTC. Independently verified: `cache_ttl_inject` = 2 and `ping_event_mode`
 = 1 in the binary, `BuildCommit` readable as `42af91d64`, health 200, and a live
 stream returned 7 real `event: ping` frames with 0 comments.
 
-**The result that settles the diagnosis.** Kiro-pool streams, same channel, 60s
-deaths isolated as `use_time` 58-62 with `end_reason=client_gone`, restart
-minutes excluded:
+**RETRACTED (19:30 UTC): the "53.9% -> 7.9%" result below this note was wrong.**
+Real `event: ping` frames went live at 16:25 with `ping-events-20261026`, not at
+18:58. The window labelled "pre-ping" (16:26-18:58) already had real pings, so
+the table compared two real-ping windows and the drop is traffic mix. The
+latency session's matching 53.1% -> 8.7% has the same flaw.
 
-| phase | kiro-pool streams | died at 60s | % |
-|---|---|---|---|
-| pre-ping (16:26-18:58) | 206 | 111 | **53.9** |
-| post-ping (18:58-20:50) | 38 | 3 | **7.9** |
+Corrected, kiro-pool streams by window and user (60s death = `use_time` 58-62,
+`end_reason=client_gone`):
 
-The 60s wall was the client's liveness timer running out on a stream whose only
-keep-alives were `: PING` comments, which event-counting clients do not see. With
-real `event: ping` frames the timer resets and the wall mostly disappears. The
-residual 3 are not clustered at the boundary the way the pre-fix 111 were (7, 8,
-14, 60, 60, 60s), so they look like genuine client aborts rather than a timer.
+| window | user | streams | longest | ran past 62s | died at 60s |
+|---|---|---|---|---|---|
+| comment pings 14:26-16:25 | 111 (customer) | 44 | 60s | 0 | 8 |
+| comment pings 14:26-16:25 | 29 (cctest) | 59 | 282s | 11 | 6 |
+| real pings 16:25-18:58 | 111 (customer) | 50 | 60s | 0 | 38 |
+| real pings 16:25-18:58 | 1 ("Model testing") | 101 | 84s | 1 | 60 |
+| real pings 16:25-18:58 | 29 (cctest) | 55 | 299s | 9 | 13 |
+| real pings 18:58+ | 1 ("Model testing") | 115 | 60s | 0 | 26 |
+| real pings 18:58+ | 29 (cctest) | 17 | 114s | 2 | 0 |
 
-Sample is 38 clean post-fix streams, not yet the ~100 agreed with the latency
-session, but the effect is large enough (53.9% -> 7.9%) that it is already
-decisive. Do not lower `LATENCY_CLIENT_GONE_RATIO` below 0.75 until the sample
-reaches ~100, per the agreement; then it can drop on evidence.
+What this shows:
+- **Not a liveness timer.** Every 60s death after 16:25 had real pings flowing
+  and real output: first token at 7-23s, then ~1,600 completion tokens. An idle
+  or liveness timer cannot fire on a stream that is sending content.
+- **Not a server cap.** Caddy `read_timeout` is 600s, `STREAMING_TIMEOUT` is a
+  per-chunk idle timer, and the cctest client's streams on the same channel run
+  to 282-299s.
+- **It is a per-client total-duration limit.** Customer 111 (token "Opus 5.5",
+  opus-5-5, reasoning max) and the owner's "Model testing" job never ran past
+  ~60s in any window, with comment pings or real ones. Their client stops at 60s
+  wall-clock time whatever the gateway sends. "Customer post-fix 60s deaths: 0"
+  is true only because customer 111 sent no traffic after 18:58.
+
+Real `event: ping` frames stay: they are correct protocol behaviour and cost
+nothing. They are not a fix for this. The only levers are the client's timeout,
+which is the customer's setting, or a shorter time-to-completion. Aborted
+streams are still billed on the estimated path, so these customers pay for
+responses their client discards.
+
+**Rollback hazard found in the same check.** `rollback-pre-vt42af91d-4ad0a10` and
+`ping-events-20261026` both point at `4ad0a1069802`, an intermediate build
+layer (step 27, before `ENTRYPOINT`). It has no entrypoint and `cmd=["bash"]`,
+so with compose's `command: --log-dir /app/logs` it fails at once:
+`exec: "--log-dir": executable file not found`. A rollback to either tag is a
+full outage. The image that actually ran from 16:25 (`d6c40cad10f9`) no longer
+exists. Valid rollback targets, both checked to start with the compose command:
+`cache-affinity-20261026` (41ddad115b45; ttl=2, ping=1; lacks the 16:47
+`mediaItemCacheControl` fix) and `pinned` (17a34903983b; lacks the token_id
+fallback and `mediaItemCacheControl`).
+
+The original (wrong) text follows, kept for the record.
+
+~~The 60s wall was the client's liveness timer running out on a stream whose
+only keep-alives were `: PING` comments. Kiro-pool 60s deaths fell from 111 of
+206 (53.9%, 16:26-18:58) to 3 of 38 (7.9%, 18:58+). Sample is 38 clean post-fix
+streams, but the effect is large enough that it is already decisive.~~
+
+**Threshold consequence.** Keep `CCTEST_LATENCY_CLIENT_GONE_RATIO` at 0.75, and
+do not plan to lower it "once pings prove out": the evidence now says kiro-pool
+`client_gone` is mostly clients with a 60s total-duration limit, which is client
+behaviour, not channel health. That is exactly what 0.75 stops the monitor from
+acting on. A dead channel still trips the hard-error ratio, FRT and hang checks.
