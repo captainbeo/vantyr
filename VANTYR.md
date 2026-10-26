@@ -5597,6 +5597,17 @@ exists. Valid rollback targets, both checked to start with the compose command:
 `mediaItemCacheControl` fix) and `pinned` (17a34903983b; lacks the token_id
 fallback and `mediaItemCacheControl`).
 
+**Resolved 19:45 UTC.** The latency session untagged
+`rollback-pre-vt42af91d-4ad0a10` and tagged `rollback-pre-vt42af91d-41ddad1`
+-> 41ddad115b45 (boot-tested under the compose command; ttl=2, ping=1). The
+cache session then retagged `ping-events-20261026` as
+`UNBOOTABLE-layer-4ad0a10-do-not-run`, so no tag that reads like a release
+names the broken layer. References to `ping-events-20261026` earlier in this
+file describe history, not a usable image. The compose backup that pinned it is
+renamed `compose.yaml.bak-pre-vt42af91d64.UNSAFE-pins-unbootable-ping-events-tag`.
+Rule: a tag that greps clean can still be an unbootable layer; `docker run` it
+with the compose command before calling it a rollback target.
+
 The original (wrong) text follows, kept for the record.
 
 ~~The 60s wall was the client's liveness timer running out on a stream whose
