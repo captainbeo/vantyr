@@ -18,10 +18,17 @@ the restart plan and locked decisions.
 ## Local run (development)
 
 ```bash
+# compose has no gateway build: section (removed 2026-10-26, see 2026-10-26g).
+# Build the image from a clean checkout first, then point compose at it.
+docker build --build-arg COMMIT=$(git rev-parse HEAD) -t vantyr/new-api:dev-$(git rev-parse --short HEAD) .
 cd deploy/vantyr
-docker compose up -d --build
+# set `image:` under gateway to the tag above, then:
+docker compose up -d
 # gateway at http://localhost:3000
 ```
+
+Production builds never use this path: use `deploy/vantyr/scripts/build-gateway.sh`
+on the server with a tarball from `pack-build-context.sh`.
 
 Registry image is not used for Vantyr; we always build from the pinned
 source (the Dockerfile is multi-stage, self-contained, and digest-pinned).
@@ -5450,6 +5457,9 @@ the linker, and compose passes it through as a build arg:
 COMMIT=$(git rev-parse --short HEAD) docker compose build gateway
 ```
 
+(Superseded 2026-10-26g: compose no longer has a gateway `build:` section, so
+this command is a no-op. `build-gateway.sh` passes `--build-arg COMMIT` itself.)
+
 Verify a build with:
 
 ```bash
@@ -5567,6 +5577,13 @@ Corrected, kiro-pool streams by window and user (60s death = `use_time` 58-62,
 | real pings 18:58+ | 1 ("Model testing") | 115 | 60s | 0 | 26 |
 | real pings 18:58+ | 29 (cctest) | 17 | 114s | 2 | 0 |
 
+**SUPERSEDED by 2026-10-26f:** the "per-client total-duration limit" conclusion
+below is wrong. The 60s cut was Caddy v2.11.6's `read_body_idle` default on
+HTTP/1.1 streams. The cctest monitor's long streams survived because they did
+not take that path. Kiro-pool after the Caddy fix (20:37 UTC): 0 of 28 streams
+died at 60s, against 78 of 340 on the same image before it. The liveness-timer
+and server-idle-timer exclusions below still hold.
+
 What this shows:
 - **Not a liveness timer.** Every 60s death after 16:25 had real pings flowing
   and real output: first token at 7-23s, then ~1,600 completion tokens. An idle
@@ -5679,3 +5696,32 @@ global option.
 Still open: `www.vantyr.xyz` has no DNS record (NXDOMAIN on 1.1.1.1 and
 8.8.8.8), so Caddy fails its ACME challenge (56 failures/24h). Needs a DNS
 record (owner, DNS change).
+
+## 2026-10-26g — gateway `build:` section removed from compose (LIVE, no restart)
+
+Owner decision (option B). `deploy/vantyr/compose.yaml` no longer has a
+`build:` block for the gateway. Its context was `../..`, i.e. `/opt/vantyr` on
+the server: a hand-patched tree with an empty `.git`. The 14:26 and 15:10 images
+built from it silently lacked `InjectCacheTtl` and the real-event ping code that
+were already in HEAD.
+
+Now `docker compose build gateway` is a silent no-op (exit 0, image id
+unchanged) and `up --build` cannot rebuild the gateway. The only build path is
+`deploy/vantyr/scripts/build-gateway.sh`, which verifies a tarball of a pinned
+SHA against a manifest and refuses to build on any mismatch. It never used the
+compose `build:` block (it calls `docker build` with an explicit tag).
+
+Applied on the server with a backup
+(`compose.yaml.bak-pre-nobuild-20261026-2044`). Checked before and after: the
+compose config hash for the gateway is identical with and without the block,
+`docker compose up -d --dry-run` reports the gateway as `Running` (no recreate),
+and the container start time is still 18:58:04 UTC. The `cctest-monitor` build
+block is unchanged (its context is its own directory, not `/opt/vantyr`).
+
+Docs that told people to build through compose are updated: the "Local run"
+section above, the BuildCommit note in 2026-10-26c, and
+`docs/2026-10-26-kiro-failover-fix.md`.
+
+`/opt/vantyr` itself is still not a git checkout. With this change nothing
+builds from it by accident; making it a real clone would need a deploy key on
+the repo (owner decision, not done).

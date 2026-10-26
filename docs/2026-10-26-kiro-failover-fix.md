@@ -101,6 +101,14 @@ TTLSeconds: 1200,  // was 0 (effective 3600 via DefaultTTLSeconds), 20 minutes
 ## Deployment Steps
 
 ### Build image
+
+> **Do not use these build steps (superseded 2026-10-26).** `/opt/vantyr` is not a
+> git checkout (its `.git` has no HEAD), so `git pull` there fails, and building in
+> that tree is what shipped two images without `InjectCacheTtl` and real ping
+> events on 2026-10-26. Build with `pack-build-context.sh` (dev machine) plus
+> `deploy/vantyr/scripts/build-gateway.sh` (server), per VANTYR.md 2026-10-26g.
+> The steps below are kept as a record of what was originally proposed.
+
 ```bash
 cd /d/worktrees/commercial-mvp
 git status  # confirm on feat/payment-rails, commit 8c65c31e7
