@@ -5110,19 +5110,24 @@ both shipped without 1h cache TTL injection** (`grep -ac cache_ttl_inject
 silently reverted at 14:26.
 
 The effect is unambiguous once you hold the traffic source fixed, because only
-kiro-pool ever produces 1h writes (A6's relay creates 5-minute caches; 5m writes
-were 0 of 332 on kiro-pool before 14:26). Kiro-pool traffic, 14:26-16:16:
+kiro-pool ever produces 1h writes (A6's relay creates 5-minute caches). Count a
+genuine 5-minute-only write as `cc1h = 0 AND cc5m > 0`: a 1h write populates
+BOTH `cache_creation_tokens` and `cache_creation_tokens_1h` with the same value
+(245 of 245 rows on kiro-pool), so a naive `cc5m > 0` double-counts 1h writes as
+5-minute ones.
 
-| window | kiro-pool reqs | with 1h write | with 5m write |
+| phase | kiro-pool reqs | 1h writes | 5m-only writes |
 |---|---|---|---|
-| before 14:26 | 332 | 65 | 0 |
-| 14:26-16:16 | 176 | **0** | **18** |
+| before 14:26 | 271 | 57 | **0** |
+| 14:26-16:16 (bad builds) | 176 | **0** | **18** |
+| after 16:24 (fixed) | 18 | 1 | **0** |
 
-Same channel, same client type, same window length as the baseline: zero 1h
-writes and a novel 5m-write class that had never appeared on kiro-pool. So every
-cache those users created in that window expired after 5 minutes while the
-affinity rules pinned them to the channel for 20, i.e. a pin that outlived its
-cache by 15 minutes — the exact failure the TTL work existed to prevent.
+Same channel, comparable volume, and the write type flips and flips back: a class
+of write that had never occurred on kiro-pool appeared in the bad window and
+disappeared once injection returned. So every cache those users created in that
+window expired after 5 minutes while the affinity rules pinned them to the
+channel for 20 — a pin that outlived its cache by 15 minutes, the exact failure
+the TTL work existed to prevent.
 
 Caveat for the record: the monitor was also flapping kiro-pool during part of
 that window, so a share of Claude traffic went to A6 pins (which never produce
@@ -5407,3 +5412,19 @@ gateway back to yesterday's build." The intent was right but the tag is no
 longer what it says: the running image is `ping-events-20261026`, and the repo
 compose now names that instead. The rollback hazard it describes is real; the
 specific tag in the message is stale.
+
+**Keep-alive billing safety (checked 2026-10-26).** A keep-alive frame must not
+make an aborted stream billable. On the Anthropic path this is structural, not
+guarded: `PingEventData` writes `event: ping` straight to the client under the
+ping mutex and never reaches `dataHandler`, so `HandleClaudeResponseData` never
+sees it; it also carries no `usage` object, so it cannot contribute tokens even
+if it were parsed. The `resp_ping_keepalive` sentinel and `sequence_number: -1`
+in the comment above are the [OI]-Responses path's guard
+(`isKeepAliveEvent`), which is the separate accumulator that does have a
+started/billable flag.
+
+Measured either way: 6 aborted Claude streams after the ping deploy, all on
+`billing-usage-anthropic-estimated`, none with cache writes, avg quota 2325
+against a pre-deploy average of 18359 for the same path. Aborted streams are
+billed by the estimated path both before and after; the ping frames did not add
+a charge or a new billing path.
