@@ -31,6 +31,11 @@ services:
       - ERROR_LOG_ENABLED=true
       - BATCH_UPDATE_ENABLED=true
       - TZ=${TZ:-UTC}
+      # Idle-stream timeout (seconds): fires only after N seconds with
+      # ZERO bytes; resets on every chunk, so long reasoning streams are
+      # unaffected. Default 300 was letting a silent upstream hold a client
+      # for 5 minutes (kiro-pool 2026-10-24).
+      - STREAMING_TIMEOUT=${STREAMING_TIMEOUT:-60}
     volumes:
       - ./data/logs:/app/logs
       - ./data/gateway:/data
@@ -155,6 +160,22 @@ services:
       - LATENCY_CLIENT_GONE_RATIO=${CCTEST_LATENCY_CLIENT_GONE_RATIO:-0.20}
       - LATENCY_HANG_THRESHOLD=${CCTEST_LATENCY_HANG_THRESHOLD:-3}
       - LATENCY_ERROR_RATIO=${CCTEST_LATENCY_ERROR_RATIO:-0.05}
+      # Primary-channel failover + severe-degradation circuit breaker
+      # (2026-10-25). These were set directly on the server and never came
+      # back to the repo; restored here so this file is the whole truth.
+      # CCTEST_PRIMARY_CHANNELS names the primary per group, e.g.
+      # "default:kiro-pool,unlimited:kiro-pool".
+      - PRIMARY_CHANNELS=${CCTEST_PRIMARY_CHANNELS:-}
+      - PRIMARY_RESTORE_MINUTES=${CCTEST_PRIMARY_RESTORE_MINUTES:-30}
+      - PRIMARY_PROBE_BASE_URL=${CCTEST_PRIMARY_PROBE_BASE_URL:-}
+      - PRIMARY_PROBE_KEY=${CCTEST_PRIMARY_PROBE_KEY:-}
+      - PRIMARY_PROBE_MODEL=${CCTEST_PRIMARY_PROBE_MODEL:-claude-sonnet-5}
+      - CIRCUIT_ERROR_RATIO=${CCTEST_CIRCUIT_ERROR_RATIO:-0.10}
+      - CIRCUIT_BREAKER_ENABLED=${CCTEST_CIRCUIT_BREAKER_ENABLED:-true}
+      - CIRCUIT_MIN_SAMPLES=${CCTEST_CIRCUIT_MIN_SAMPLES:-15}
+      - CIRCUIT_CLIENT_GONE_RATIO=${CCTEST_CIRCUIT_CLIENT_GONE_RATIO:-0.50}
+      - CIRCUIT_WINDOW_MINUTES=${CCTEST_CIRCUIT_WINDOW_MINUTES:-15}
+      - CIRCUIT_INTERVAL_MINUTES=${CCTEST_CIRCUIT_INTERVAL_MINUTES:-5}
       - SYNC_INTERVAL_MINUTES=${CCTEST_SYNC_INTERVAL_MINUTES:-5}
       - MODEL_PREFIXES=${CCTEST_MODEL_PREFIXES:-claude,gpt}
       - USAGE_WINDOW_HOURS=${CCTEST_USAGE_WINDOW_HOURS:-168}
