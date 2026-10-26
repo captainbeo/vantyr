@@ -14,6 +14,12 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        # Vantyr fork (2026-10-26): stamp the source revision into the binary
+        # (common.BuildCommit) so `grep BuildCommit` on the image tells you
+        # exactly what is in it. Version identifies only the upstream tag.
+        # Build with: COMMIT=$(git rev-parse --short HEAD) docker compose build gateway
+        COMMIT: ${COMMIT:-unknown}
     image: vantyr/new-api:ping-events-20261026
     container_name: vantyr-gateway
     restart: unless-stopped

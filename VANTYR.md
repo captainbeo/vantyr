@@ -5385,11 +5385,42 @@ The `inspect` line is not decoration. All four checks are positive-only, so on
 their own they cannot tell "feature present" from "I grepped the wrong image" —
 and with a reused tag, the wrong image is exactly what a stale name resolves to.
 Printing the id and build time makes the gate self-identifying: if the id is not
-the build you just made, the counts below it mean nothing. A negative-control
-sentinel was suggested and rejected — the binary carries no reliable
-build-stamp string (checked: no `v1.0.0-rc.41`, no `go1.x` line survives
-`-ldflags -s -w`), so a sentinel would be a hand-maintained value that drifts
-from the images it describes, which is the same class of bug as the reused tag.
+the build you just made, the counts below it mean nothing.
+
+**Correction: an earlier version of this entry said the binary carries no
+reliable build stamp. That was wrong, and the measurement behind it was
+broken.** I had run `strings /new-api | grep ...` and read the empty output as
+"absent". `strings` is not installed in the runtime image, so every one of
+those checks returned `strings: not found` — which `2>/dev/null` swallowed into
+a false zero. The binaries do carry `v1.0.0-rc.41` and `go1.26.1` as plain
+grep-able strings, and the Go buildinfo section survives `-s -w` (it is a
+separate section, not something stripping removes). The lesson is the one this
+whole entry is about: an empty result proves nothing until you have shown the
+command can produce a non-empty one.
+
+What *is* true, for a different reason: `Version` identifies the upstream tag,
+not the build. All three images print `v1.0.0-rc.41`, and buildinfo carries no
+`vcs.revision` because the build context is a copied tree with no `.git`. So
+there was no build stamp — but as a fixable gap, not an inherent limit.
+
+**Fixed at the source (this commit).** `common.BuildCommit` is now injected by
+the linker, and compose passes it through as a build arg:
+
+```bash
+COMMIT=$(git rev-parse --short HEAD) docker compose build gateway
+```
+
+Verify a build with:
+
+```bash
+IMG=vantyr/new-api:<new-tag>
+docker run --rm --entrypoint sh $IMG -c 'grep -ao "<expected-sha>" /new-api | head -1'
+```
+
+Verified end-to-end: a test build with `--build-arg COMMIT=teststamp01`
+produced a binary where `grep -ao teststamp01 /new-api` returns the string, and
+`Version` still reports `v1.0.0-rc.41`. Builds without the arg stamp
+`unknown`, so an unstamped image is visible rather than silently wrong.
 
 All four must be non-zero. The first two were live in production and were
 silently lost; the third postdates the affected builds (absent-because-newer,
@@ -5435,6 +5466,15 @@ verifying with the loop above, retag or delete the old one deliberately.
 **Pin the build revision.** The same tree produced a good image at 16:23 and a
 missing-feature image at 15:10 because someone synced it at 16:03. Build from a
 tree whose provenance is known, not from `/opt/vantyr` as found.
+
+**Rollback targets are not equivalent — say which is which.** `pinned`
+(17a34903983b) is proven only as *the image that ran before today*; it lacks the
+`token_id` fallback and `mediaItemCacheControl`, so rolling back to it
+re-introduces the two problems those fixed. It is a valid emergency rollback for
+a runtime failure, not a neutral one. `ping-events-20261026` is the current
+proven image. `cache-affinity-20261026` (41ddad115b45, 16:16) was built and
+feature-verified but superseded before any production traffic, so treat it as
+unproven. "Known-good" must not be read as "equivalent".
 
 **Correcting `b5a5d4556`.** That commit's message says the repo names
 `cache-affinity-20261026` so that reapplying it "would have silently rolled the
