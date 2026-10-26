@@ -5100,9 +5100,21 @@ options (no rebuild needed) or tag pinned-next56 as pinned.
 
 ## 2026-10-26 — affinity coverage, cache-write billing, streaming timeout (LIVE)
 
-Deployed image `vantyr/new-api:cache-affinity-20261026` (sha c86e1c5442af) at
-15:10 UTC, replacing `feat-payment-rails-ttl20`. Rollback: retag that image in
-`deploy/vantyr/compose.yaml` and `docker compose up -d --force-recreate gateway`.
+Deployed image `vantyr/new-api:cache-affinity-20261026` at 15:10 UTC, replacing
+`feat-payment-rails-ttl20`.
+
+**That 15:10 image was built from the `/opt/vantyr` working tree, which was
+missing `service/cache_ttl_inject.go` — so it shipped without 1h cache TTL
+injection entirely** (`grep -ac cache_ttl_inject /new-api` = 0). Production
+effect: at 14:00 UTC, 1 of 66 requests carried 1h cache tokens; at 15:00 UTC, 0
+of 114; at 16:00, 1 of 42, against a normal 20-60 per hour. For ~75 minutes every
+cache write was 5-minute while the affinity rules still pinned for 20 minutes,
+so cache lifetime fell from 1h to 5min for everyone. Replaced by the 16:16 build.
+The image is preserved as `cache-affinity-broken-20261026-1510` (778e57f77058) —
+the name is accurate, do not use it as a rollback target for anything
+cache-related. Its tag no longer points at the 15:10 build either; the
+`cache-affinity-20261026` name was retagged to the 16:16 build (41ddad115b45),
+which is the last known-good image for both 1h injection and ping events.
 
 **Routing — `/v1/messages` without `metadata.user_id`.** Some `/v1/messages`
 requests carry no `metadata.user_id` and therefore matched no affinity rule, so
@@ -5298,3 +5310,19 @@ at ~386% CPU on a 4-vCPU box and tripped the gateway's own CPU guard (96.6%
 against a 90% threshold), which returned `system_cpu_overloaded` to real
 requests. Stopped; load returned to normal. Worth knowing that guard exists and
 that a stray build is enough to trigger it.
+
+**Deploy hygiene (2026-10-26, after four images in one day).** Three separate
+problems all traced to the same cause — nobody could tell what a tag contained:
+
+- `/opt/vantyr` is not a git checkout (its `.git` has no HEAD) and is not the
+  same tree as the maintained copy. Building `context: ../..` from it silently
+  produced the cache_ttl_inject-less 15:10 image.
+- A tag name was reused: `cache-affinity-20261026` now resolves to the 16:16
+  build, not the 15:10 one, so the name stopped identifying an artifact.
+- Two sessions each inferred the other was building, and neither was right.
+
+Rules for the next deploy: build from `git archive <sha>` (never a working
+tree), put the commit and a timestamp in the tag, never retag an existing name,
+and after every build assert the features you expect are actually in the binary
+— `grep -ac cache_ttl_inject /new-api` and `grep -ac ping_event_mode /new-api`
+must both be non-zero for any image shipped from here on.
