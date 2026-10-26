@@ -5729,3 +5729,50 @@ section above, the BuildCommit note in 2026-10-26c, and
 `/opt/vantyr` itself is still not a git checkout. With this change nothing
 builds from it by accident; making it a real clone would need a deploy key on
 the repo (owner decision, not done).
+
+## 2026-10-26f — kiro-pool `thinking.display` normalized by param override (LIVE)
+
+**Problem.** kiro-proxy validates `thinking.display` and rejects anything other
+than `summarized` / `omitted` with `400 thinking.display must be one of:
+summarized, omitted` (`proxy/handler.go` `validateClaudeThinkingConfig` in the
+pinned kiro-reverse-api image). Anthropic accepts these requests, so customers
+saw an error on a valid request. 48h before the fix: 44 rejections across 7
+users (musicazx 21, Lexan 8, kriegsgluck0 8, longson 6, siuuu 1), all on
+channel 95.
+
+**Fix (config only, no code).** Channel 95 (`kiro-pool`) `param_override` was
+empty; it is now:
+
+```json
+{"operations":[{"path":"thinking.display","mode":"set","value":"summarized",
+  "logic":"AND","conditions":[
+    {"path":"thinking.display","mode":"full","value":"summarized","invert":true},
+    {"path":"thinking.display","mode":"full","value":"omitted","invert":true}]}]}
+```
+
+Both conditions skip a missing key (`pass_missing_key` false), so requests
+without `thinking.display` are untouched; valid values fail one of the AND
+conditions and pass through unchanged. Only an unrecognized value is rewritten
+to `summarized`, which keeps the visible thinking summary the client asked for.
+Applied 2026-10-26 20:54 UTC by DB update + channel sync.
+
+**Evidence** (live non-stream requests on `claude-opus-5-5` via channel 95):
+
+| request | before | after |
+|---|---|---|
+| `display: "full"` | 400 | 200 |
+| `display: "summarized"` | 200 | 200 |
+| `display: "omitted"` | 200 | 200 |
+| no `display` | 200 | 200 |
+| no `thinking` | 200 | 200 |
+
+kiro-proxy `requests` table: the only `thinking.display` 400 after 20:54 is the
+pre-fix test request itself (20:54:22).
+
+**Rollback.** No backup file was written (the backup step hit a permission
+error on `/opt/vantyr/backups`). The prior value was empty, so rollback is
+clearing channel 95's `param_override`.
+
+**Scope note.** If channel 95 later needs other overrides, keep this operation
+in the same `operations` array; the affinity rule's `param_override_template`
+(pass-headers) is merged in front of channel operations, not replacing them.
