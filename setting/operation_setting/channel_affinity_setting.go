@@ -142,8 +142,14 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			ValueRegex:            "",
 			TTLSeconds:            0,
 			ParamOverrideTemplate: buildCodexPassHeaderTemplate(),
-			SkipRetryOnFailure:    true,
-			IncludeUsingGroup:     true,
+			// Prefer, not strict (owner decision 2026-10-25): strict refused
+			// to retry when the pinned merchant failed, so a dead pin turned
+			// into user-facing errors even when a healthy path existed. The
+			// cache is lost on a merchant switch either way; the request
+			// should not be.
+			SkipRetryOnFailure: false,
+			SessionMode:        "prefer",
+			IncludeUsingGroup:  true,
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
 		},
@@ -155,10 +161,20 @@ var channelAffinitySetting = ChannelAffinitySetting{
 				{Type: "gjson", Path: "metadata.user_id"},
 			},
 			ValueRegex:            "",
-			TTLSeconds:            0,
+			TTLSeconds:            3600,
 			ParamOverrideTemplate: buildPassHeaderTemplate(claudeCliPassThroughHeaders),
-			SkipRetryOnFailure:    true,
-			IncludeUsingGroup:     true,
+			// Prefer, not strict: see the codex rule above. Incident
+			// 2026-10-25 12:15-12:18 — a /v1/messages session pinned to a
+			// dead fable-5 merchant got 8 straight 502s with
+			// reason=strict_session instead of a retry.
+			// TTL set to 1 hour (was 0/infinite) so sessions naturally
+			// migrate back to the primary (Kiro) after it recovers from
+			// an outage, rather than staying pinned to A6 backup forever.
+			// This allows Kiro→A6→Kiro automatic restore while preserving
+			// cache reuse during the failover window.
+			SkipRetryOnFailure: false,
+			SessionMode:        "prefer",
+			IncludeUsingGroup:  true,
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
 		},
@@ -185,6 +201,31 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			SkipRetryOnFailure:    false,
 			SessionMode:           "prefer",
 			IncludeUsingGroup:     true,
+			IncludeRuleName:       true,
+			UserAgentInclude:      nil,
+		},
+		{
+			// Cache affinity: route users back to the channel where they
+			// built a cache (2026-10-26). If a user wrote cache on merchant A
+			// in the last 5 min, route them back to A on the next request so
+			// they hit the cache instead of losing it. Prefer mode (not strict):
+			// if merchant A dies, failover immediately and record the new
+			// channel as the cache location.
+			Name:       "cache affinity",
+			ModelRegex: []string{"^claude-.*$", "^gpt-.*$"},
+			PathRegex:  []string{"/v1/messages", "/v1/chat/completions", "/v1/responses"},
+			KeySources: []ChannelAffinityKeySource{
+				{Type: "gjson", Path: "metadata.user_id"},
+				{Type: "gjson", Path: "user"},
+				{Type: "context_int", Key: "token_id"},
+			},
+			ValueRegex:            "",
+			TTLSeconds:            300, // 5 min: typical cache TTL (Anthropic 5m default)
+			ParamOverrideTemplate: map[string]any{},
+			SkipRetryOnFailure:    false,
+			SessionMode:           "prefer",
+			IncludeUsingGroup:     true,
+			IncludeModelName:      true, // Scope affinity by model: cache is per-model
 			IncludeRuleName:       true,
 			UserAgentInclude:      nil,
 		},
