@@ -5639,3 +5639,43 @@ models run almost entirely on kiro-pool (opus-5 176 kiro / 1 A6, sonnet-5 268 /
 5 that day), a flat subscription, because kiro-pool only came online
 2026-10-24. Before that every request went to A6, which is why a 7-day window
 made these models look A6-heavy.
+
+## 2026-10-26f — the 60s cut was Caddy, not the client (FIXED, LIVE)
+
+**Supersedes the "60s client_gone is a client limit" conclusion in 2026-10-26d.**
+kiro-proxy logged 487 `499 client_closed` in 24h; 445 ended at ~59.9s, spread
+over every account and several customers (kriegsgluck0, cctest-sidecar,
+longson, musicazx, Lexan, the owner). Cause: Caddy v2.11.6 (arrived unpinned
+via `caddy:2-alpine`) defaults `read_body_idle` to 60s and never clears that
+deadline after the request body is read. On HTTP/1.1 — what Claude Code uses —
+it cancels any POST stream 60s after the body, mid-answer (caddy#8103 /
+#8106). The gateway logs it as `client_gone`, kiro-proxy as 499.
+
+Evidence (same Kiro request each time): gateway direct 202s complete; live
+Caddy HTTP/2 121s complete; live Caddy HTTP/1.1 cut at 60.0s; throwaway
+caddy:2.11.6 cut at 60.0s; caddy:2.8 108s complete; 2.11.6 +
+`read_body_idle -1s` 113s complete.
+
+Fix: global `servers { timeouts { read_body_idle -1s } }` in the Caddyfile.
+The per-route `reverse_proxy` `read_timeout` values still bound upstream
+reads. Image pinned to
+`caddy:2.11.6-alpine@sha256:881bbc60f9986d5ab8e7cfd6cf7e4ef3c9c0439fef2429d035d065577882f028`
+(the digest already running). Caddy container recreated 20:37 UTC (~2s
+downtime) — this also fixed a stale single-file bind mount: the container had
+been reading an old inode of the Caddyfile, so in-container `caddy reload`
+silently loaded the old config. After editing the Caddyfile, write it in place
+(`cat new > Caddyfile`), never by rename, or recreate the container.
+
+Verified after recreate: container and host Caddyfile md5 match; active config
+has `read_idle_timeout: -1s`; all four proxy routes present; site, docs,
+locale, brand, `/api/status`, pay, pay2 return 200; a 110s HTTP/1.1 stream from
+the owner PC through vantyr.xyz reached `message_stop` (before: cut at
+60.09s). Backups: `/opt/vantyr/backups/Caddyfile.20261026-202342`,
+`/opt/vantyr/backups/compose.yaml.20261026-203440`.
+
+Before any Caddy re-pin, confirm the target version fixes #8106 or keep the
+global option.
+
+Still open: `www.vantyr.xyz` has no DNS record (NXDOMAIN on 1.1.1.1 and
+8.8.8.8), so Caddy fails its ACME challenge (56 failures/24h). Needs a DNS
+record (owner, DNS change).

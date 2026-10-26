@@ -107,7 +107,7 @@ services:
       - vantyr
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.6-alpine@sha256:881bbc60f9986d5ab8e7cfd6cf7e4ef3c9c0439fef2429d035d065577882f028
     restart: unless-stopped
     ports:
       - '80:80'

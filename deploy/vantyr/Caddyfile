@@ -1,3 +1,19 @@
+# Global options.
+# read_body_idle -1s: Caddy v2.11.6 made read_body_idle default to 60s, and
+# its deadline is never cleared after the request body is read. On HTTP/1.1
+# that cancels every long POST stream (Claude Code /v1/messages) exactly 60s
+# after the body was read, mid-answer: caddy#8103 / #8106. Reproduced on this
+# host 2026-10-26 (2.11.6 cut at 60.0s; 2.8 and 2.11.6+this option completed).
+# Disabling it removes no protection we relied on: the per-route
+# reverse_proxy read_timeout values below still bound upstream reads.
+{
+	servers {
+		timeouts {
+			read_body_idle -1s
+		}
+	}
+}
+
 # www alias: Google Search Console property was created as
 # https://www.vantyr.xyz — serve the verification file on www too, and
 # permanently redirect everything else to the canonical apex.
