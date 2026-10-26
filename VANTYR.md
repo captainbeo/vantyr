@@ -5144,3 +5144,68 @@ swept into git (`.tmp*`, `.scratch*`, `node_modules/`, a stray `-1`, and a
 **Watch.** Re-run the switch-rate query after a few days: unmatched
 `/v1/messages` traffic should drop from 24% toward the 0.1-0.2% seen on matched
 traffic.
+
+## 2026-10-26b — gateway outage, cache_control loss, and the watchdog (LIVE)
+
+**Outage 14:00-14:24 UTC.** `vantyr-gateway` was stopped by hand
+(`docker stop`, session from 77.174.132.231) as part of an image-tag change,
+but the `sed -i` that followed edited `/opt/vantyr/docker-compose.yml` — not the
+file the stack actually runs, `/opt/vantyr/deploy/vantyr/compose.yaml`. The
+session ended before any `up -d`, so nothing came back. Caddy served **357 x
+502** (`dial tcp: lookup gateway on 127.0.0.11:53: server misbehaving`) for 23
+minutes. Restored at 14:24:26; a later session recreated the container on
+`cache-affinity-20261026` (commit edf0b2418) at 14:26:47 and edited the real
+compose file. **Lesson: the running stack is `deploy/vantyr/compose.yaml`; the
+top-level `docker-compose.yml` is a stale leftover and should not be edited.**
+
+**Why it was silent.** Every loop in cctest-monitor is a *consumer* of the
+gateway API, so a dead gateway degraded all of them to the same routine-looking
+line — `[primary] sweep failed`, once per 5-minute tick, for 23 minutes. Every
+existing alert ends in `discord_alert`, which needs no gateway and so was never
+the thing that failed. Nothing escalated.
+
+**Now fixed — gateway watchdog (deployed 15:59 UTC).** A probe of the
+unauthenticated `/api/status` every 30 s; pages Discord when the gateway has
+been unreachable for 120 s, and again on recovery with the measured downtime.
+It holds no channel state and reads no state.json, and it starts *before*
+main()'s config gate so it also speaks when the monitor is parked. One page out,
+one page back — a sustained outage cannot become an alert storm. Verified in the
+deployed container against a dead port (1 alert, correct text) and against the
+healthy gateway (0 alerts). Env: `GATEWAY_WATCHDOG_ENABLED` (default true),
+`GATEWAY_WATCHDOG_INTERVAL` (30), `GATEWAY_WATCHDOG_DOWN_AFTER` (120).
+
+**Cache_control was being dropped on /v1/chat/completions.** Production
+evidence: kiro-pool (ch95) showed **zero** cache writes on chat-completions in
+every window measured — 0 of 243 rows after the affinity deploy, 0 of 180
+before it, `cache_tokens` = 0 throughout — while the *same channel* served 2,482
+cache hits on 3,624 `/v1/messages` rows in the same period. The upstream caches
+fine; only the converted path lost the markers. `ParseContent()` read only
+`type`/`text` from each content part and the converter emitted
+`{Type:"text", Text:...}`, so a breakpoint never reached a Claude-native
+upstream and the request created no cache at all. On a6 merchants the request
+passes through in [OI] format and their relay injects the cache — which is why
+hits appeared there and hid the gap. Fixed in `relaykit` (commit d055e13d9):
+`MediaContent` already had a `CacheControl` field and the reverse direction
+already populated it unconditionally, so this only makes the two directions
+consistent. **Needs a gateway rebuild to take effect** (not yet deployed —
+the fix is in the repo, the running image predates it).
+
+**Affinity verification (read-only, from the earlier request).** All four checks
+done. The rule matches 100% (all 426 post-deploy chat-completions rows tagged
+`chat completions trace`). Stickiness holds: excluding probe traffic (user 74's
+tokens 39 "1" and 52 "uberllm", 1-9-token health checks), six of seven session
+keys pinned to a single channel; the one that spans two switched *before* the
+deploy and stayed put — clear-on-fail / record-on-success working. The earlier
+"8 channels" reading was probe traffic, not affinity failure.
+
+**client_gone still ~15%** (421 rows/24 h), clustered exactly at
+`use_time = 60` s, FRT 5-10 s. A hard client-side 60 s cap, not an idle
+timeout; the 15 s keep-alive ping does not help these users. Open.
+
+**Repo hygiene.** `compose.yaml` had silently diverged from the server:
+`STREAMING_TIMEOUT`, the `PRIMARY_*` failover block and the `CIRCUIT_*` breaker
+block were applied on the box and never came back. Re-applying the repo file
+would have dropped the circuit breaker. Repo now carries all of them
+(51a22d000) and points at `cache-affinity-20261026` (b5a5d4556) — previously it
+still named `:pinned`, so reapplying it would also have rolled the gateway back
+a day.
