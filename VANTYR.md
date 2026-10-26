@@ -5354,3 +5354,56 @@ creates 1h caches (A6's relay creates 5-minute ones), and its 1h-write rate
 depends on which clients happened to land there. Holding the channel fixed is
 what separated "injection is off" from "traffic moved" in the 14:26-16:16
 window. The hourly total moved with both at once and was ambiguous.
+
+## 2026-10-26d — deploy checklist for the gateway image (process gate)
+
+The `vantyr-gateway` image has silently shipped without a feature three times
+today. Source was never the problem: `08cba379c` was in HEAD the whole time and
+`PingEventMode` was in `general_setting.go`. The image was the problem. The
+build context is `/opt/vantyr` (compose `context: ../..`), it is a *different
+tree* from the maintained fork at `/opt/vantyr/deploy/vantyr`, and it can lose
+files with no error — `Dockerfile:30` is `COPY . .`, so a build takes whatever
+is on disk, and `/opt/vantyr/.git` is a master ref with zero commits so it
+cannot resolve to a revision either. Verify after every build:
+
+```bash
+IMG=vantyr/new-api:<new-tag>
+for s in ping_event_mode cache_ttl_inject mediaItemCacheControl "chat completions trace"; do
+  printf "%s=%s " "$s" "$(docker run --rm --entrypoint sh $IMG -c "grep -a -c $s /new-api")"
+done; echo
+```
+
+All four must be non-zero. Each has silently vanished at least once:
+
+| feature | string | last seen missing |
+|---|---|---|
+| real-event keep-alive | `ping_event_mode` | 15:10 `cache-affinity-20261026` |
+| cache TTL injection | `cache_ttl_inject` | 15:10 `cache-affinity-20261026` |
+| cache_control through the converter | `mediaItemCacheControl` | 15:10 build |
+| chat-completions affinity rule | `chat completions trace` | never (present in all) |
+
+Measured across the images still on disk (feature string -> occurrence count):
+
+| image | built | ping_event_mode | cache_ttl_inject | mediaItemCacheControl | chat completions trace |
+|---|---|---|---|---|---|
+| `feat-payment-rails-ttl20` | 13:58 | 0 | 0 | 0 | 1 |
+| `cache-affinity-broken-20261026-1510` | 15:10 | 0 | 0 | 0 | 1 |
+| `ping-events-20261026` (running) | 16:23 | 1 | 2 | 1 | 1 |
+
+**Do not reuse an image tag.** `cache-affinity-20261026` was originally the
+broken 15:10 build; a later rebuild (mine, 16:16) overwrote that tag in place,
+so the name now resolves to two different images depending on when you look.
+The original is preserved only because it was retagged
+`cache-affinity-broken-20261026-1510`. Build to a new tag every time, and after
+verifying with the loop above, retag or delete the old one deliberately.
+
+**Pin the build revision.** The same tree produced a good image at 16:23 and a
+missing-feature image at 15:10 because someone synced it at 16:03. Build from a
+tree whose provenance is known, not from `/opt/vantyr` as found.
+
+**Correcting `b5a5d4556`.** That commit's message says the repo names
+`cache-affinity-20261026` so that reapplying it "would have silently rolled the
+gateway back to yesterday's build." The intent was right but the tag is no
+longer what it says: the running image is `ping-events-20261026`, and the repo
+compose now names that instead. The rollback hazard it describes is real; the
+specific tag in the message is stale.
