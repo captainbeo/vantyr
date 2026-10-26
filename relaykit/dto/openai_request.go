@@ -683,6 +683,24 @@ func (m *Message) IsStringContent() bool {
 	return false
 }
 
+// mediaItemCacheControl returns a content block's cache_control marker as raw
+// JSON, or nil when the block carries none. Clients that speak the
+// [OI]-compatible format may still attach Anthropic cache breakpoints to
+// content parts (OpenRouter's convention, which we accept on input); keeping
+// the marker on MediaContent is what lets a converted request carry those
+// breakpoints to a Claude-native upstream instead of silently dropping them.
+func mediaItemCacheControl(contentItem map[string]any) json.RawMessage {
+	raw, ok := contentItem["cache_control"]
+	if !ok || raw == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
 func (m *Message) ParseContent() []MediaContent {
 	if m.Content == nil {
 		return nil
@@ -738,6 +756,11 @@ func (m *Message) ParseContent() []MediaContent {
 				contentList = append(contentList, MediaContent{
 					Type: ContentTypeText,
 					Text: text,
+					// Preserved so a chat-completions client that marks a
+					// cache breakpoint reaches a Claude-native upstream with
+					// that breakpoint intact (see the oai_chat ->
+					// claude_messages converter).
+					CacheControl: mediaItemCacheControl(contentItem),
 				})
 			}
 
@@ -762,6 +785,9 @@ func (m *Message) ParseContent() []MediaContent {
 			contentList = append(contentList, MediaContent{
 				Type:     ContentTypeImageURL,
 				ImageUrl: temp,
+				// See the text case above: cache breakpoints survive the
+				// [OI]-compatible -> Claude conversion.
+				CacheControl: mediaItemCacheControl(contentItem),
 			})
 
 		case ContentTypeInputAudio:
@@ -776,6 +802,7 @@ func (m *Message) ParseContent() []MediaContent {
 					contentList = append(contentList, MediaContent{
 						Type:       ContentTypeInputAudio,
 						InputAudio: temp,
+						CacheControl: mediaItemCacheControl(contentItem),
 					})
 				}
 			}
