@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 ajan rehberi</span>
       <span class="chip">OpenAI + Anthropic uyumlu</span>
-      <span class="chip">1M token başına $0.05'den başlayan</span>
+      <span class="chip">1M token başına $0.03'den başlayan</span>
       <span class="chip">kart, iDEAL, kripto veya TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>Değerleri girdikten sonra uzantıda <strong>Verify</strong> düğmesine tıkla: "Invalid API Key" anahtarda yazım hatası demektir; "Model Not Found", o model ID'sinin Vantyr'ın sunmadığı bir model demektir — tam ID'ler için <a href="https://vantyr.xyz/pricing">Model Genel Bakış</a> sayfasına bak.</p>
-    <p class="muted">claude-sonnet-5 için önerilen model meta verileri: bağlam penceresi 200000, maksimum çıktı 16384, girdi $0.26/1M, çıktı $1.30/1M (bkz. <a href="#pricing">tablo</a>).</p>
+    <p class="muted">claude-sonnet-5 için önerilen model meta verileri: bağlam penceresi 200000, maksimum çıktı 16384, girdi $0.10/1M, çıktı $0.25/1M (bkz. <a href="#pricing">tablo</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Model</th><th class="num">Girdi</th><th class="num">Çıktı</th><th class="num">Önbellek</th><th>En uygun olduğu kullanım</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">amiral gemisi</span> en zor problemler</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">en yeni</span> en yeni Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>dengeli amiral gemisi</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>dengeli amiral gemisi</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">uygun fiyatlı</span> günlük kodlama</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">uygun fiyatlı</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">ucuz</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">uygun fiyatlı</span>ucuz, en yeni GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>orta kademe akıl yürütme</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">amiral gemisi</span> en zor problemler</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">en yeni</span> en yeni Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>dengeli amiral gemisi</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>dengeli amiral gemisi</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">uygun fiyatlı</span> günlük kodlama</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">uygun fiyatlı</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">ucuz</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">ucuz</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">uygun fiyatlı</span>ucuz, en yeni GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>orta kademe akıl yürütme</td></tr>
     </tbody>
   </table>
-  <p class="muted">Tablo, 2026-10-13 tarihi itibarıyla canlı yapılandırmayı yansıtır.</p>
-  <p><strong>Örnek hesap:</strong> ile bir kodlama oturumu — <span class="mono">claude-sonnet-5</span> 30k girdi + 5k çıktı token göndermek yaklaşık <strong>$0.014</strong>. Bir aylık yoğun günlük kullanım tek haneli dolarlarda kalır.</p>
+  <p class="muted">Tablo, 2026-10-27 tarihi itibarıyla canlı yapılandırmayı yansıtır.</p>
+  <p><strong>Örnek hesap:</strong> ile bir kodlama oturumu — <span class="mono">claude-sonnet-5</span> 30k girdi + 5k çıktı token göndermek yaklaşık <strong>$0.004</strong>. Bir aylık yoğun günlük kullanım tek haneli dolarlarda kalır.</p>
   <ul>
     <li>İstekler önce küçük bir provizyon tutar, sonra gerçek kullanıma göre hesaplanır — aradaki fark anında geri döner.</li>
     <li>Upstream'in başarısız olduğu istekler otomatik olarak iade edilir; almadığın yanıt için sıfır ücret ödersin.</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">modeller &amp; fiyatlandırma</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord topluluğu</a>
   <a href="https://github.com/captainbeo/vantyr">kaynak (AGPL)</a>
-  <span class="right">docs rev 2026-10-13c</span>
+  <span class="right">docs rev 2026-10-27a</span>
 </footer>
     </main>
 </div>

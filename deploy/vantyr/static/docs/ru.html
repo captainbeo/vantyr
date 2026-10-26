@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 руководств по агентам</span>
       <span class="chip">Совместимость с OpenAI и Anthropic</span>
-      <span class="chip">от $0.05 / 1M токенов</span>
+      <span class="chip">от $0.03 / 1M токенов</span>
       <span class="chip">карта, iDEAL, крипта или TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">Идентификатор модели</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>После ввода значений нажмите <strong>Verify</strong> в расширении: «Invalid API Key» — опечатка в ключе; «Model Not Found» — такой модели нет среди обслуживаемых Vantyr; сверьтесь на странице <a href="https://vantyr.xyz/pricing">«Обзор моделей»</a> — там точные идентификаторы.</p>
-    <p class="muted">Рекомендуемые метаданные для claude-sonnet-5: контекстное окно 200000, максимальный вывод 16384, вход $0.26/1M, вывод $1.30/1M (см. <a href="#pricing">таблицу</a>).</p>
+    <p class="muted">Рекомендуемые метаданные для claude-sonnet-5: контекстное окно 200000, максимальный вывод 16384, вход $0.10/1M, вывод $0.25/1M (см. <a href="#pricing">таблицу</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Модель</th><th class="num">Вход</th><th class="num">Выход</th><th class="num">Кэш</th><th>Лучше всего для</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">флагман</span> — сложнейшие задачи</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">последняя</span> — самый новый Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>сбалансированный флагман</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>сбалансированный флагман</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">выгодная</span> — повседневное программирование</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">выгодная</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">дешёвая</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">выгодная</span>дешёвая, новейшая GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>средний уровень рассуждений</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">флагман</span> — сложнейшие задачи</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">последняя</span> — самый новый Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>сбалансированный флагман</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>сбалансированный флагман</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">выгодная</span> — повседневное программирование</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">выгодная</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">дешёвая</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">дешёвая</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">выгодная</span>дешёвая, новейшая GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>средний уровень рассуждений</td></tr>
     </tbody>
   </table>
-  <p class="muted">Таблица отражает актуальную конфигурацию на 2026-10-13.</p>
-  <p><strong>Пример расчёта:</strong> сессия программирования на <span class="mono">claude-sonnet-5</span> с 30k входных и 5k выходных токенов стоит примерно <strong>$0.014</strong>. Месяц интенсивного ежедневного использования обходится в несколько долларов.</p>
+  <p class="muted">Таблица отражает актуальную конфигурацию на 2026-10-27.</p>
+  <p><strong>Пример расчёта:</strong> сессия программирования на <span class="mono">claude-sonnet-5</span> с 30k входных и 5k выходных токенов стоит примерно <strong>$0.004</strong>. Месяц интенсивного ежедневного использования обходится в несколько долларов.</p>
   <ul>
     <li>Запросы предварительно блокируют небольшую сумму, затем списание сверяется с фактическим использованием — разница мгновенно возвращается.</li>
     <li>Неудавшиеся запросы к вышестоящему провайдеру возвращаются автоматически; за неполученный ответ списаний нет.</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">модели и цены</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">сообщество Discord</a>
   <a href="https://github.com/captainbeo/vantyr">исходный код (AGPL)</a>
-  <span class="right">docs rev 2026-10-13c</span>
+  <span class="right">docs rev 2026-10-27a</span>
 </footer>
     </main>
 </div>

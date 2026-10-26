@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 agent-handleidingen</span>
       <span class="chip">OpenAI- en Anthropic-compatibel</span>
-      <span class="chip">vanaf $0.05 / 1M tokens</span>
+      <span class="chip">vanaf $0.03 / 1M tokens</span>
       <span class="chip">kaart, iDEAL, crypto of TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">Model-ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>Klik na het invullen van de waarden op <strong>Verifiëren</strong> in de extensie: "Invalid API Key" betekent een typefout in de sleutel; "Model Not Found" betekent dat Vantyr het model-ID niet aanbiedt — controleer het <a href="https://vantyr.xyz/pricing">Modeloverzicht</a> voor exacte ID's.</p>
-    <p class="muted">Aanbevolen modelmetadata voor claude-sonnet-5: contextvenster 200000, max uitvoer 16384, invoer $0.26/1M, uitvoer $1.30/1M (zie de <a href="#pricing">tabel</a>).</p>
+    <p class="muted">Aanbevolen modelmetadata voor claude-sonnet-5: contextvenster 200000, max uitvoer 16384, invoer $0.10/1M, uitvoer $0.25/1M (zie de <a href="#pricing">tabel</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Model</th><th class="num">Invoer</th><th class="num">Uitvoer</th><th class="num">Cache</th><th>Geschikt voor</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">vlaggenschip</span> zwaarste problemen</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">nieuwste</span> nieuwste Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>gebalanceerd vlaggenschip</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>gebalanceerd vlaggenschip</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">prijs-kwaliteit</span> alledaags programmeren</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">prijs-kwaliteit</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">goedkoop</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">prijs-kwaliteit</span>goedkoop, nieuwste GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>redeneren op midden niveau</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">vlaggenschip</span> zwaarste problemen</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">nieuwste</span> nieuwste Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>gebalanceerd vlaggenschip</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>gebalanceerd vlaggenschip</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">prijs-kwaliteit</span> alledaags programmeren</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">prijs-kwaliteit</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">goedkoop</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">goedkoop</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">prijs-kwaliteit</span>goedkoop, nieuwste GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>redeneren op midden niveau</td></tr>
     </tbody>
   </table>
-  <p class="muted">De tabel weerspiegelt de live configuratie per 2026-10-13.</p>
-  <p><strong>Rekenvoorbeeld:</strong> een coderingssessie op <span class="mono">claude-sonnet-5</span> met 30k invoer- + 5k uitvoertokens kost ongeveer <strong>$0.014</strong>. Een maand zwaar dagelijks gebruik blijft binnen enkele dollars.</p>
+  <p class="muted">De tabel weerspiegelt de live configuratie per 2026-10-27.</p>
+  <p><strong>Rekenvoorbeeld:</strong> een coderingssessie op <span class="mono">claude-sonnet-5</span> met 30k invoer- + 5k uitvoertokens kost ongeveer <strong>$0.004</strong>. Een maand zwaar dagelijks gebruik blijft binnen enkele dollars.</p>
   <ul>
     <li>Aanvragen reserveren vooraf een klein bedrag en vereffenen daarna naar het werkelijke gebruik — het verschil keert direct terug.</li>
     <li>Bij mislukte upstream-aanvragen wordt automatisch terugbetaald; geen kosten voor een respons die je niet hebt gekregen.</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">modellen &amp; prijzen</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
   <a href="https://github.com/captainbeo/vantyr">broncode (AGPL)</a>
-  <span class="right">docs-versie 2026-10-13c</span>
+  <span class="right">docs-versie 2026-10-27a</span>
 </footer>
     </main>
 </div>

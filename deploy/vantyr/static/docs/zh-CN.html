@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 份 Agent 指南</span>
       <span class="chip">兼容 OpenAI + Anthropic</span>
-      <span class="chip">低至 $0.05 / 1M tokens</span>
+      <span class="chip">低至 $0.03 / 1M tokens</span>
       <span class="chip">银行卡、iDEAL、加密货币或 TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">模型 ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>填好后点击扩展中的 <strong>Verify</strong> ：「Invalid API Key」说明密钥打错了；「Model Not Found」说明该模型 ID 不在 Vantyr 提供的范围内——请查看 <a href="https://vantyr.xyz/pricing">模型总览</a> 获取精确 ID。</p>
-    <p class="muted">claude-sonnet-5 的推荐模型元数据：上下文窗口 200000，最大输出 16384，输入 $0.26/1M，输出 $1.30/1M（见 <a href="#pricing">表格</a>).</p>
+    <p class="muted">claude-sonnet-5 的推荐模型元数据：上下文窗口 200000，最大输出 16384，输入 $0.10/1M，输出 $0.25/1M（见 <a href="#pricing">表格</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>模型</th><th class="num">输入</th><th class="num">输出</th><th class="num">缓存</th><th>适用场景</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">旗舰</span> 最难的问题</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">最新</span> 全新 Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>均衡旗舰</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>均衡旗舰</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">性价比</span> 日常编码</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">性价比</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">实惠</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">性价比</span>实惠、最新 GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>中端推理</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">旗舰</span> 最难的问题</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">最新</span> 全新 Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>均衡旗舰</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>均衡旗舰</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">性价比</span> 日常编码</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">性价比</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">实惠</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">实惠</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">性价比</span>实惠、最新 GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>中端推理</td></tr>
     </tbody>
   </table>
-  <p class="muted">表格反映截至 2026-10-13 的实时配置。</p>
-  <p><strong>计费示例：</strong> 上的一段编码会话，发送 30k 输入 + 5k 输出 token 的花费约为 <span class="mono">claude-sonnet-5</span> ——发送 30k 输入 + 5k 输出 token 的花费约为 <strong>$0.014</strong>。一个月重度日常使用的花费也就个位数美元。</p>
+  <p class="muted">表格反映截至 2026-10-27 的实时配置。</p>
+  <p><strong>计费示例：</strong> 上的一段编码会话，发送 30k 输入 + 5k 输出 token 的花费约为 <span class="mono">claude-sonnet-5</span> ——发送 30k 输入 + 5k 输出 token 的花费约为 <strong>$0.004</strong>。一个月重度日常使用的花费也就个位数美元。</p>
   <ul>
     <li>请求会先预授权一小笔冻结金额，完成后按实际用量结算——差额会立即返还。</li>
     <li>上游失败的请求会自动退款；没收到的响应分文不收。</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">模型与价格</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord 社区</a>
   <a href="https://github.com/captainbeo/vantyr">源码（AGPL）</a>
-  <span class="right">docs rev 2026-10-13c</span>
+  <span class="right">docs rev 2026-10-27a</span>
 </footer>
     </main>
 </div>

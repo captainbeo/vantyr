@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 Agenten-Anleitungen</span>
       <span class="chip">OpenAI + Anthropic kompatibel</span>
-      <span class="chip">ab $0.05 / 1M Tokens</span>
+      <span class="chip">ab $0.03 / 1M Tokens</span>
       <span class="chip">Karte, iDEAL, Krypto oder TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">Modell-ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>Nach der Eingabe der Werte klicke auf <strong>Verify</strong> in der Erweiterung: „Invalid API Key“ bedeutet ein Tippfehler im Schlüssel; „Model Not Found“ bedeutet, dass Vantyr diese Modell-ID nicht anbietet — prüfe die <a href="https://vantyr.xyz/pricing">Modellübersicht</a> für exakte IDs.</p>
-    <p class="muted">Empfohlene Modell-Metadaten für claude-sonnet-5: Kontextfenster 200000, maximale Ausgabe 16384, Eingabe $0.26/1M, Ausgabe $1.30/1M (siehe die <a href="#pricing">Tabelle</a>).</p>
+    <p class="muted">Empfohlene Modell-Metadaten für claude-sonnet-5: Kontextfenster 200000, maximale Ausgabe 16384, Eingabe $0.10/1M, Ausgabe $0.25/1M (siehe die <a href="#pricing">Tabelle</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Modell</th><th class="num">Eingabe</th><th class="num">Ausgabe</th><th class="num">Cache</th><th>Am besten für</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">Flaggschiff</span> härtesten Probleme</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">neueste</span> neueste Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>ausgeglichenes Flaggschiff</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>ausgeglichenes Flaggschiff</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">Preis-Leistung</span> alltägliche Programmierung</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">Preis-Leistung</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">günstig</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">Preis-Leistung</span>günstig, neuestes GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>Reasoning der Mittelklasse</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">Flaggschiff</span> härtesten Probleme</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">neueste</span> neueste Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>ausgeglichenes Flaggschiff</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>ausgeglichenes Flaggschiff</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">Preis-Leistung</span> alltägliche Programmierung</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">Preis-Leistung</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">günstig</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">günstig</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">Preis-Leistung</span>günstig, neuestes GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>Reasoning der Mittelklasse</td></tr>
     </tbody>
   </table>
-  <p class="muted">Die Tabelle zeigt die Live-Konfiguration vom 2026-10-13.</p>
-  <p><strong>Rechenbeispiel:</strong> eine Coding-Session auf <span class="mono">claude-sonnet-5</span> mit 30k Eingabe- + 5k Ausgabe-Tokens kostet etwa <strong>$0.014</strong>. Ein Monat intensiver täglicher Nutzung landet im einstelligen Dollar-Bereich.</p>
+  <p class="muted">Die Tabelle zeigt die Live-Konfiguration vom 2026-10-27.</p>
+  <p><strong>Rechenbeispiel:</strong> eine Coding-Session auf <span class="mono">claude-sonnet-5</span> mit 30k Eingabe- + 5k Ausgabe-Tokens kostet etwa <strong>$0.004</strong>. Ein Monat intensiver täglicher Nutzung landet im einstelligen Dollar-Bereich.</p>
   <ul>
     <li>Anfragen autorisieren vorab eine kleine Reservierung und werden dann auf die tatsächliche Nutzung abgerechnet — die Differenz wird sofort erstattet.</li>
     <li>Upstream-fehlgeschlagene Anfragen werden automatisch erstattet; null Kosten für eine Antwort, die du nicht bekommen hast.</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">Modelle &amp; Preise</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">Discord-Community</a>
   <a href="https://github.com/captainbeo/vantyr">Quellcode (AGPL)</a>
-  <span class="right">docs rev 2026-10-13c</span>
+  <span class="right">docs rev 2026-10-27a</span>
 </footer>
     </main>
 </div>

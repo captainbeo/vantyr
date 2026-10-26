@@ -5776,3 +5776,48 @@ clearing channel 95's `param_override`.
 **Scope note.** If channel 95 later needs other overrides, keep this operation
 in the same `operations` array; the affinity rule's `param_override_template`
 (pass-headers) is merged in front of channel operations, not replacing them.
+
+## 2026-10-26j — $75 alias rows removed; Discord and /docs prices aligned to billing (LIVE)
+
+**$75 rows.** `/api/pricing` listed `claude-opus-5.5`, `claude-sonnet-5.5` and
+`claude-haiku-5.5` at $75/$75. They were dot-spelled aliases in the kiro-pool
+(ch95) `models` list with no ratio configured, so the pricing view fell back to
+the 37.5 self-use ratio. No request ever used them (0 log rows). Removed from
+ch95 `models` plus their 6 ability rows at 22:55 UTC; `model_mapping` and
+`param_override` untouched (fingerprint checked before and after). Backup:
+`/opt/vantyr/backups/ch95-dot-aliases-20261026-225554-{channel,abilities}.csv`.
+`/api/pricing` went from 13 to 10 models; opus-5-5, sonnet-5-5 and haiku-5-5
+each returned 200 through kiro-pool afterwards. The dash names already reach
+kiro-proxy's dot names through ch95's `model_mapping`, so the aliases were never
+needed for routing.
+
+**Discord and the ratio view.** The Discord #pricing bot computes prices from
+`ModelRatio` / `CompletionRatio` / `CacheRatio` / `CreateCacheRatio` and ignores
+`billing_expr`, so the two expression-billed models showed $0.15/$0.55. Their
+ratio entries now equal their expressions (23:15 UTC, backup
+`/opt/vantyr/backups/options-ratioview-pre-align-20261026-231512.tsv`):
+
+| Model | ModelRatio | Completion | Cache | CreateCache | in / out / read / write ($/1M) |
+|---|---|---|---|---|---|
+| claude-opus-5-5 | 0.075 -> 0.05 | 3.667 -> 4.5 | 0.0267 -> 0.04 | 2.4 -> 1.0 | 0.10 / 0.45 / 0.004 / 0.10 |
+| claude-sonnet-5-5 | 0.075 | 3.667 -> 2.333 | 0.02 | 1.2 -> 0.333 | 0.15 / 0.35 / 0.003 / 0.05 |
+
+Billing is unchanged: both models are `tiered_expr`, so settlement uses the
+expression. Opus-5-5 rows logged after the change (72950-72952) billed exactly
+the expression value. The ratio fields are also the fallback when a tiered
+request settles without a usage object (`modelPriceHelperTiered`), and that
+fallback now matches the expression instead of overstating opus-5-5. This
+supersedes the 2.4 / 1.2 `CreateCacheRatio` values set earlier on 2026-10-26,
+which only affected the ratio view and showed writes there as $0.36 / $0.18.
+Rule for future expression edits: mirror the new coefficients into the ratio
+entries, or Discord shows stale prices.
+
+**/docs.** The price table in all 12 languages now shows billed prices (rev
+2026-10-27a, as-of 2026-10-27): seven rows still carried the Oct 13 prices; a
+`claude-haiku-5-5` row was added (reusing each locale's "cheap" pill); the
+"from" chip went $0.05 -> $0.03; the sonnet-5 metadata sentence $0.26/$1.30 ->
+$0.10/$0.25; the worked example $0.014 -> $0.004. Targeted string edits with
+exact-match guards, and every locale's inline script still parses. Deployed by
+copy, no reload; served md5 equals local for all 12 files, and the live
+`<html lang>` differs per URL (de, ja, ar, zh-CN checked). Backup:
+`/opt/vantyr-backup-docs/pre-prices-20261026-232211`.

@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 agent guides</span>
       <span class="chip">OpenAI + Anthropic compatible</span>
-      <span class="chip">from $0.05 / 1M tokens</span>
+      <span class="chip">from $0.03 / 1M tokens</span>
       <span class="chip">card, iDEAL, crypto or TRY</span>
     </div>
   </div>
@@ -698,7 +698,7 @@ stream_max_retries = 1</pre>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>After entering values, click <strong>Verify</strong> in the extension: "Invalid API Key" means a typo in the key; "Model Not Found" means the model ID isn't one Vantyr serves — check the <a href="https://vantyr.xyz/pricing">Model Overview</a> for exact IDs.</p>
-    <p class="muted">Recommended model metadata for claude-sonnet-5: context window 200000, max output 16384, input $0.26/1M, output $1.30/1M (see the <a href="#pricing">table</a>).</p>
+    <p class="muted">Recommended model metadata for claude-sonnet-5: context window 200000, max output 16384, input $0.10/1M, output $0.25/1M (see the <a href="#pricing">table</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -810,19 +810,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th>Best for</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">flagship</span> hardest problems</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">latest</span> newest Fable</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>balanced flagship</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span> everyday coding</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">value</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">cheap</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">value</span>cheap, newest GPT</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>mid-tier reasoning</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">flagship</span> hardest problems</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">latest</span> newest Fable</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>balanced flagship</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>balanced flagship</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">value</span> everyday coding</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">value</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">cheap</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">cheap</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">value</span>cheap, newest GPT</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>mid-tier reasoning</td></tr>
     </tbody>
   </table>
-  <p class="muted">Table reflects live configuration as of 2026-10-13.</p>
-  <p><strong>Worked example:</strong> a coding session on <span class="mono">claude-sonnet-5</span> sending 30k input + 5k output tokens costs about <strong>$0.014</strong>. A month of heavy daily use lands in single-digit dollars.</p>
+  <p class="muted">Table reflects live configuration as of 2026-10-27.</p>
+  <p><strong>Worked example:</strong> a coding session on <span class="mono">claude-sonnet-5</span> sending 30k input + 5k output tokens costs about <strong>$0.004</strong>. A month of heavy daily use lands in single-digit dollars.</p>
   <ul>
     <li>Requests pre-authorize a small hold, then settle to actual usage — the difference returns immediately.</li>
     <li>Upstream-failed requests are refunded automatically; zero charge for a response you didn't get.</li>
@@ -879,7 +880,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">models &amp; pricing</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">discord community</a>
   <a href="https://github.com/captainbeo/vantyr">source (AGPL)</a>
-  <span class="right">docs rev 2026-10-13c</span>
+  <span class="right">docs rev 2026-10-27a</span>
 </footer>
     </main>
 </div>

@@ -402,7 +402,7 @@ html { scroll-padding-top: 90px; }
     <div class="hero-chips">
       <span class="chip hot">8 hướng dẫn agent</span>
       <span class="chip">Tương thích OpenAI + Anthropic</span>
-      <span class="chip">từ $0.05 / 1M tokens</span>
+      <span class="chip">từ $0.03 / 1M tokens</span>
       <span class="chip">thẻ, iDEAL, crypto hoặc TRY</span>
     </div>
   </div>
@@ -695,7 +695,7 @@ stream_max_retries = 1</pre>
       <div class="k">Model ID</div><div class="v">claude-sonnet-5</div>
     </div>
     <p>Sau khi nhập xong các giá trị, nhấp <strong>Verify</strong> trong extension: "Invalid API Key" nghĩa là khóa bị gõ sai; "Model Not Found" nghĩa là model ID không nằm trong số Vantyr đang phục vụ — kiểm tra <a href="https://vantyr.xyz/pricing">Tổng quan về mô hình</a> để lấy ID chính xác.</p>
-    <p class="muted">Siêu dữ liệu mô hình khuyên dùng cho claude-sonnet-5: cửa sổ ngữ cảnh 200000, đầu ra tối đa 16384, đầu vào $0.26/1M, đầu ra $1.30/1M (xem <a href="#pricing">bảng</a>).</p>
+    <p class="muted">Siêu dữ liệu mô hình khuyên dùng cho claude-sonnet-5: cửa sổ ngữ cảnh 200000, đầu ra tối đa 16384, đầu vào $0.10/1M, đầu ra $0.25/1M (xem <a href="#pricing">bảng</a>).</p>
   </div>
 
   <div id="agent-aider">
@@ -807,19 +807,20 @@ print(resp.choices[0].message.content)</pre>
       <th>Mô hình</th><th class="num">Đầu vào</th><th class="num">Đầu ra</th><th class="num">Cache</th><th>Phù hợp nhất</th>
     </tr></thead>
     <tbody>
-      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">flagship</span> vấn đề khó nhất</td></tr>
-      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.50</td><td class="num">$0.05</td><td><span class="pill hot">latest</span> Fable mới nhất</td></tr>
-      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.12</td><td class="num">$0.50</td><td class="num">$0.01</td><td>flagship cân bằng</td></tr>
-      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.52</td><td class="num">$2.60</td><td class="num">$0.03</td><td>flagship cân bằng</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">giá tốt</span> lập trình hằng ngày</td></tr>
-      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.26</td><td class="num">$1.30</td><td class="num">$0.03</td><td><span class="pill">giá tốt</span></td></tr>
-      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.05</td><td class="num">$0.15</td><td class="num">$0.05</td><td><span class="pill">rẻ</span></td></tr>
-      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.06</td><td class="num">$0.20</td><td class="num">$0.06</td><td><span class="pill">giá tốt</span>rẻ, GPT mới nhất</td></tr>
-      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.10</td><td>reasoning tầm trung</td></tr>
+      <tr><td><span class="mono">claude-fable-5</span></td><td class="num">$0.25</td><td class="num">$1.20</td><td class="num">$0.025</td><td><span class="pill hot">flagship</span> vấn đề khó nhất</td></tr>
+      <tr><td><span class="mono">claude-fable-5-1</span></td><td class="num">$0.25</td><td class="num">$1.30</td><td class="num">$0.004</td><td><span class="pill hot">latest</span> Fable mới nhất</td></tr>
+      <tr><td><span class="mono">claude-opus-5</span></td><td class="num">$0.10</td><td class="num">$0.40</td><td class="num">$0.007</td><td>flagship cân bằng</td></tr>
+      <tr><td><span class="mono">claude-opus-5-5</span></td><td class="num">$0.10</td><td class="num">$0.45</td><td class="num">$0.004</td><td>flagship cân bằng</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5</span></td><td class="num">$0.10</td><td class="num">$0.25</td><td class="num">$0.004</td><td><span class="pill">giá tốt</span> lập trình hằng ngày</td></tr>
+      <tr><td><span class="mono">claude-sonnet-5-5</span></td><td class="num">$0.15</td><td class="num">$0.35</td><td class="num">$0.003</td><td><span class="pill">giá tốt</span></td></tr>
+      <tr><td><span class="mono">claude-haiku-5-5</span></td><td class="num">$0.05</td><td class="num">$0.20</td><td class="num">$0.005</td><td><span class="pill">rẻ</span></td></tr>
+      <tr><td><span class="mono">gpt-6-sol</span></td><td class="num">$0.03</td><td class="num">$0.12</td><td class="num">$0.0012</td><td><span class="pill">rẻ</span></td></tr>
+      <tr><td><span class="mono">gpt-6-1-sol</span></td><td class="num">$0.10</td><td class="num">$0.20</td><td class="num">$0.003</td><td><span class="pill">giá tốt</span>rẻ, GPT mới nhất</td></tr>
+      <tr><td><span class="mono">gpt-6-astra</span></td><td class="num">$0.20</td><td class="num">$0.70</td><td class="num">$0.01</td><td>reasoning tầm trung</td></tr>
     </tbody>
   </table>
-  <p class="muted">Bảng phản ánh cấu hình thời gian thực tính đến 2026-10-13.</p>
-  <p><strong>Ví dụ minh họa:</strong> một phiên lập trình trên <span class="mono">claude-sonnet-5</span> gửi 30k token đầu vào + 5k token đầu ra tốn khoảng <strong>$0.014</strong>. Một tháng dùng nặng hằng ngày cũng chỉ ở mức vài đô la.</p>
+  <p class="muted">Bảng phản ánh cấu hình thời gian thực tính đến 2026-10-27.</p>
+  <p><strong>Ví dụ minh họa:</strong> một phiên lập trình trên <span class="mono">claude-sonnet-5</span> gửi 30k token đầu vào + 5k token đầu ra tốn khoảng <strong>$0.004</strong>. Một tháng dùng nặng hằng ngày cũng chỉ ở mức vài đô la.</p>
   <ul>
     <li>Yêu cầu tạm giữ trước một khoản nhỏ, rồi quyết toán theo mức dùng thực tế — phần chênh lệch hoàn lại ngay lập tức.</li>
     <li>Yêu cầu thất bại phía upstream được hoàn tiền tự động; không tính phí cho phản hồi bạn không nhận được.</li>
@@ -876,7 +877,7 @@ print(resp.choices[0].message.content)</pre>
   <a href="https://vantyr.xyz/pricing">mô hình &amp; bảng giá</a>
   <a href="https://discord.gg/BNBdHZqGFb" target="_blank" rel="noopener">cộng đồng Discord</a>
   <a href="https://github.com/captainbeo/vantyr">mã nguồn (AGPL)</a>
-  <span class="right">tài liệu bản cập nhật 2026-10-13c</span>
+  <span class="right">tài liệu bản cập nhật 2026-10-27a</span>
 </footer>
     </main>
 </div>
