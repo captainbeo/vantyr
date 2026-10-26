@@ -5529,3 +5529,30 @@ Measured either way: 6 aborted Claude streams after the ping deploy, all on
 against a pre-deploy average of 18359 for the same path. Aborted streams are
 billed by the estimated path both before and after; the ping frames did not add
 a charge or a new billing path.
+
+## 2026-10-26d — client_gone 60s deaths collapse after the ping fix (LIVE)
+
+Image `vantyr/new-api:vt-42af91d64` (87d7a7295598, commit 42af91d64) deployed
+18:58 UTC. Independently verified: `cache_ttl_inject` = 2 and `ping_event_mode`
+= 1 in the binary, `BuildCommit` readable as `42af91d64`, health 200, and a live
+stream returned 7 real `event: ping` frames with 0 comments.
+
+**The result that settles the diagnosis.** Kiro-pool streams, same channel, 60s
+deaths isolated as `use_time` 58-62 with `end_reason=client_gone`, restart
+minutes excluded:
+
+| phase | kiro-pool streams | died at 60s | % |
+|---|---|---|---|
+| pre-ping (16:26-18:58) | 206 | 111 | **53.9** |
+| post-ping (18:58-20:50) | 38 | 3 | **7.9** |
+
+The 60s wall was the client's liveness timer running out on a stream whose only
+keep-alives were `: PING` comments, which event-counting clients do not see. With
+real `event: ping` frames the timer resets and the wall mostly disappears. The
+residual 3 are not clustered at the boundary the way the pre-fix 111 were (7, 8,
+14, 60, 60, 60s), so they look like genuine client aborts rather than a timer.
+
+Sample is 38 clean post-fix streams, not yet the ~100 agreed with the latency
+session, but the effect is large enough (53.9% -> 7.9%) that it is already
+decisive. Do not lower `LATENCY_CLIENT_GONE_RATIO` below 0.75 until the sample
+reaches ~100, per the agreement; then it can drop on evidence.
