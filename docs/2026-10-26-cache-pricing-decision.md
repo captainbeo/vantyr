@@ -64,7 +64,16 @@ cost but a read is still ~5x cheaper than a write (the incentive to reuse).
 | sonnet-5 | 0.04 | 0.0300 | 0.05 | 0.064 | 0.0480 | 0.08 |
 
 fable-5, fable-5-1, haiku-5-5, gpt-6-sol, gpt-6-1-sol, astra: unchanged. Their writes
-are already at or above 1.6x (fable-5 is 3.3x; astra does not bill writes at all).
+are already at or above 1.6x (fable-5 is 3.3x).
+
+Correction (2026-10-26): an earlier draft said astra "does not bill writes at all".
+Wrong. Astra has a configured `ModelRatio`, so `GetBillingMode` returns `ratio` and
+the built-in `gpt-6-astra` expression is never used. In ratio mode a write is billed
+at `CreateCacheRatio`, which astra does not set, so the default 1.25 applies:
+$0.25/M against $0.20/M input. Verified on a logged row (p=1284, c=2802, cw=1281,
+quota 1141 = (3 + 1281x1.25 + 2802x3.5) x 0.1). A6 also prices astra writes at 1.25x
+its input (cheapest listing 0.0513/0.0410, median 0.4419/0.3535), so the write keeps
+the same markup as astra's input price. Volume is small: 53,639 write tokens in 7 days.
 
 **3. The cache-loss problem is not a pricing problem.**
 A merchant switch costs one cache rebuild. Affinity already pins a session to its
