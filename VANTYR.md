@@ -5693,9 +5693,13 @@ the owner PC through vantyr.xyz reached `message_stop` (before: cut at
 Before any Caddy re-pin, confirm the target version fixes #8106 or keep the
 global option.
 
-Still open: `www.vantyr.xyz` has no DNS record (NXDOMAIN on 1.1.1.1 and
-8.8.8.8), so Caddy fails its ACME challenge (56 failures/24h). Needs a DNS
-record (owner, DNS change).
+~~Still open: `www.vantyr.xyz` has no DNS record (NXDOMAIN on 1.1.1.1 and
+8.8.8.8), so Caddy fails its ACME challenge (56 failures/24h).~~ Resolved
+2026-10-26: owner added the record (`www` -> 85.190.118.190, same as the apex,
+on 1.1.1.1 and 8.8.8.8). Caddy's next scheduled retry obtained the certificate
+at 20:58:17 UTC (Let's Encrypt YE1, `CN=www.vantyr.xyz`, expires 2027-01-24);
+`https://www.vantyr.xyz` now returns 308 -> `https://vantyr.xyz/` with a valid
+chain. No Caddy change or restart was needed.
 
 ## 2026-10-26g — gateway `build:` section removed from compose (LIVE, no restart)
 
