@@ -42,18 +42,27 @@ trap 'rm -rf "$STAGE"' EXIT
 echo "== packing $FULL_SHA — $SUBJECT"
 git archive --format=tar "$FULL_SHA" | tar -x -C "$STAGE"
 
-# md5 manifest of exactly what will be extracted. The server verifies against
-# this, so it must describe the archive contents, not the working tree.
-( cd "$STAGE" && find . -type f -print0 | sort -z | xargs -0 md5sum ) > "$STAGE/MANIFEST.md5"
-# The manifest itself is not in the manifest; note its own hash for transit.
-MANIFEST_MD5=$(md5sum "$STAGE/MANIFEST.md5" | cut -d' ' -f1)
+# md5 manifest of exactly what will be extracted. Written outside the staged
+# tree so it cannot hash itself (an earlier version checksummed MANIFEST.md5
+# into its own listing, which then failed verification on the server).
+# Paths are recorded as `./relative` with a leading `*` marker so the server's
+# verifier can look them up by exact name — filenames in this repo have been
+# committed with control characters in them, and shell-glob-style parsing
+# mangles those.
+MANIFEST=$(mktemp /tmp/vantyr-manifest-XXXXXX)
+( cd "$STAGE" && find . -type f -print0 | sort -z | \
+    while IFS= read -r -d '' f; do printf '%s *%s\n' "$(md5sum "$f" | cut -d' ' -f1)" "$f"; done ) > "$MANIFEST"
+MANIFEST_MD5=$(md5sum "$MANIFEST" | cut -d' ' -f1)
+FILE_COUNT=$(wc -l < "$MANIFEST")
+cp "$MANIFEST" "$STAGE/MANIFEST.md5"
 
 TARBALL="$OUT_DIR/vantyr-ctx-$SHORT.tar.gz"
 tar -czf "$TARBALL" -C "$STAGE" .
+rm -f "$MANIFEST"
 
 echo "== wrote $TARBALL"
 echo "   revision:     $FULL_SHA"
-echo "   files:        $(( $(wc -l < "$STAGE/MANIFEST.md5") ))"
+echo "   files:        $FILE_COUNT"
 echo "   manifest md5: $MANIFEST_MD5"
 echo
 echo "== upload and build with:"

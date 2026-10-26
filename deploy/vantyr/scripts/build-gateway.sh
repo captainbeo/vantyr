@@ -47,9 +47,33 @@ if [ "$GOT" != "$MANIFEST_MD5" ]; then
 fi
 echo "== manifest integrity ok"
 
-# 2. Every file in the archive must match the manifest.
-if ! ( cd "$STAGE" && md5sum -c --quiet MANIFEST.md5 ); then
-    echo "== ARCHIVE CORRUPT: files do not match their manifest" >&2
+# 2. Every file in the archive must match the manifest. Do NOT use
+#    `md5sum -c` here: it mangles names containing backslash-escapes or
+#    newlines, which made it report a phantom mismatch on a tracked file whose
+#    name ends in a control character (the stray `2<U+F00D>` committed in
+#    edf0b2412). Compare explicitly instead, reading NUL-separated paths so
+#    odd names survive.
+BAD=0
+VERIFIED_PATHS=()
+while IFS= read -r -d '' path; do
+    rel="${path#./}"
+    [ "$rel" = "MANIFEST.md5" ] && continue
+    # match this path's recorded hash by exact-name lookup, not parsing
+    want=$(grep -a -- "\\*${path}$" "$STAGE/MANIFEST.md5" | head -1 | cut -d' ' -f1)
+    if [ -z "$want" ]; then
+        echo "   NOT IN MANIFEST: $rel" >&2
+        BAD=$((BAD + 1)); continue
+    fi
+    have=$(md5sum "$STAGE/$rel" | cut -d' ' -f1)
+    if [ "$have" != "$want" ]; then
+        echo "   CORRUPT: $rel" >&2
+        BAD=$((BAD + 1)); continue
+    fi
+    VERIFIED_PATHS+=("$path")
+done < <(cd "$STAGE" && find . -type f -print0)
+
+if [ "$BAD" -ne 0 ]; then
+    echo "== ARCHIVE CORRUPT: $BAD file(s) do not match their manifest" >&2
     exit 1
 fi
 echo "== archive verified: $(wc -l < "$STAGE/MANIFEST.md5") files"
@@ -60,18 +84,19 @@ echo "== archive verified: $(wc -l < "$STAGE/MANIFEST.md5") files"
 ( cd "$STAGE" && rm -f MANIFEST.md5 && tar -cf - . ) | tar -xf - -C "$BUILD_DIR"
 echo "== extracted into $BUILD_DIR"
 
-# 4. Verify the context on disk now matches the archive. Guards against a
-#    partial extract or a pre-existing file that shadowed one in the archive.
+# 4. Verify the context on disk now matches what was verified in step 2.
+#    Guards against a partial extract, or a pre-existing file in the context
+#    that shadowed one from the archive.
 MISMATCH=0
-while read -r sum path; do
+for path in "${VERIFIED_PATHS[@]}"; do
     rel="${path#./}"
-    [ "$rel" = "MANIFEST.md5" ] && continue
+    want=$(grep -a -- "\\*${path}$" "$STAGE/MANIFEST.md5" | head -1 | cut -d' ' -f1)
     actual=$(md5sum "$BUILD_DIR/$rel" 2>/dev/null | cut -d' ' -f1)
-    if [ "$actual" != "$sum" ]; then
+    if [ "$actual" != "$want" ]; then
         echo "   MISMATCH: $rel" >&2
         MISMATCH=$((MISMATCH + 1))
     fi
-done < <(grep -v 'MANIFEST.md5' "$STAGE/MANIFEST.md5" 2>/dev/null || tar -xzf "$TARBALL" -O ./MANIFEST.md5)
+done
 
 if [ "$MISMATCH" -ne 0 ]; then
     echo "== REFUSING TO BUILD: $MISMATCH file(s) in the context differ from the archive." >&2
