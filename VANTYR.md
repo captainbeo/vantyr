@@ -5244,3 +5244,57 @@ not build from a working tree whose provenance is unclear.
 **AGPL:** `deploy/vantyr/static/source/` refreshed with
 `vantyr-source-2026-10-26-ping-events.tar.gz` and a matching `source-notice.txt`
 for this image.
+
+## 2026-10-26c — build-context divergence, cache_control verified, watchdog live
+
+**The build context was a different tree from the source of truth.** The gateway
+builds with `context: ../..` from `deploy/vantyr/compose.yaml`, i.e. `/opt/vantyr`
+— but the *maintained* copy of the fork lives at `/opt/vantyr/deploy/vantyr/`,
+and the authoritative history is the local repo. The two had forked: `/opt/vantyr`
+was missing `service/cache_ttl_inject.go` entirely, its `relay/helper/common.go`
+had none of the real-event ping code, and 19 files differed overall. The 15:10
+`cache-affinity-20261026` image was built from that incomplete tree, so it
+**silently shipped without the cache-TTL injection and the ping-event keep-alive
+that VANTYR.md had recorded as live** — only the affinity rule landed, because
+that one file had been copied in by hand.
+
+Confirmed by string search in the running binaries:
+
+| image | `PingEventData` | `cache_ttl_inject` | `chat completions trace` |
+|---|---|---|---|
+| `pinned-next57` (10-25) | yes | yes | yes |
+| `cache-affinity-20261026` (15:10) | no | no | yes |
+| `ping-events-20261026` (16:23, current) | yes | yes | yes |
+
+Fixed by syncing the whole tracked source from the repo into the build context
+and rebuilding. **Any future build must start from a tree whose provenance is
+known — pin the revision, do not build from `/opt/vantyr` as found.**
+
+**Correcting an earlier claim in this file.** The 2026-10-26 entry said
+kiro-pool (ch95) never caches and implied the upstream could not. That was
+wrong, and it was measured wrong because the image running at the time had lost
+the cache_control converter fix — so of course nothing cached. ch95 caches
+normally: on `/v1/messages` today it logged 1,453 reads over 2,329 rows, and 239
+rows with cache writes.
+
+**cache_control through the converter — verified live.** Controlled A/B on the
+same channel (95), same model, same cache-marked content:
+
+- native `/v1/messages`: wrote 1,576 then read 1,339
+- converted `/v1/chat/completions`: **read 1,339** on both calls, logged with
+  `request_path=/v1/chat/completions`
+
+The converted path now carries the breakpoint to the upstream and collects the
+cache hit. Before the fix this path logged `cache_tokens = 0` on every row.
+
+**Gateway watchdog — live and verified.** Started before main()'s config gate,
+probes `/api/status` every 30 s, pages Discord after 120 s unreachable and again
+on recovery. Verified inside the deployed container against a dead port (one
+alert, correct text) and against the healthy gateway (zero alerts). This is the
+alert that did not exist during the 23-minute outage earlier today.
+
+**Also:** a runaway `go build` container from a compose build was left spinning
+at ~386% CPU on a 4-vCPU box and tripped the gateway's own CPU guard (96.6%
+against a 90% threshold), which returned `system_cpu_overloaded` to real
+requests. Stopped; load returned to normal. Worth knowing that guard exists and
+that a stray build is enough to trigger it.
