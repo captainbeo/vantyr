@@ -5097,3 +5097,50 @@ With this + the chat-completions affinity rule, the cache story for agentic
 users is: pinned merchant (survives rotation via re-pin) + 1h TTL (survives
 turn gaps) + 5x-cheaper reads. Rollback: set cache_ttl_inject=false in
 options (no rebuild needed) or tag pinned-next56 as pinned.
+
+## 2026-10-26 — affinity coverage, cache-write billing, streaming timeout (LIVE)
+
+Deployed image `vantyr/new-api:cache-affinity-20261026` (sha c86e1c5442af) at
+15:10 UTC, replacing `feat-payment-rails-ttl20`. Rollback: retag that image in
+`deploy/vantyr/compose.yaml` and `docker compose up -d --force-recreate gateway`.
+
+**Routing — `/v1/messages` without `metadata.user_id`.** 26% of production
+`/v1/messages` requests carry no `metadata.user_id` (861 of 1,784 on the owner's
+own traffic since the Oct 25 deploy). They matched no affinity rule, so they had
+no stickiness and switched merchant on 24% of back-to-back requests (same token
+and model, gap <= 5 min). Requests that did match switched 0.1-0.2%. The
+"claude cli trace" rule now falls back to `context_int: token_id`, the same
+fallback "chat completions trace" already uses. Verified live: a metadata-less
+request matched with `key_source=context_int` and pinned to channel 95.
+
+**Routing — cache-affinity TTL.** The catch-all "cache affinity" rule pinned for
+300 s while the relay injects a 1h cache (`InjectCacheTtl`), so the pin expired
+ten minutes before the cache did. Raised to 3600 s. Rules are first-match-wins,
+so `/v1/messages` and `/v1/chat/completions` still take the earlier rules'
+1200 s and 3600 s.
+
+**Billing — 1h cache writes.** Opus-5-5 and Sonnet-5-5 are the only Claude
+models on `tiered_expr`, and their expressions omitted `cc1h`, so 1h cache
+writes billed $0 (39.6M tokens on opus-5-5 in 7 days). Live option
+`billing_setting.billing_expr` now appends `+ cc1h * 0.16` (opus-5-5) and
+`+ cc1h * 0.08` (sonnet-5-5). Ratio-mode models were already correct via
+`CreateCacheRatio x 6/3.75`; gpt-6-astra has no 1h cache tokens. Backup of the
+previous option value: `/tmp/billing_expr.bak` on the server. Verified: the
+expression the engine resolves is `tier("base", p * 0.1 + c * 0.45 + cr * 0.02
++ cc * 0.1 + cc1h * 0.16)`, and quota equals that formula on every row logged
+after the change. Rows written before 15:00 UTC used the old expression.
+
+**Streaming timeout.** `STREAMING_TIMEOUT` was unset in `.env`, so it fell back
+to the default 60. It is an idle timeout that resets on every chunk
+(`relay/helper/stream_scanner.go`), so it killed silent streams, not long
+generations. Set to 300 (the upstream default) in `.env`.
+
+**Removed.** `service/cache_affinity.go` and its tests never compiled and were
+never called; the native framework already records and prefers the cache-holding
+channel. Deleted, along with 18.7k scratch/build files that commit edf0b2418 had
+swept into git (`.tmp*`, `.scratch*`, `node_modules/`, a stray `-1`, and a
+`.tmp-tokens.txt` holding two smoke-test keys). `.gitignore` now covers them.
+
+**Watch.** Re-run the switch-rate query after a few days: unmatched
+`/v1/messages` traffic should drop from 24% toward the 0.1-0.2% seen on matched
+traffic.
