@@ -5216,3 +5216,31 @@ would have dropped the circuit breaker. Repo now carries all of them
 (51a22d000) and points at `cache-affinity-20261026` (b5a5d4556) — previously it
 still named `:pinned`, so reapplying it would also have rolled the gateway back
 a day.
+
+## 2026-10-26c — real-event SSE keep-alive deployed (LIVE)
+
+Image `vantyr/new-api:ping-events-20261026` (sha d6c40cad10f9) deployed at
+16:24 UTC, built from a clean `git archive` of HEAD (2a7ef347f) rather than the
+`/opt/vantyr` working tree. That tree is not a usable checkout — its `.git` has
+no HEAD — and building from it in place is how the previous image shipped
+without 08cba379c.
+
+**Why:** the gateway sent keep-alives as SSE comments (`: PING`). Comments are
+transport framing; client liveness timers count events, so a client with a 60 s
+idle limit hung up during the 5-8 s (and longer, on reasoning requests)
+pre-first-token silence. `ping_event_mode` emits a real `event: ping` frame
+(and `response.in_progress` on the [OI]-Responses path). The DB option had been
+`true` since before this deploy but was inert: the running binary predated the
+feature, so the string `ping_event_mode` was absent from `/new-api`.
+
+**Verified live after deploy:** a streaming `/v1/messages` request that ran long
+enough to cross the 15 s ping interval returned 5 `event: ping` frames and 0
+`: PING` comments over 591 events.
+
+**Note for the next deploy:** local HEAD is ahead of `origin/feat/payment-rails`
+and other sessions commit to the same tree. Pin the revision when building; do
+not build from a working tree whose provenance is unclear.
+
+**AGPL:** `deploy/vantyr/static/source/` refreshed with
+`vantyr-source-2026-10-26-ping-events.tar.gz` and a matching `source-notice.txt`
+for this image.
