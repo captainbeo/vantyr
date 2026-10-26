@@ -26,7 +26,9 @@ FULL_SHA="${2:?missing full sha}"
 TAG="${3:?missing image tag}"
 MANIFEST_MD5="${4:?missing manifest md5}"
 
-BUILD_DIR=/opt/vantyr
+# BUILD_DIR is overridable only so the verify/extract steps can be exercised
+# against a scratch dir; production builds use the default.
+BUILD_DIR="${BUILD_DIR:-/opt/vantyr}"
 COMPOSE_DIR=/opt/vantyr/deploy/vantyr
 
 echo "== build-gateway: sha=${FULL_SHA:0:12} tag=$TAG"
@@ -51,7 +53,7 @@ echo "== manifest integrity ok"
 #    `md5sum -c` here: it mangles names containing backslash-escapes or
 #    newlines, which made it report a phantom mismatch on a tracked file whose
 #    name ends in a control character (the stray `2<U+F00D>` committed in
-#    edf0b2412). Compare explicitly instead, reading NUL-separated paths so
+#    edf0b2418). Compare explicitly instead, reading NUL-separated paths so
 #    odd names survive.
 BAD=0
 VERIFIED_PATHS=()
@@ -69,6 +71,7 @@ while IFS= read -r -d '' path; do
         echo "   CORRUPT: $rel" >&2
         BAD=$((BAD + 1)); continue
     fi
+    case "$rel" in deploy/*) continue ;; esac   # verified, never extracted (step 3)
     VERIFIED_PATHS+=("$path")
 done < <(cd "$STAGE" && find . -type f -print0)
 
@@ -78,10 +81,23 @@ if [ "$BAD" -ne 0 ]; then
 fi
 echo "== archive verified: $(wc -l < "$STAGE/MANIFEST.md5") files"
 
+# Capture the expected hash per verified path BEFORE the manifest is excluded
+# from the context below — step 4 needs these and the file is gone by then.
+declare -A EXPECT
+for path in "${VERIFIED_PATHS[@]}"; do
+    EXPECT["$path"]=$(grep -a -- "\\*${path}$" "$STAGE/MANIFEST.md5" | head -1 | cut -d' ' -f1)
+done
+
 # 3. Copy into the build context. No --delete: the context holds data/,
 #    backups/, .env and other untracked runtime state that must survive.
 #    MANIFEST.md5 is packer metadata, not source — leave it out of the context.
-( cd "$STAGE" && rm -f MANIFEST.md5 && tar -cf - . ) | tar -xf - -C "$BUILD_DIR"
+#    deploy/ is skipped: it is the LIVE config dir (compose.yaml, Caddyfile,
+#    .env, monitor.py, static/) and .dockerignore excludes it from the build
+#    anyway. The first run of this script extracted it and rewrote 54 live
+#    files, including the script that was running.
+#    --no-same-owner: the archive carries the dev machine's uid (197609).
+( cd "$STAGE" && rm -f MANIFEST.md5 && tar --exclude=./deploy -cf - . ) \
+    | tar --no-same-owner -xf - -C "$BUILD_DIR"
 echo "== extracted into $BUILD_DIR"
 
 # 4. Verify the context on disk now matches what was verified in step 2.
@@ -90,7 +106,7 @@ echo "== extracted into $BUILD_DIR"
 MISMATCH=0
 for path in "${VERIFIED_PATHS[@]}"; do
     rel="${path#./}"
-    want=$(grep -a -- "\\*${path}$" "$STAGE/MANIFEST.md5" | head -1 | cut -d' ' -f1)
+    want="${EXPECT[$path]}"
     actual=$(md5sum "$BUILD_DIR/$rel" 2>/dev/null | cut -d' ' -f1)
     if [ "$actual" != "$want" ]; then
         echo "   MISMATCH: $rel" >&2
@@ -105,11 +121,27 @@ if [ "$MISMATCH" -ne 0 ]; then
 fi
 echo "== context on disk verified against the archive"
 
+# VERIFY_ONLY=1 stops here. A build on this 4-vCPU host pushes the gateway past
+# its 90% CPU gate and real users get 503 system_cpu_overloaded (2026-10-26:
+# two at 17:43 during a build), so test the verify/extract path without one.
+if [ "${VERIFY_ONLY:-0}" = "1" ]; then
+    echo "== VERIFY_ONLY: stopping before the build"
+    exit 0
+fi
+
 # 5. Build with the revision stamped into the binary (common.BuildCommit).
-cd "$COMPOSE_DIR"
-COMMIT="$FULL_SHA" docker compose build --build-arg "COMMIT=$FULL_SHA" gateway
-docker tag vantyr/new-api:gateway "vantyr/new-api:$TAG"
-echo "== built and tagged vantyr/new-api:$TAG"
+#    Use `docker build` with an explicit -t rather than `docker compose build`:
+#    compose names the result after its `image:` value, which is the *running*
+#    image's tag, so a build silently overwrites whatever is live. That is
+#    exactly how `cache-affinity-20261026` came to mean two different images
+#    on 2026-10-26. The context and dockerfile here match compose's
+#    (context ../.. = $BUILD_DIR, dockerfile Dockerfile).
+docker build \
+    --build-arg "COMMIT=$FULL_SHA" \
+    -f "$BUILD_DIR/Dockerfile" \
+    -t "vantyr/new-api:$TAG" \
+    "$BUILD_DIR"
+echo "== built vantyr/new-api:$TAG"
 
 # 6. Verify the image itself. An empty grep proves nothing (2026-10-26: a
 #    missing `strings` binary produced four false "absent" readings), so print

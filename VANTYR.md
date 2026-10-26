@@ -5337,6 +5337,35 @@ against a 90% threshold), which returned `system_cpu_overloaded` to real
 requests. Stopped; load returned to normal. Worth knowing that guard exists and
 that a stray build is enough to trigger it.
 
+**Any gateway build on this host costs users a few 503s.** It is not only
+runaway builds: the normal 17:45 UTC build (`vt-42af91d64`) also crossed the
+90% gate, and user 111 got two `503` at 17:43:31-32 (`sar` shows the 17:50
+bucket at 70% idle against ~91% before). Build in a quiet window, or off the
+host. `build-gateway.sh` has `VERIFY_ONLY=1` so the verify/extract path can be
+tested without building.
+
+**`build-gateway.sh` first run (2026-10-26 17:40 UTC) — two side effects, both
+repaired.** (1) It extracted the archive's `deploy/` into the live config dir,
+rewriting 54 files, including `compose.yaml` and the script itself. Checked
+against the 16:23 source snapshot: only `compose.yaml` changed in content (it
+gained the `COMMIT` build arg, which is the repo version and is intended);
+the Caddyfile differs only in line endings, `.env` and `x-bot/.env` were not
+in the archive and are untouched. The script now verifies `deploy/` but never
+extracts it, and extracts with `--no-same-owner`. (2) It built through
+`docker compose build`, which names the result after compose's `image:` — so
+the build retagged `ping-events-20261026` (the running image) onto the new
+build. Repaired: `ping-events-20261026` was re-pointed at `4ad0a1069802`,
+whose `/new-api` md5 (`eec7d7bea233`) is identical to the running container's,
+and the new build is `vt-42af91d64`. The script now uses `docker build -t`.
+
+Gate tests on the server (`VERIFY_ONLY=1`, scratch `BUILD_DIR`): a wrong
+manifest md5 is refused; a tampered `service/cache_ttl_inject.go` inside the
+tarball is refused before anything is extracted; a pre-existing immutable file
+in the context made the extract itself fail, which also refuses (so step 4's
+shadow check was not exercised directly — it was pre-empted). The
+`docker build -t` path (steps 5-6) has not run yet; the stamp check in step 6
+did pass on the 17:45 compose build (`42af91d6468f…` present in the binary).
+
 **Deploy hygiene (2026-10-26, after four images in one day).** Three separate
 problems all traced to the same cause — nobody could tell what a tag contained:
 
@@ -5450,9 +5479,11 @@ cache-related measurement taken in that window (including the conclusion that
 kiro-pool does not cache) was measured against a binary missing
 `cache_ttl_inject`. Corrected in the 2026-10-26c entry.
 
-Times in this file are UTC unless marked. Commit timestamps are local (+0100
-for this repo today) — `d055e13d9` reads 16:47 but is 15:47 UTC, which is
-*before* the 16:23 UTC build that contains it. Comparing a commit timestamp to
+Times in this file are UTC unless marked. Commit timestamps carry the
+committer's local offset, and it is not fixed: today's are +0100, but
+`08cba379c` (2026-10-24, before the clock change) is +0200. Convert per commit.
+`d055e13d9` reads 16:47 +0100, i.e. 15:47 UTC, which is *before* the 16:23 UTC
+build that contains it. Comparing a commit timestamp to
 an image timestamp without converting is how the first version of this entry
 got the `mediaItemCacheControl` row wrong.
 
