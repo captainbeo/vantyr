@@ -5103,18 +5103,39 @@ options (no rebuild needed) or tag pinned-next56 as pinned.
 Deployed image `vantyr/new-api:cache-affinity-20261026` at 15:10 UTC, replacing
 `feat-payment-rails-ttl20`.
 
-**That 15:10 image was built from the `/opt/vantyr` working tree, which was
-missing `service/cache_ttl_inject.go` — so it shipped without 1h cache TTL
-injection entirely** (`grep -ac cache_ttl_inject /new-api` = 0). Production
-effect: at 14:00 UTC, 1 of 66 requests carried 1h cache tokens; at 15:00 UTC, 0
-of 114; at 16:00, 1 of 42, against a normal 20-60 per hour. For ~75 minutes every
-cache write was 5-minute while the affinity rules still pinned for 20 minutes,
-so cache lifetime fell from 1h to 5min for everyone. Replaced by the 16:16 build.
-The image is preserved as `cache-affinity-broken-20261026-1510` (778e57f77058) —
-the name is accurate, do not use it as a rollback target for anything
-cache-related. Its tag no longer points at the 15:10 build either; the
-`cache-affinity-20261026` name was retagged to the 16:16 build (41ddad115b45),
-which is the last known-good image for both 1h injection and ping events.
+**That 15:10 image — and the 14:26 image before it — were built from the
+`/opt/vantyr` working tree, which was missing `service/cache_ttl_inject.go`, so
+both shipped without 1h cache TTL injection** (`grep -ac cache_ttl_inject
+/new-api` = 0 for both). Commit 8c65c31e7 had been live since Oct 25 and was
+silently reverted at 14:26.
+
+The effect is unambiguous once you hold the traffic source fixed, because only
+kiro-pool ever produces 1h writes (A6's relay creates 5-minute caches; 5m writes
+were 0 of 332 on kiro-pool before 14:26). Kiro-pool traffic, 14:26-16:16:
+
+| window | kiro-pool reqs | with 1h write | with 5m write |
+|---|---|---|---|
+| before 14:26 | 332 | 65 | 0 |
+| 14:26-16:16 | 176 | **0** | **18** |
+
+Same channel, same client type, same window length as the baseline: zero 1h
+writes and a novel 5m-write class that had never appeared on kiro-pool. So every
+cache those users created in that window expired after 5 minutes while the
+affinity rules pinned them to the channel for 20, i.e. a pin that outlived its
+cache by 15 minutes — the exact failure the TTL work existed to prevent.
+
+Caveat for the record: the monitor was also flapping kiro-pool during part of
+that window, so a share of Claude traffic went to A6 pins (which never produce
+1h writes). That does not explain the 176 kiro-pool requests producing zero 1h
+writes, but it does mean the customer-visible share is smaller than "everyone for
+75 minutes".
+
+Replaced by the 16:16 build. The 15:10 image is preserved as
+`cache-affinity-broken-20261026-1510` (778e57f77058) — the name is accurate, do
+not use it as a rollback target for anything cache-related. Its tag no longer
+points at the 15:10 build either; the `cache-affinity-20261026` name was retagged
+to the 16:16 build (41ddad115b45), which is the last known-good image for both 1h
+injection and ping events.
 
 **Routing — `/v1/messages` without `metadata.user_id`.** Some `/v1/messages`
 requests carry no `metadata.user_id` and therefore matched no affinity rule, so
@@ -5326,3 +5347,10 @@ tree), put the commit and a timestamp in the tag, never retag an existing name,
 and after every build assert the features you expect are actually in the binary
 — `grep -ac cache_ttl_inject /new-api` and `grep -ac ping_event_mode /new-api`
 must both be non-zero for any image shipped from here on.
+
+**Method note (2026-10-26).** Estimate cache-injection health from kiro-pool
+alone, never from hourly totals. Kiro-pool is the only channel whose upstream
+creates 1h caches (A6's relay creates 5-minute ones), and its 1h-write rate
+depends on which clients happened to land there. Holding the channel fixed is
+what separated "injection is off" from "traffic moved" in the 14:26-16:16
+window. The hourly total moved with both at once and was ambiguous.
