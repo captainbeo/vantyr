@@ -150,8 +150,8 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			SkipRetryOnFailure: false,
 			SessionMode:        "prefer",
 			IncludeUsingGroup:  true,
-			IncludeRuleName:       true,
-			UserAgentInclude:      nil,
+			IncludeRuleName:    true,
+			UserAgentInclude:   nil,
 		},
 		{
 			Name:       "claude cli trace",
@@ -159,6 +159,14 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			PathRegex:  []string{"/v1/messages"},
 			KeySources: []ChannelAffinityKeySource{
 				{Type: "gjson", Path: "metadata.user_id"},
+				// Fallback (2026-10-26): 26% of production /v1/messages
+				// requests carry no metadata.user_id (observed on the owner's
+				// own traffic: 861 of 1,784 after the Oct 25 deploy). They
+				// matched no rule at all, so they got no session stickiness
+				// and switched merchant on 24% of back-to-back requests.
+				// The token id is always present, so pin per API key instead
+				// — the same fallback "chat completions trace" already uses.
+				{Type: "context_int", Key: "token_id"},
 			},
 			ValueRegex:            "",
 			TTLSeconds:            1200,
@@ -178,8 +186,8 @@ var channelAffinitySetting = ChannelAffinitySetting{
 			SkipRetryOnFailure: false,
 			SessionMode:        "prefer",
 			IncludeUsingGroup:  true,
-			IncludeRuleName:       true,
-			UserAgentInclude:      nil,
+			IncludeRuleName:    true,
+			UserAgentInclude:   nil,
 		},
 		{
 			// OpenAI-format callers of Claude models (user-report 2026-10-25:
