@@ -5362,9 +5362,11 @@ window. The hourly total moved with both at once and was ambiguous.
 
 ## 2026-10-26d — deploy checklist for the gateway image (process gate)
 
-The `vantyr-gateway` image has silently shipped without a feature three times
-today. Source was never the problem: `08cba379c` was in HEAD the whole time and
-`PingEventMode` was in `general_setting.go`. The image was the problem. The
+One forked build context silently removed two already-live features from
+production for ~2 hours on 2026-10-26. Source was never the problem:
+`08cba379c` (ping, 10-24) and `8c65c31e7` (cache TTL, 10-25) were both in HEAD
+the whole time, and the image running before the incident — `pinned`
+(17a34903983b, built 10-25 11:54) — contained both. The image was the problem. The
 build context is `/opt/vantyr` (compose `context: ../..`), it is a *different
 tree* from the maintained fork at `/opt/vantyr/deploy/vantyr`, and it can lose
 files with no error — `Dockerfile:30` is `COPY . .`, so a build takes whatever
@@ -5373,27 +5375,55 @@ cannot resolve to a revision either. Verify after every build:
 
 ```bash
 IMG=vantyr/new-api:<new-tag>
+docker image inspect $IMG --format 'gating {{.Id}} built {{.Created}}' | cut -c1-60
 for s in ping_event_mode cache_ttl_inject mediaItemCacheControl "chat completions trace"; do
   printf "%s=%s " "$s" "$(docker run --rm --entrypoint sh $IMG -c "grep -a -c $s /new-api")"
 done; echo
 ```
 
-All four must be non-zero. Each has silently vanished at least once:
+The `inspect` line is not decoration. All four checks are positive-only, so on
+their own they cannot tell "feature present" from "I grepped the wrong image" —
+and with a reused tag, the wrong image is exactly what a stale name resolves to.
+Printing the id and build time makes the gate self-identifying: if the id is not
+the build you just made, the counts below it mean nothing. A negative-control
+sentinel was suggested and rejected — the binary carries no reliable
+build-stamp string (checked: no `v1.0.0-rc.41`, no `go1.x` line survives
+`-ldflags -s -w`), so a sentinel would be a hand-maintained value that drifts
+from the images it describes, which is the same class of bug as the reused tag.
 
-| feature | string | last seen missing |
+All four must be non-zero. The first two were live in production and were
+silently lost; the third postdates the affected builds (absent-because-newer,
+not lost); the fourth has never gone missing:
+
+| feature | string | history |
 |---|---|---|
-| real-event keep-alive | `ping_event_mode` | 15:10 `cache-affinity-20261026` |
-| cache TTL injection | `cache_ttl_inject` | 15:10 `cache-affinity-20261026` |
-| cache_control through the converter | `mediaItemCacheControl` | 15:10 build |
-| chat-completions affinity rule | `chat completions trace` | never (present in all) |
+| real-event keep-alive | `ping_event_mode` | live until 14:26, lost by `feat-payment-rails-ttl20`, restored 16:23 |
+| cache TTL injection | `cache_ttl_inject` | live until 14:26, lost by `feat-payment-rails-ttl20`, restored 16:23 |
+| cache_control through the converter | `mediaItemCacheControl` | added 15:47 UTC (`d055e13d9`, 16:47 +0100); in the 16:23 build, never before that |
+| chat-completions affinity rule | `chat completions trace` | never missing |
 
-Measured across the images still on disk (feature string -> occurrence count):
+Measured across the images still on disk (feature string -> occurrence count).
+The `pinned` row is the point: production **had** both features before 14:26.
 
 | image | built | ping_event_mode | cache_ttl_inject | mediaItemCacheControl | chat completions trace |
 |---|---|---|---|---|---|
-| `feat-payment-rails-ttl20` | 13:58 | 0 | 0 | 0 | 1 |
-| `cache-affinity-broken-20261026-1510` | 15:10 | 0 | 0 | 0 | 1 |
-| `ping-events-20261026` (running) | 16:23 | 1 | 2 | 1 | 1 |
+| `pinned` / `pinned-next57` (pre-deploy) | 10-25 11:54 | **1** | **2** | 0 | 1 |
+| `feat-payment-rails-ttl20` | 10-26 13:58 | **0** | **0** | 0 | 1 |
+| `cache-affinity-broken-20261026-1510` | 10-26 15:10 | 0 | 0 | 0 | 1 |
+| `ping-events-20261026` (running) | 10-26 16:23 | 1 | 2 | 1 | 1 |
+
+**Incident window: 14:26 -> 16:25 UTC (~2h), not 15:10 -> 16:25.** The loss
+entered production with `feat-payment-rails-ttl20` at 14:26 and persisted
+through the 15:10 build — one forked tree, two consecutive images. Every
+cache-related measurement taken in that window (including the conclusion that
+kiro-pool does not cache) was measured against a binary missing
+`cache_ttl_inject`. Corrected in the 2026-10-26c entry.
+
+Times in this file are UTC unless marked. Commit timestamps are local (+0100
+for this repo today) — `d055e13d9` reads 16:47 but is 15:47 UTC, which is
+*before* the 16:23 UTC build that contains it. Comparing a commit timestamp to
+an image timestamp without converting is how the first version of this entry
+got the `mediaItemCacheControl` row wrong.
 
 **Do not reuse an image tag.** `cache-affinity-20261026` was originally the
 broken 15:10 build; a later rebuild (mine, 16:16) overwrote that tag in place,
