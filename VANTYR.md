@@ -5104,14 +5104,20 @@ Deployed image `vantyr/new-api:cache-affinity-20261026` (sha c86e1c5442af) at
 15:10 UTC, replacing `feat-payment-rails-ttl20`. Rollback: retag that image in
 `deploy/vantyr/compose.yaml` and `docker compose up -d --force-recreate gateway`.
 
-**Routing — `/v1/messages` without `metadata.user_id`.** 26% of production
-`/v1/messages` requests carry no `metadata.user_id` (861 of 1,784 on the owner's
-own traffic since the Oct 25 deploy). They matched no affinity rule, so they had
-no stickiness and switched merchant on 24% of back-to-back requests (same token
-and model, gap <= 5 min). Requests that did match switched 0.1-0.2%. The
-"claude cli trace" rule now falls back to `context_int: token_id`, the same
-fallback "chat completions trace" already uses. Verified live: a metadata-less
-request matched with `key_source=context_int` and pinned to channel 95.
+**Routing — `/v1/messages` without `metadata.user_id`.** Some `/v1/messages`
+requests carry no `metadata.user_id` and therefore matched no affinity rule, so
+they had no stickiness at all. The "claude cli trace" rule now falls back to
+`context_int: token_id`, the same fallback "chat completions trace" already
+uses. Verified live: a metadata-less request matched with
+`key_source=context_int` and pinned to channel 95.
+
+Scale of the gap, measured after the fact and smaller than first reported: the
+26%-unmatched / 24%-switch figures that motivated this came from a 7-day window
+that predates the Oct 25 prefer-mode deploy. In the window between that deploy
+and this one, customer traffic was 6 unmatched requests out of 1,178 (0.5%,
+0% switches) and owner traffic 864 of 2,122 (41% unmatched, but switching only
+0.59% because prefer mode already re-pins on failover). Treat this as a small
+correctness win — every request now has a pin — not as a large switch-rate fix.
 
 **Routing — cache-affinity TTL.** The catch-all "cache affinity" rule pinned for
 300 s while the relay injects a 1h cache (`InjectCacheTtl`), so the pin expired
@@ -5141,9 +5147,10 @@ channel. Deleted, along with 18.7k scratch/build files that commit edf0b2418 had
 swept into git (`.tmp*`, `.scratch*`, `node_modules/`, a stray `-1`, and a
 `.tmp-tokens.txt` holding two smoke-test keys). `.gitignore` now covers them.
 
-**Watch.** Re-run the switch-rate query after a few days: unmatched
-`/v1/messages` traffic should drop from 24% toward the 0.1-0.2% seen on matched
-traffic.
+**Watch.** Re-run the switch-rate query after a few days. The number that
+matters is the split between matched and unmatched traffic, not the raw rate:
+matched requests already switched 0.1-0.2% before this change, so there is
+little headroom left there.
 
 ## 2026-10-26b — gateway outage, cache_control loss, and the watchdog (LIVE)
 
