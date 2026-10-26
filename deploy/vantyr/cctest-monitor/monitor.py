@@ -1217,6 +1217,105 @@ def discord_alert(webhook, text):
     if status not in (200, 204):
         LOG.warning("discord alert failed: %s %s", status, payload)
 
+# ---------------------------------------------------------------------------
+# Gateway availability watchdog
+#
+# Every loop in this process is a *consumer* of the gateway admin API, so a
+# dead gateway degrades all of them to the same line — `[primary] sweep
+# failed` / `channel list failed` / `sync-loop tick failed` — repeated every
+# tick with no escalation. That is exactly what a 23-minute total outage
+# looked like on 2026-10-26: Caddy served 357 x 502 to real users while the
+# logs showed nothing but a routine-looking sweep error, because every alert
+# path in here ends in `discord_alert`, which needs no gateway and so was
+# never the thing that failed.
+#
+# This loop is deliberately dumb and independent: it polls /api/status (an
+# unauthenticated liveness route) on a short interval, and pages Discord when
+# the gateway has been unreachable for a sustained window. It also reports
+# recovery with the measured downtime so an outage is never silent at either
+# end. It is the only check that can still speak when everything else is
+# down, so it must never depend on gateway auth, channel state, or state.json.
+# ---------------------------------------------------------------------------
+
+GATEWAY_WATCHDOG_DOWN_AFTER = 120   # seconds unreachable before paging
+GATEWAY_WATCHDOG_INTERVAL = 30      # seconds between probes
+
+
+def _watchdog_env_int(name, default, lo=1):
+    """Module-level because the watchdog starts before main() parses env
+    (it must survive a parked monitor). Malformed values fall back to the
+    default rather than raising — a bad env var must not cost the one alert
+    path that works when everything else is down."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        LOG.error("bad %s=%r — using default %s", name, os.environ.get(name), default)
+        return default
+    return max(lo, value)
+
+
+def gateway_liveness(base_url, timeout=10.0):
+    """True when the gateway answers /api/status. Any HTTP answer counts:
+    a 500 still proves the process is up and serving, which is what this
+    watchdog distinguishes from 'nothing is listening'."""
+    url = base_url.rstrip("/") + "/api/status"
+    _payload, status = http_json("GET", url, None, None, timeout=timeout)
+    return status != 0
+
+
+def gateway_watchdog_loop(base_url, discord, interval=GATEWAY_WATCHDOG_INTERVAL,
+                          down_after=GATEWAY_WATCHDOG_DOWN_AFTER):
+    """Pages when the gateway is unreachable for `down_after` seconds, and
+    again when it comes back. Holds no other state: one transition out, one
+    transition back, so a long outage produces exactly two messages."""
+    LOG.info("[watchdog] gateway liveness probe started: every %ds, alert after %ds down",
+             interval, down_after)
+    down_since = None
+    alerted = False
+    while True:
+        try:
+            up = gateway_liveness(base_url)
+        except Exception:
+            # A bug in the probe must not kill the watchdog thread.
+            LOG.exception("[watchdog] liveness probe failed")
+            up = False
+        now = time.time()
+        if up:
+            if alerted and down_since is not None:
+                minutes = max(1, int((now - down_since) // 60))
+                LOG.warning("[watchdog] gateway REACHABLE again after %dm down", minutes)
+                discord_alert(
+                    discord,
+                    f"cctest: **gateway is back** — {base_url} answered again after "
+                    f"~{minutes}m unreachable. Users were seeing 502s for that window.",
+                )
+            down_since = None
+            alerted = False
+        else:
+            if down_since is None:
+                down_since = now
+                LOG.warning("[watchdog] gateway unreachable — starting downtime clock")
+            elif not alerted and (now - down_since) >= down_after:
+                alerted = True
+                minutes = max(1, int((now - down_since) // 60))
+                LOG.error("[watchdog] gateway DOWN for %dm — paging", minutes)
+                discord_alert(
+                    discord,
+                    f"cctest: **GATEWAY DOWN** — {base_url} has not answered "
+                    f"/api/status for {minutes}m. Every API request is failing "
+                    f"(Caddy returns 502). Check `docker ps` for vantyr-gateway.",
+                )
+        time.sleep(interval)
+
+
+def start_gateway_watchdog(base_url, discord, interval=GATEWAY_WATCHDOG_INTERVAL,
+                           down_after=GATEWAY_WATCHDOG_DOWN_AFTER):
+    threading.Thread(
+        target=gateway_watchdog_loop,
+        args=(base_url, discord, interval, down_after),
+        daemon=True, name="cctest-gateway-watchdog",
+    ).start()
+
 
 def park(reason):
     """Config incomplete: log once and idle instead of crash-looping, so a
@@ -1793,6 +1892,22 @@ def main():
     gateway_url = os.environ.get("GATEWAY_URL")
     gateway_token = os.environ.get("GATEWAY_TOKEN")
     cctest_key = os.environ.get("CCTEST_KEY")
+
+    # Gateway availability watchdog — started BEFORE the config gate below so
+    # it still speaks when the monitor is parked. It is the only alert path
+    # that survives a dead gateway (2026-10-26: 23-minute outage, 357 x 502,
+    # no page, because every other alert here rides the gateway).
+    if os.environ.get("GATEWAY_WATCHDOG_ENABLED", "true").lower() in ("1", "true", "yes"):
+        if gateway_url:
+            start_gateway_watchdog(
+                gateway_url,
+                os.environ.get("DISCORD_WEBHOOK") or None,
+                interval=_watchdog_env_int("GATEWAY_WATCHDOG_INTERVAL", 30, lo=5),
+                down_after=_watchdog_env_int("GATEWAY_WATCHDOG_DOWN_AFTER", 120, lo=30),
+            )
+        else:
+            LOG.warning("[watchdog] not started: GATEWAY_URL unset")
+
     if not (gateway_url and gateway_token and cctest_key):
         park("GATEWAY_URL, GATEWAY_TOKEN, and CCTEST_KEY must all be set")
         return 1

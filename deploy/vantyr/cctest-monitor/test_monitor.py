@@ -2599,6 +2599,109 @@ def test_do_check_alias_prediction_is_match_not_swap():
     assert verdict == "attr_match", verdict
 
 
+
+def test_gateway_watchdog_alerts_once_then_reports_recovery():
+    """The 2026-10-26 gap: a dead gateway produced only repeated
+    `[primary] sweep failed` lines and no page. The watchdog must page after
+    the sustained-down window and again on recovery — exactly twice for one
+    outage, never once per tick."""
+    alerts = []
+    probes = [False, False, False, False, False, True]   # down, then up
+    clock = [1000.0]
+
+    def fake_liveness(base_url, timeout=10.0):
+        return probes.pop(0) if probes else True
+
+    real_liveness, real_sleep, real_alert, real_time = (
+        m.gateway_liveness, m.time.sleep, m.discord_alert, m.time.time)
+    m.gateway_liveness = fake_liveness
+    m.discord_alert = lambda webhook, text: alerts.append(text)
+    # Each probe advances 30s; stop the loop once the scripted probes run out
+    # and one more tick has confirmed recovery.
+    def fake_sleep(_seconds):
+        clock[0] += 30.0
+        if not probes:
+            raise SystemExit
+    m.time.sleep = fake_sleep
+    m.time.time = lambda: clock[0]
+    try:
+        try:
+            m.gateway_watchdog_loop("http://gateway:3000", "https://hook",
+                                    interval=30, down_after=120)
+        except SystemExit:
+            pass
+    finally:
+        m.gateway_liveness, m.time.sleep = real_liveness, real_sleep
+        m.discord_alert, m.time.time = real_alert, real_time
+
+    assert len(alerts) == 2, alerts
+    assert "GATEWAY DOWN" in alerts[0], alerts[0]
+    assert "is back" in alerts[1], alerts[1]
+
+
+def test_gateway_watchdog_silent_when_healthy():
+    """A healthy gateway must never page — this runs every 30s forever."""
+    alerts = []
+    calls = [0]
+
+    def fake_liveness(base_url, timeout=10.0):
+        calls[0] += 1
+        return True
+
+    def fake_sleep(_seconds):
+        if calls[0] >= 5:
+            raise SystemExit
+
+    real_liveness, real_sleep, real_alert = (
+        m.gateway_liveness, m.time.sleep, m.discord_alert)
+    m.gateway_liveness = fake_liveness
+    m.discord_alert = lambda webhook, text: alerts.append(text)
+    m.time.sleep = fake_sleep
+    try:
+        try:
+            m.gateway_watchdog_loop("http://gateway:3000", "https://hook",
+                                    interval=30, down_after=120)
+        except SystemExit:
+            pass
+    finally:
+        m.gateway_liveness, m.time.sleep = real_liveness, real_sleep
+        m.discord_alert = real_alert
+
+    assert alerts == [], alerts
+
+
+def test_gateway_watchdog_short_blip_does_not_page():
+    """Down for one tick then back: below the sustained window, so no page.
+    Flapping must not turn into an alert storm."""
+    alerts = []
+    probes = [False, True, True]
+
+    def fake_liveness(base_url, timeout=10.0):
+        return probes.pop(0) if probes else True
+
+    def fake_sleep(_seconds):
+        if not probes:
+            raise SystemExit
+
+    real_liveness, real_sleep, real_alert = (
+        m.gateway_liveness, m.time.sleep, m.discord_alert)
+    m.gateway_liveness = fake_liveness
+    m.discord_alert = lambda webhook, text: alerts.append(text)
+    m.time.sleep = fake_sleep
+    try:
+        try:
+            m.gateway_watchdog_loop("http://gateway:3000", "https://hook",
+                                    interval=30, down_after=120)
+        except SystemExit:
+            pass
+    finally:
+        m.gateway_liveness, m.time.sleep = real_liveness, real_sleep
+        m.discord_alert = real_alert
+
+    assert alerts == [], alerts
+
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
