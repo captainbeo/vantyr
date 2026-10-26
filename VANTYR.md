@@ -5730,7 +5730,7 @@ section above, the BuildCommit note in 2026-10-26c, and
 builds from it by accident; making it a real clone would need a deploy key on
 the repo (owner decision, not done).
 
-## 2026-10-26f — kiro-pool `thinking.display` normalized by param override (LIVE)
+## 2026-10-26h — kiro-pool `thinking.display` normalized by param override (LIVE)
 
 **Problem.** kiro-proxy validates `thinking.display` and rejects anything other
 than `summarized` / `omitted` with `400 thinking.display must be one of:
