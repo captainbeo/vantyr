@@ -74,10 +74,14 @@ sidecar that exposes the pool as an Anthropic/OpenAI-compatible endpoint,
 and the gateway points a channel at it — the same pattern as sub2api.
 
 - Upstream: https://github.com/tanu360/kiro-reverse-api (MIT). No upstream
-  tags or releases exist, so the image is pinned by digest:
-  `ghcr.io/tanu360/kiro-reverse-api@sha256:68425f26…` (source commit
-  `9290b35`, 2026-10-10). Review the intervening upstream history before
-  any re-pin, same as the New API re-pin gate. Do not track `:latest`.
+  tags or releases exist. Base is source commit `9290b35` (2026-10-10, the
+  former pin `ghcr.io/tanu360/kiro-reverse-api@sha256:68425f26…`). Since
+  2026-10-27c the running image is built locally from that commit plus
+  `deploy/vantyr/kiro-proxy/patches/` (stream timeout fix, see 2026-10-27c):
+  `git am` the patches onto 9290b35, `docker build -t vantyr/kiro-proxy:<sha>-<date> .`
+  (linux/amd64), `docker save | gzip`, upload, `docker load`, point
+  `compose.yaml` at the tag. Review the intervening upstream history before
+  any re-base, same as the New API re-pin gate. Do not track `:latest`.
 - Endpoints: Anthropic `/v1/messages`, OpenAI `/v1/chat/completions`,
   OpenAI `/v1/responses`, `/v1/models`. Because it speaks Anthropic
   natively, register it as a **type 14 "Anthropic"** channel (base URL
@@ -5924,3 +5928,81 @@ Effect on the 2026-10-26/27 rotations: the three latency-only rotations with a
 have fired. 6.1-sol 6481 (mean 19.2s) still would: one 300s stalled request
 dominates the mean while the median was 1.7s. Known gap: the check uses the
 mean, and large prompts (20-100k context, p50 17-34s) exceed any fixed limit.
+
+## 2026-10-27c — session affinity stays on the first-choice tier (Kiro)
+
+**Problem.** A6 spend ran ~$23/24h, ~$17 of it Opus 5.5, although Kiro (ch95,
+P30) is first choice for the five Claude models and the a6pin channels (P20)
+are backup. Cause: Kiro failed a request before any output, the retry
+succeeded on an A6 pin, and that was a genuine success, so the 27a gate let
+`RecordChannelAffinity` bind the session to A6. Every later request then went
+straight to A6 and each success refreshed the binding, so the session never
+returned to Kiro (24h: Opus 5.5 951 A6 requests, 906 from one user; sessions
+alternating kiro_ok/a6_ok in long runs).
+
+**Fix.** `model.IsChannelInTopPriorityTier(group, model, channel, filters)`
+reports whether a channel is in the highest priority tier among the enabled
+channels that serve that group and model. Session affinity uses it twice:
+- write (`service/channel_affinity.go` `RecordChannelAffinity`): a success on
+  a lower tier does not bind the session, and an existing binding stays;
+- read (`service/channel_select.go` `SelectChannelForRequest`): a binding to a
+  lower tier is skipped (policy event `skip`/`affinity_fallback_tier`) and
+  cleared, so the request goes through normal tier selection (Kiro first).
+
+When Kiro is disabled it leaves the cache candidate list, A6 becomes the top
+enabled tier, and binding to A6 works as before; once Kiro is re-enabled the
+next request drops the A6 binding. Single-tier models (Fable, GPT) are
+unaffected. Strict sessions are exempt (they must keep their channel). Fail
+open: memory cache off, unknown channel or no candidates reports "top tier".
+B1 (retry avoids tried channels), B2 (no retry after client bytes) and the 27a
+success gate are unchanged.
+
+Trade-off: a session whose requests keep failing on Kiro now pays the Kiro
+attempt each time instead of sticking to A6.
+
+Tests: `model/channel_top_tier_test.go`,
+`service/channel_affinity_fallback_tier_test.go` (fallback success does not
+bind or overwrite; stale fallback binding skipped + cleared; primary disabled
+binds fallback; strict keeps it). `controller/channel_pin_retry_test.go`
+`TestRequestPolicyRoutingDatabaseMatrix` had been failing since 27a (it runs
+`Distribute()` without a relay, so the request was never marked successful);
+it now marks success before `Distribute()` and passes.
+
+**kiro-proxy stream timeout (same deploy).** kiro-proxy's streaming
+`http.Client{Timeout: 5m}` cut every Kiro answer longer than 300s
+("context deadline exceeded", see 2026-10-27a). Patches in
+`deploy/vantyr/kiro-proxy/patches/` on upstream `9290b35`:
+- 8a3aa7c: drop the total `Client.Timeout`; `ResponseHeaderTimeout` 5m bounds
+  the wait for the response to start.
+- fcddf06: an idle-timeout reader for mid-stream stalls. It did not work: it
+  cancelled a context derived from the request context, which the transport
+  does not watch, so a stalled read stayed blocked (its own test failed).
+- e406cba: the reader now closes the body after 5 minutes with no bytes, which
+  aborts the connection (HTTP/1.1) or stream (HTTP/2) and unblocks the read;
+  the error is `errStreamIdleTimeout` and is not retried.
+Tests (golang:1.25-alpine): idle-reader tests incl. a real HTTP/1.1 and HTTP/2
+body pass. Full suite vs baseline 9290b35: 594 → 601 passes, the same one
+pre-existing failure on both (`TestRequestPageSortsByDuration`, timing) and
+the same 15-minute suite timeout in `TestResponsesCustomToolHTTPAndSSE` on
+both.
+
+**Deploy (2026-10-27 13:38-13:40 UTC).**
+- kiro-proxy `vantyr/kiro-proxy:e406cba-20261027` (sha256:43dd1b054e7d), built
+  locally linux/amd64, uploaded as a gzip'd `docker save` (md5
+  5b3bdf803223cef80f215eda949641e1), swapped 13:38:48, healthy.
+- gateway `vantyr/new-api:vt-27c-20261027-132738` (sha256:78a2d3482189) via
+  pack-build-context.sh + build-gateway.sh from 5e20fdc8f; BuildCommit stamp
+  ok; binary has ping_event_mode, cache_ttl_inject, mediaItemCacheControl,
+  chat completions trace, affinity_fallback_tier, IsChannelInTopPriorityTier,
+  client_content_sent, GetRandomSatisfiedChannelAvoiding. Swapped 13:40,
+  healthy. The build produced no 503s (load peaked at 3.1).
+- compose backup `/opt/vantyr/backups/compose-pre-27c-20261027-133847.yaml`.
+  Rollback: gateway `vt-27b-20261027-032422` (be05725266b3), kiro-proxy
+  `ghcr.io/tanu360/kiro-reverse-api@sha256:68425f26…`.
+- One customer request failed during the kiro-proxy restart (user 110,
+  claude-sonnet-5, 13:38:48 "do request failed"); its retries went to ch64
+  `a6pin-sonnet-5-3825`, which answered 503 "no active candidates in the
+  personal routing pool" twice. ch64 is the only enabled sonnet-5 pin and has
+  not succeeded since 2026-10-26 16:50, so sonnet-5 has no working backup.
+- First minutes after the swap: claude-opus-5-5 4 Kiro / 0 A6, haiku 1/0, no
+  errors (24h before: opus-5-5 2604 Kiro / 556 A6).

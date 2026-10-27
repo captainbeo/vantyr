@@ -193,6 +193,9 @@ func TestRequestPolicyRoutingDatabaseMatrix(t *testing.T) {
 							request.Request.Header.Set("Content-Type", "application/json")
 							request.Request.Header.Set("X-Session", t.Name())
 							common.SetContextKey(request, constant.ContextKeyUsingGroup, "default")
+							// Distribute runs without a relay handler here; stand in for one that
+							// completed, since affinity is only recorded for successful requests.
+							service.MarkRequestPolicySuccess(request, nil)
 							middleware.Distribute()(request)
 							events := service.RequestPolicy(request).Events()
 							assert.True(t, slices.ContainsFunc(events, func(event service.PolicyEvent) bool { return event.Decision.Reason == "session_rule_matched" }), "decision events are recorded for every request")
