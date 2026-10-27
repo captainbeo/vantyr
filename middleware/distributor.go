@@ -124,7 +124,10 @@ func Distribute() func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		c.Next()
-		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+		// Vantyr fork (2026-10-27): only record affinity when the relay
+		// marked the request successful. A stream can start with 200 OK and
+		// then fail mid-way (error event); status<400 alone is not enough.
+		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest && service.RequestPolicy(c).Successful {
 			service.RecordChannelAffinity(c, channel.Id)
 		}
 	}
