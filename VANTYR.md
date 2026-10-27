@@ -5891,7 +5891,17 @@ copy, no reload; served md5 equals local for all 12 files, and the live
 `<html lang>` differs per URL (de, ja, ar, zh-CN checked). Backup:
 `/opt/vantyr-backup-docs/pre-prices-20261026-232211`.
 
-## 2026-10-27a — fable-5 off merchant 3825; latency first-token limit 10s -> 15s (LIVE)
+## 2026-10-27a — affinity + fable-5 + latency fixes (LIVE)
+
+**Affinity gate (354f7d855).** middleware/distributor deferred
+`RecordChannelAffinity` when `status<400`, but a stream can start with 200 OK
+and fail mid-way (B2's error event). The distributor recorded affinity for
+failed streams. Fix: gate affinity recording on `RequestPolicy(c).Successful`.
+The relay sets this flag to true only when the stream completes successfully or
+the non-stream response is successful. Added distributor_affinity_test.go
+covering 200+successful (record), 200+unsuccessful (skip), 500+unsuccessful
+(skip), 400+unsuccessful (skip). Related: [[vantyr-cache-pricing-gap]] switch
+rate measurement depends on accurate affinity recording.
 
 **fable-5 pool.** Merchant 3825 billed our fable-5 key at its second listing
 ($0.96/M input vs our $0.25 sell price, see 2026-10-26i). The owner deleted
