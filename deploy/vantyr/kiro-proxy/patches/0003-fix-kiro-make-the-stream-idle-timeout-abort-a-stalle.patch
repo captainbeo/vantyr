@@ -1,0 +1,379 @@
+From e406cba24f57fee2ada76a65ccb1a8303e75e0e1 Mon Sep 17 00:00:00 2001
+From: captainbeo <captainbeo@outlook.com>
+Date: Tue, 27 Oct 2026 14:12:24 +0100
+Subject: [PATCH 3/3] fix(kiro): make the stream idle timeout abort a stalled
+ read
+
+fcddf06's idleTimeoutReader cancelled a context derived from the request
+context. The HTTP transport only watches the context the request was made
+with, so a stalled Read never unblocked (its own test blocked the full 10s).
+Close the body instead, which aborts the HTTP/1.1 connection or the HTTP/2
+stream, and report the read as errStreamIdleTimeout. An idle timeout is not
+retried: the stall already cost five minutes. The reader is now closed per
+attempt instead of deferred inside the retry loop.
+
+Tests: unblocks a stalled pipe and a real HTTP/1.1 and HTTP/2 body, resets on
+activity, passes EOF, Close stops the timer.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ proxy/idle_timeout_reader.go      |  81 +++++++-------
+ proxy/idle_timeout_reader_test.go | 171 ++++++++++++++++--------------
+ proxy/kiro.go                     |  14 +--
+ 3 files changed, 136 insertions(+), 130 deletions(-)
+
+diff --git a/proxy/idle_timeout_reader.go b/proxy/idle_timeout_reader.go
+index cf9d9bc..aa747ed 100644
+--- a/proxy/idle_timeout_reader.go
++++ b/proxy/idle_timeout_reader.go
+@@ -1,67 +1,60 @@
+ package proxy
+ 
+ import (
+-	"context"
++	"errors"
+ 	"io"
+-	"sync"
++	"sync/atomic"
+ 	"time"
+ )
+ 
+-// idleTimeoutReader wraps an io.Reader and enforces an idle timeout: if no
+-// bytes are read for the specified duration, the context is canceled and
+-// subsequent reads return ctx.Err(). This guards against mid-frame stalls in
+-// streaming responses where io.ReadFull blocks indefinitely without a deadline.
++// streamIdleTimeout bounds how long a Kiro stream may go without sending a
++// byte. The gateway's own streaming timeout normally fires first; this is the
++// backstop now that the 5-minute total http.Client.Timeout is gone.
++const streamIdleTimeout = 5 * time.Minute
++
++// errStreamIdleTimeout reports a stream that sent nothing for the idle timeout.
++var errStreamIdleTimeout = errors.New("upstream stream idle timeout")
++
++// idleTimeoutReader guards a streaming body against stalls (Vantyr fork,
++// 2026-10-27). parseEventStreamTracked reads with io.ReadFull, which blocks
++// until the body yields data, so a stream that goes silent would hang forever
++// without the old total timeout. When no bytes arrive for timeout, the reader
++// closes the body: that aborts the connection (HTTP/1.1) or the stream
++// (HTTP/2) and unblocks the pending Read, whose error is then reported as
++// errStreamIdleTimeout. Cancelling a context derived from the request context
++// would not work: the transport only watches the context the request was
++// made with.
+ type idleTimeoutReader struct {
+-	r       io.Reader
+-	ctx     context.Context
+-	cancel  context.CancelFunc
+-	timeout time.Duration
+-	mu      sync.Mutex
+-	timer   *time.Timer
++	body     io.ReadCloser
++	timeout  time.Duration
++	timer    *time.Timer
++	timedOut atomic.Bool
++	stopped  atomic.Bool
+ }
+ 
+-// newIdleTimeoutReader wraps r and cancels ctx if r remains idle for timeout.
+-// Once the context is canceled, Read returns ctx.Err().
+-func newIdleTimeoutReader(r io.Reader, ctx context.Context, timeout time.Duration) *idleTimeoutReader {
+-	ctx, cancel := context.WithCancel(ctx)
+-	itr := &idleTimeoutReader{
+-		r:       r,
+-		ctx:     ctx,
+-		cancel:  cancel,
+-		timeout: timeout,
+-	}
++func newIdleTimeoutReader(body io.ReadCloser, timeout time.Duration) *idleTimeoutReader {
++	itr := &idleTimeoutReader{body: body, timeout: timeout}
+ 	itr.timer = time.AfterFunc(timeout, func() {
+-		itr.mu.Lock()
+-		defer itr.mu.Unlock()
+-		cancel()
++		itr.timedOut.Store(true)
++		_ = body.Close()
+ 	})
+ 	return itr
+ }
+ 
+-func (itr *idleTimeoutReader) Read(p []byte) (n int, err error) {
+-	// Check context before blocking on Read.
+-	if err := itr.ctx.Err(); err != nil {
+-		return 0, err
++func (itr *idleTimeoutReader) Read(p []byte) (int, error) {
++	n, err := itr.body.Read(p)
++	if n > 0 && !itr.stopped.Load() {
++		itr.timer.Reset(itr.timeout)
+ 	}
+-
+-	n, err = itr.r.Read(p)
+-	if n > 0 || err != nil {
+-		itr.mu.Lock()
+-		if itr.timer != nil {
+-			itr.timer.Reset(itr.timeout)
+-		}
+-		itr.mu.Unlock()
++	if err != nil && itr.timedOut.Load() {
++		return n, errStreamIdleTimeout
+ 	}
+ 	return n, err
+ }
+ 
+-// Close stops the idle timer. The underlying reader is not closed.
++// Close stops the idle timer. The body itself is closed by its owner.
+ func (itr *idleTimeoutReader) Close() error {
+-	itr.mu.Lock()
+-	defer itr.mu.Unlock()
+-	if itr.timer != nil {
+-		itr.timer.Stop()
+-		itr.timer = nil
+-	}
++	itr.stopped.Store(true)
++	itr.timer.Stop()
+ 	return nil
+ }
+diff --git a/proxy/idle_timeout_reader_test.go b/proxy/idle_timeout_reader_test.go
+index 8487bfe..352361e 100644
+--- a/proxy/idle_timeout_reader_test.go
++++ b/proxy/idle_timeout_reader_test.go
+@@ -1,113 +1,126 @@
+ package proxy
+ 
+ import (
+-	"context"
++	"errors"
++	"fmt"
+ 	"io"
++	"net/http"
++	"net/http/httptest"
+ 	"strings"
+ 	"testing"
+ 	"time"
+ )
+ 
+-// slowReader simulates a reader that stalls for a specified duration before
+-// returning data.
+-type slowReader struct {
+-	data  string
+-	delay time.Duration
+-	read  bool
+-}
+-
+-func (s *slowReader) Read(p []byte) (n int, err error) {
+-	if s.read {
+-		return 0, io.EOF
+-	}
+-	time.Sleep(s.delay)
+-	s.read = true
+-	n = copy(p, s.data)
+-	return n, nil
+-}
+-
+-func TestIdleTimeoutReaderCancelsOnIdle(t *testing.T) {
+-	ctx := context.Background()
+-	slow := &slowReader{data: "hello", delay: 10 * time.Second}
+-	itr := newIdleTimeoutReader(slow, ctx, 50*time.Millisecond)
++func TestIdleTimeoutReaderUnblocksStalledRead(t *testing.T) {
++	// A pipe with no writer blocks like a stalled upstream body.
++	pr, pw := io.Pipe()
++	defer pw.Close()
++	itr := newIdleTimeoutReader(pr, 50*time.Millisecond)
+ 	defer itr.Close()
+ 
+-	// The first Read should block for 10s, but the idle timer fires after 50ms
+-	// and cancels the context. The reader checks ctx.Err() before blocking,
+-	// so we should get context.Canceled within ~50-100ms.
+ 	start := time.Now()
+-	buf := make([]byte, 100)
+-	n, err := itr.Read(buf)
+-	elapsed := time.Since(start)
+-
+-	if err != context.Canceled {
+-		t.Fatalf("expected context.Canceled after idle timeout, got %v (read %d bytes in %s)", err, n, elapsed)
++	_, err := itr.Read(make([]byte, 16))
++	if !errors.Is(err, errStreamIdleTimeout) {
++		t.Fatalf("expected errStreamIdleTimeout, got %v", err)
++	}
++	if elapsed := time.Since(start); elapsed > time.Second {
++		t.Fatalf("stalled read took %s to unblock", elapsed)
+ 	}
+-	if elapsed > 200*time.Millisecond {
+-		t.Fatalf("idle timeout took too long: %s (expected ~50ms)", elapsed)
++	if isRetryableStreamError(err) {
++		t.Fatal("an idle timeout must not be retried")
+ 	}
+ }
+ 
+-func TestIdleTimeoutReaderResetsOnActivity(t *testing.T) {
+-	ctx := context.Background()
+-	r := strings.NewReader("abcdefghij")
+-	itr := newIdleTimeoutReader(r, ctx, 100*time.Millisecond)
+-	defer itr.Close()
+-
+-	// Read 5 bytes, wait 80ms (under timeout), read 5 more. The timer should
+-	// reset after the first read, so the second read should succeed.
+-	buf := make([]byte, 5)
+-	n, err := itr.Read(buf)
+-	if err != nil || n != 5 || string(buf[:n]) != "abcde" {
+-		t.Fatalf("first read failed: n=%d err=%v data=%q", n, err, buf[:n])
++// The production path: a real response body that sends a partial frame and
++// then goes silent, over HTTP/1.1 and HTTP/2 (the Kiro transport forces h2).
++func TestIdleTimeoutReaderUnblocksHTTPBody(t *testing.T) {
++	for _, h2 := range []bool{false, true} {
++		t.Run(fmt.Sprintf("http2=%t", h2), func(t *testing.T) {
++			release := make(chan struct{})
++			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				w.WriteHeader(http.StatusOK)
++				_, _ = w.Write([]byte("partial"))
++				w.(http.Flusher).Flush()
++				select {
++				case <-release:
++				case <-r.Context().Done():
++				}
++			}))
++			if h2 {
++				srv.EnableHTTP2 = true
++				srv.StartTLS()
++			} else {
++				srv.Start()
++			}
++			defer srv.Close()
++			defer close(release)
++
++			resp, err := srv.Client().Get(srv.URL)
++			if err != nil {
++				t.Fatalf("request failed: %v", err)
++			}
++			defer resp.Body.Close()
++			if want := map[bool]int{false: 1, true: 2}[h2]; resp.ProtoMajor != want {
++				t.Fatalf("expected HTTP/%d, got %s", want, resp.Proto)
++			}
++
++			itr := newIdleTimeoutReader(resp.Body, 100*time.Millisecond)
++			defer itr.Close()
++			start := time.Now()
++			got, err := io.ReadAll(itr)
++			if !errors.Is(err, errStreamIdleTimeout) {
++				t.Fatalf("expected errStreamIdleTimeout, got %v (read %q)", err, got)
++			}
++			if string(got) != "partial" {
++				t.Fatalf("expected the partial frame before the stall, got %q", got)
++			}
++			if elapsed := time.Since(start); elapsed > 2*time.Second {
++				t.Fatalf("stalled body took %s to unblock", elapsed)
++			}
++		})
+ 	}
++}
+ 
+-	time.Sleep(80 * time.Millisecond)
++func TestIdleTimeoutReaderResetsOnActivity(t *testing.T) {
++	pr, pw := io.Pipe()
++	itr := newIdleTimeoutReader(pr, 200*time.Millisecond)
++	defer itr.Close()
+ 
+-	n, err = itr.Read(buf)
+-	if err != nil || n != 5 || string(buf[:n]) != "fghij" {
+-		t.Fatalf("second read failed after timer reset: n=%d err=%v data=%q", n, err, buf[:n])
++	// Six chunks 50ms apart: 300ms in total, never 200ms idle.
++	go func() {
++		for i := 0; i < 6; i++ {
++			time.Sleep(50 * time.Millisecond)
++			_, _ = pw.Write([]byte("x"))
++		}
++		pw.Close()
++	}()
++	got, err := io.ReadAll(itr)
++	if err != nil || string(got) != "xxxxxx" {
++		t.Fatalf("expected 6 bytes and EOF, got %q err=%v", got, err)
+ 	}
+ }
+ 
+ func TestIdleTimeoutReaderPassesEOF(t *testing.T) {
+-	ctx := context.Background()
+-	r := strings.NewReader("hi")
+-	itr := newIdleTimeoutReader(r, ctx, 1*time.Second)
++	itr := newIdleTimeoutReader(io.NopCloser(strings.NewReader("hi")), time.Second)
+ 	defer itr.Close()
+-
+-	buf := make([]byte, 10)
+-	n, err := itr.Read(buf)
+-	if err != nil || n != 2 || string(buf[:n]) != "hi" {
+-		t.Fatalf("first read failed: n=%d err=%v", n, err)
+-	}
+-
+-	n, err = itr.Read(buf)
+-	if err != io.EOF {
+-		t.Fatalf("expected EOF on exhausted reader, got n=%d err=%v", n, err)
++	got, err := io.ReadAll(itr)
++	if err != nil || string(got) != "hi" {
++		t.Fatalf("expected %q, got %q err=%v", "hi", got, err)
+ 	}
+ }
+ 
+ func TestIdleTimeoutReaderCloseStopsTimer(t *testing.T) {
+-	ctx := context.Background()
+-	slow := &slowReader{data: "data", delay: 10 * time.Second}
+-	itr := newIdleTimeoutReader(slow, ctx, 50*time.Millisecond)
+-
+-	// Close immediately. The timer should stop, and the context should not be
+-	// canceled (because Close stops the timer before it fires).
++	pr, pw := io.Pipe()
++	itr := newIdleTimeoutReader(pr, 50*time.Millisecond)
+ 	if err := itr.Close(); err != nil {
+ 		t.Fatalf("Close failed: %v", err)
+ 	}
++	time.Sleep(120 * time.Millisecond)
+ 
+-	time.Sleep(100 * time.Millisecond)
+-
+-	// The timer was stopped, but the Read still checks ctx.Err(). If ctx is
+-	// still active, the slow reader will block for 10s. We'll just check that
+-	// the context hasn't been canceled yet.
+-	select {
+-	case <-itr.ctx.Done():
+-		t.Fatalf("context was canceled after Close (timer should have been stopped)")
+-	default:
+-		// ok
++	// The timer was stopped, so the body is still open and readable.
++	go func() { _, _ = pw.Write([]byte("ok")); pw.Close() }()
++	got, err := io.ReadAll(itr)
++	if err != nil || string(got) != "ok" {
++		t.Fatalf("expected %q after Close, got %q err=%v", "ok", got, err)
+ 	}
+ }
+diff --git a/proxy/kiro.go b/proxy/kiro.go
+index 7463a20..524afcc 100644
+--- a/proxy/kiro.go
++++ b/proxy/kiro.go
+@@ -458,14 +458,10 @@ endpointLoop:
+ 				continue endpointLoop
+ 			}
+ 
+-			//! Guard against mid-frame stalls: io.ReadFull blocks indefinitely if
+-			//! the upstream stops sending data mid-frame. The idle timeout reader
+-			//! cancels ctx after 5 minutes of read inactivity, causing the next
+-			//! ReadFull to unblock and check ctx.Err().
+-			idleBody := newIdleTimeoutReader(resp.Body, ctx, 5*time.Minute)
+-			defer idleBody.Close()
+-
++			//! No total client timeout (long answers run past 5 minutes), so bound idle time instead.
++			idleBody := newIdleTimeoutReader(resp.Body, streamIdleTimeout)
+ 			emitted, err := parseEventStreamTracked(idleBody, callback)
++			idleBody.Close()
+ 			resp.Body.Close()
+ 			if err == nil {
+ 				return nil
+@@ -513,6 +509,10 @@ func isRetryableStreamError(err error) bool {
+ 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+ 		return false
+ 	}
++	//! A stall already cost streamIdleTimeout; retrying would cost it again.
++	if errors.Is(err, errStreamIdleTimeout) {
++		return false
++	}
+ 	var netErr net.Error
+ 	return !errors.As(err, &netErr) || !netErr.Timeout()
+ }
+-- 
+2.54.0.windows.1
+

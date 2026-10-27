@@ -17,7 +17,7 @@ services:
     # were already in HEAD. Build only with deploy/vantyr/scripts/
     # build-gateway.sh (verified tarball of a pinned SHA), then point `image:`
     # at the new tag. `docker compose build gateway` is now a silent no-op.
-    image: vantyr/new-api:vt-42af91d64
+    image: vantyr/new-api:vt-27c-20261027-132738
     container_name: vantyr-gateway
     restart: unless-stopped
     command: --log-dir /app/logs
@@ -205,10 +205,11 @@ services:
   # kiro-proxy — Kiro account pool → Anthropic/OpenAI-compatible API.
   # Sidecar that turns the operator's authorized Kiro accounts into the
   # Opus+Sonnet primary pool. Registered in the gateway as a channel; loopback
-  # only (Caddy/gateway reach it over the vantyr network). Pinned image digest
-  # below; see VANTYR.md for the upstream review note.
+  # only (Caddy/gateway reach it over the vantyr network). Locally built image
+  # (upstream 9290b35 + deploy/vantyr/kiro-proxy/patches, 2026-10-27c); see
+  # VANTYR.md for the upstream review note and how to rebuild.
   kiro-proxy:
-    image: ghcr.io/tanu360/kiro-reverse-api@sha256:68425f261983afa228db1a8f18a26ae5a83862636cbac24ed644e3cfd1c8505f
+    image: vantyr/kiro-proxy:e406cba-20261027
     container_name: vantyr-kiro-proxy
     restart: unless-stopped
     environment:

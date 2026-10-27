@@ -1,0 +1,275 @@
+From fcddf063c9069fd4418dc4affeed5df0f07f0b19 Mon Sep 17 00:00:00 2001
+From: captainbeo <captainbeo@outlook.com>
+Date: Tue, 27 Oct 2026 04:04:15 +0100
+Subject: [PATCH 2/3] fix(kiro): guard parseEventStreamTracked against
+ mid-frame idle stalls
+
+io.ReadFull blocks indefinitely when the upstream stops sending data
+mid-frame. For callers with their own request timeouts (e.g. gateway's
+StreamingTimeout), this is bounded, but a caller without one could hang
+forever.
+
+Wrap resp.Body in an idleTimeoutReader that cancels the request context
+after 5 minutes of read inactivity. The reader checks ctx.Err() before
+blocking, causing io.ReadFull to unblock and return context.Canceled.
+
+Also removed Client.Timeout from GetClientForProxy (was still 5m), which
+would abort healthy streams after 5 minutes total. Long Claude Opus
+answers often exceed 5 minutes.
+
+Fixes: lines 568+589 in proxy/kiro.go (parseEventStreamTracked).
+Tests: proxy/idle_timeout_reader_test.go covers timeout+reset+EOF+Close.
+---
+ proxy/idle_timeout_reader.go      |  67 ++++++++++++++++++
+ proxy/idle_timeout_reader_test.go | 113 ++++++++++++++++++++++++++++++
+ proxy/kiro.go                     |  13 +++-
+ proxy/kiro_test.go                |   7 +-
+ 4 files changed, 196 insertions(+), 4 deletions(-)
+ create mode 100644 proxy/idle_timeout_reader.go
+ create mode 100644 proxy/idle_timeout_reader_test.go
+
+diff --git a/proxy/idle_timeout_reader.go b/proxy/idle_timeout_reader.go
+new file mode 100644
+index 0000000..cf9d9bc
+--- /dev/null
++++ b/proxy/idle_timeout_reader.go
+@@ -0,0 +1,67 @@
++package proxy
++
++import (
++	"context"
++	"io"
++	"sync"
++	"time"
++)
++
++// idleTimeoutReader wraps an io.Reader and enforces an idle timeout: if no
++// bytes are read for the specified duration, the context is canceled and
++// subsequent reads return ctx.Err(). This guards against mid-frame stalls in
++// streaming responses where io.ReadFull blocks indefinitely without a deadline.
++type idleTimeoutReader struct {
++	r       io.Reader
++	ctx     context.Context
++	cancel  context.CancelFunc
++	timeout time.Duration
++	mu      sync.Mutex
++	timer   *time.Timer
++}
++
++// newIdleTimeoutReader wraps r and cancels ctx if r remains idle for timeout.
++// Once the context is canceled, Read returns ctx.Err().
++func newIdleTimeoutReader(r io.Reader, ctx context.Context, timeout time.Duration) *idleTimeoutReader {
++	ctx, cancel := context.WithCancel(ctx)
++	itr := &idleTimeoutReader{
++		r:       r,
++		ctx:     ctx,
++		cancel:  cancel,
++		timeout: timeout,
++	}
++	itr.timer = time.AfterFunc(timeout, func() {
++		itr.mu.Lock()
++		defer itr.mu.Unlock()
++		cancel()
++	})
++	return itr
++}
++
++func (itr *idleTimeoutReader) Read(p []byte) (n int, err error) {
++	// Check context before blocking on Read.
++	if err := itr.ctx.Err(); err != nil {
++		return 0, err
++	}
++
++	n, err = itr.r.Read(p)
++	if n > 0 || err != nil {
++		itr.mu.Lock()
++		if itr.timer != nil {
++			itr.timer.Reset(itr.timeout)
++		}
++		itr.mu.Unlock()
++	}
++	return n, err
++}
++
++// Close stops the idle timer. The underlying reader is not closed.
++func (itr *idleTimeoutReader) Close() error {
++	itr.mu.Lock()
++	defer itr.mu.Unlock()
++	if itr.timer != nil {
++		itr.timer.Stop()
++		itr.timer = nil
++	}
++	return nil
++}
+diff --git a/proxy/idle_timeout_reader_test.go b/proxy/idle_timeout_reader_test.go
+new file mode 100644
+index 0000000..8487bfe
+--- /dev/null
++++ b/proxy/idle_timeout_reader_test.go
+@@ -0,0 +1,113 @@
++package proxy
++
++import (
++	"context"
++	"io"
++	"strings"
++	"testing"
++	"time"
++)
++
++// slowReader simulates a reader that stalls for a specified duration before
++// returning data.
++type slowReader struct {
++	data  string
++	delay time.Duration
++	read  bool
++}
++
++func (s *slowReader) Read(p []byte) (n int, err error) {
++	if s.read {
++		return 0, io.EOF
++	}
++	time.Sleep(s.delay)
++	s.read = true
++	n = copy(p, s.data)
++	return n, nil
++}
++
++func TestIdleTimeoutReaderCancelsOnIdle(t *testing.T) {
++	ctx := context.Background()
++	slow := &slowReader{data: "hello", delay: 10 * time.Second}
++	itr := newIdleTimeoutReader(slow, ctx, 50*time.Millisecond)
++	defer itr.Close()
++
++	// The first Read should block for 10s, but the idle timer fires after 50ms
++	// and cancels the context. The reader checks ctx.Err() before blocking,
++	// so we should get context.Canceled within ~50-100ms.
++	start := time.Now()
++	buf := make([]byte, 100)
++	n, err := itr.Read(buf)
++	elapsed := time.Since(start)
++
++	if err != context.Canceled {
++		t.Fatalf("expected context.Canceled after idle timeout, got %v (read %d bytes in %s)", err, n, elapsed)
++	}
++	if elapsed > 200*time.Millisecond {
++		t.Fatalf("idle timeout took too long: %s (expected ~50ms)", elapsed)
++	}
++}
++
++func TestIdleTimeoutReaderResetsOnActivity(t *testing.T) {
++	ctx := context.Background()
++	r := strings.NewReader("abcdefghij")
++	itr := newIdleTimeoutReader(r, ctx, 100*time.Millisecond)
++	defer itr.Close()
++
++	// Read 5 bytes, wait 80ms (under timeout), read 5 more. The timer should
++	// reset after the first read, so the second read should succeed.
++	buf := make([]byte, 5)
++	n, err := itr.Read(buf)
++	if err != nil || n != 5 || string(buf[:n]) != "abcde" {
++		t.Fatalf("first read failed: n=%d err=%v data=%q", n, err, buf[:n])
++	}
++
++	time.Sleep(80 * time.Millisecond)
++
++	n, err = itr.Read(buf)
++	if err != nil || n != 5 || string(buf[:n]) != "fghij" {
++		t.Fatalf("second read failed after timer reset: n=%d err=%v data=%q", n, err, buf[:n])
++	}
++}
++
++func TestIdleTimeoutReaderPassesEOF(t *testing.T) {
++	ctx := context.Background()
++	r := strings.NewReader("hi")
++	itr := newIdleTimeoutReader(r, ctx, 1*time.Second)
++	defer itr.Close()
++
++	buf := make([]byte, 10)
++	n, err := itr.Read(buf)
++	if err != nil || n != 2 || string(buf[:n]) != "hi" {
++		t.Fatalf("first read failed: n=%d err=%v", n, err)
++	}
++
++	n, err = itr.Read(buf)
++	if err != io.EOF {
++		t.Fatalf("expected EOF on exhausted reader, got n=%d err=%v", n, err)
++	}
++}
++
++func TestIdleTimeoutReaderCloseStopsTimer(t *testing.T) {
++	ctx := context.Background()
++	slow := &slowReader{data: "data", delay: 10 * time.Second}
++	itr := newIdleTimeoutReader(slow, ctx, 50*time.Millisecond)
++
++	// Close immediately. The timer should stop, and the context should not be
++	// canceled (because Close stops the timer before it fires).
++	if err := itr.Close(); err != nil {
++		t.Fatalf("Close failed: %v", err)
++	}
++
++	time.Sleep(100 * time.Millisecond)
++
++	// The timer was stopped, but the Read still checks ctx.Err(). If ctx is
++	// still active, the slow reader will block for 10s. We'll just check that
++	// the context hasn't been canceled yet.
++	select {
++	case <-itr.ctx.Done():
++		t.Fatalf("context was canceled after Close (timer should have been stopped)")
++	default:
++		// ok
++	}
++}
+diff --git a/proxy/kiro.go b/proxy/kiro.go
+index c4683f7..7463a20 100644
+--- a/proxy/kiro.go
++++ b/proxy/kiro.go
+@@ -84,8 +84,10 @@ func GetClientForProxy(proxyURL string) *http.Client {
+ 	if cached, ok := proxyClientCache.Load(proxyURL); ok {
+ 		return cached.(*http.Client)
+ 	}
++	// Vantyr fork (2026-10-27): drop Client.Timeout to match InitKiroHttpClient;
++	// long Claude Opus answers often take >5 minutes, and the idle-timeout reader
++	// guards against mid-frame stalls.
+ 	client := &http.Client{
+-		Timeout:   5 * time.Minute,
+ 		Transport: buildKiroTransport(proxyURL),
+ 	}
+ 	proxyClientCache.Store(proxyURL, client)
+@@ -456,7 +458,14 @@ endpointLoop:
+ 				continue endpointLoop
+ 			}
+ 
+-			emitted, err := parseEventStreamTracked(resp.Body, callback)
++			//! Guard against mid-frame stalls: io.ReadFull blocks indefinitely if
++			//! the upstream stops sending data mid-frame. The idle timeout reader
++			//! cancels ctx after 5 minutes of read inactivity, causing the next
++			//! ReadFull to unblock and check ctx.Err().
++			idleBody := newIdleTimeoutReader(resp.Body, ctx, 5*time.Minute)
++			defer idleBody.Close()
++
++			emitted, err := parseEventStreamTracked(idleBody, callback)
+ 			resp.Body.Close()
+ 			if err == nil {
+ 				return nil
+diff --git a/proxy/kiro_test.go b/proxy/kiro_test.go
+index 6ea9774..50c9897 100644
+--- a/proxy/kiro_test.go
++++ b/proxy/kiro_test.go
+@@ -234,8 +234,11 @@ func TestInitKiroHttpClientKeepsShortRestTimeout(t *testing.T) {
+ 	streamClient := kiroHttpStore.Load()
+ 	restClient := kiroRestHttpStore.Load()
+ 
+-	if streamClient.Timeout != 5*time.Minute {
+-		t.Fatalf("expected streaming timeout to be 5m, got %s", streamClient.Timeout)
++	// Vantyr fork (2026-10-27): streaming client has no Timeout; the
++	// idle-timeout reader guards against mid-frame stalls, and long answers
++	// can exceed 5 minutes.
++	if streamClient.Timeout != 0 {
++		t.Fatalf("expected streaming timeout to be 0 (no Client.Timeout), got %s", streamClient.Timeout)
+ 	}
+ 	if restClient.Timeout != 30*time.Second {
+ 		t.Fatalf("expected REST timeout to stay 30s, got %s", restClient.Timeout)
+-- 
+2.54.0.windows.1
+
