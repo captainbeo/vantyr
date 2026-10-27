@@ -5777,6 +5777,75 @@ clearing channel 95's `param_override`.
 in the same `operations` array; the affinity rule's `param_override_template`
 (pass-headers) is merged in front of channel operations, not replacing them.
 
+## 2026-10-26i — cache-read prices cut to the no-loss floor (LIVE, interim)
+
+Owner decision 2026-10-26: until the long-term cache pricing model is chosen,
+cache reads are priced at the lowest level that cannot lose money on any
+merchant a model can rotate to, instead of 2x. New read price = the highest
+cache-read price among the listed merchants in the model's pin pool, rounded
+up. Input, output and cache-write prices are unchanged. Applied 2026-10-26
+23:01 UTC to options `CacheRatio` and the `cr` terms of
+`billing_setting.billing_expr`; picked up by the 60s options sync.
+
+| Model | read before ($/1M) | read after | after, % of input |
+|---|---|---|---|
+| claude-opus-5-5 (expr) | 0.02 | 0.004 | 4% |
+| claude-sonnet-5-5 (expr) | 0.01 | 0.003 | 2% |
+| claude-fable-5 | 0.05 | 0.025 | 10% |
+| claude-fable-5-1 | 0.05 | 0.004 | 1.6% |
+| claude-opus-5 | 0.01 | 0.007 | 7% |
+| claude-sonnet-5 | 0.015 | 0.004 | 4% |
+| claude-haiku-5-5 | 0.01 | 0.005 | 10% |
+| gpt-6-astra | 0.10 | 0.01 | 5% |
+| gpt-6-sol | 0.01 | 0.0012 | 4% |
+| gpt-6.1-sol / gpt-6-1-sol | 0.06 | 0.003 | 3% |
+
+Ratio values: opus-5-5 0.026666666667, sonnet-5-5 0.02, fable-5 0.1,
+fable-5-1 0.016, opus-5 0.07, sonnet-5 0.04, haiku-5-5 0.1, astra 0.05,
+gpt-6-sol 0.04, 6.1-sol (both spellings) 0.03. The expression models bill from
+their expressions (`cr * 0.004`, `cr * 0.003`); their CacheRatio entries only
+keep the pricing page consistent. 2026-10-26j later moved opus-5-5 to a 0.05
+ModelRatio basis, so its CacheRatio is now 0.04 (same $0.004 read); sonnet-5-5
+stays 0.02.
+
+Exception: fable-5's floor ignores one listing whose price is 13x the
+merchant's normal listing (see the finding below).
+
+**Evidence.**
+- `/api/pricing` served every new value within the sync window.
+- Expression path: opus-5-5 consume rows after the sync match
+  `(p*0.1 + c*0.45 + cr*0.004 + cc*0.1 + cc1h*0.16) * 0.5` exactly, e.g. row
+  72884 (cr 626,483) billed 1263 vs 1262.6 predicted. The one mismatch (row
+  72883) started before the sync and billed at the old `cr * 0.02`.
+- Ratio path: three gpt-6-sol probe requests through the gateway with real
+  cache hits; rows 72944/72945 billed 66/56 vs 65.6/55.8 predicted at the new
+  price (the old price would have billed ~84 for 72944).
+
+**Impact.** Re-pricing the last 7 days of traffic: $17.41 less on $98.26
+billed (-18%), 79% of it opus-5-5 (860M read tokens).
+
+**Rollback.** `/opt/vantyr/backups/options-cache-pre-floor-20261026.tsv` holds
+`CacheRatio` and `billing_setting.billing_expr` as they were before this
+change, but it predates 2026-10-26j, so do NOT restore it verbatim. Restore
+only the read prices:
+- `billing_setting.billing_expr`: put the `cr` terms back to `cr * 0.02`
+  (opus-5-5) and `cr * 0.01` (sonnet-5-5), leaving every other term as is.
+- `CacheRatio` for the 9 ratio-mode names: take the values from the backup.
+- `CacheRatio` for the expression models: opus-5-5 0.2 and sonnet-5-5
+  0.066666666667 (the old $0.02 / $0.01 on the post-26j ratio basis). The
+  backup's 0.133333333333 would show opus-5-5 reads at $0.0133.
+- Leave `ModelRatio`, `CompletionRatio` and `CreateCacheRatio` alone; 26j
+  set them to match the expressions.
+Then wait 60s for the options sync.
+
+**Finding (not fixed).** A6 log rows show the active fable-5 pin's key billing
+at that merchant's second listing, $0.96/M input (13x its normal $0.072),
+since 2026-10-25 (last cheap row 12:34 UTC, first expensive row 20:06 UTC). Our fable-5 sell price is
+$0.25/M, so every fable-5 token on that pin is billed below cost. The public
+marketplace search returns both listings under the same merchant id, and the
+monitor keys merchant health and price by merchant id, so the routing page can
+show the cheap price.
+
 ## 2026-10-26j — $75 alias rows removed; Discord and /docs prices aligned to billing (LIVE)
 
 **$75 rows.** `/api/pricing` listed `claude-opus-5.5`, `claude-sonnet-5.5` and
@@ -5821,3 +5890,27 @@ exact-match guards, and every locale's inline script still parses. Deployed by
 copy, no reload; served md5 equals local for all 12 files, and the live
 `<html lang>` differs per URL (de, ja, ar, zh-CN checked). Backup:
 `/opt/vantyr-backup-docs/pre-prices-20261026-232211`.
+
+## 2026-10-27a — fable-5 off merchant 3825; latency first-token limit 10s -> 15s (LIVE)
+
+**fable-5 pool.** Merchant 3825 billed our fable-5 key at its second listing
+($0.96/M input vs our $0.25 sell price, see 2026-10-26i). The owner deleted
+the "FABLE 5 | 3825" key on A6 at ~00:55 UTC. Channel 11 (a6pin-fable-5-3825)
+was still the only enabled fable-5 pin and now returned 401 invalid key, so
+5630 was promoted through the monitor's promote action at 01:04:48 UTC
+(pre-promotion verify attr_match), and channel 11 was deleted from the gateway
+(the key sync cannot recreate it: its A6 key is gone). No customer fable-5
+requests failed in the gap. Pool now: 5630 active; 1169, 4756, 4665 and the
+legacy a6pin-fable-5 as standbys. 3825 keys for other models are untouched.
+
+**First-token limit.** `CCTEST_LATENCY_FRT_MS_THRESHOLD=15000` added to the
+server `.env` (backup `/opt/vantyr/backups/env-pre-frt15-20261027-013514`),
+monitor recreated with `up -d` 01:35 UTC; container env and the startup line
+(`frt>=15000ms`) confirm it. The circuit breaker for kiro-pool does not use
+first-token time and is unchanged.
+
+Effect on the 2026-10-26/27 rotations: the three latency-only rotations with a
+13.1-13.3s mean first-token time (fable-5 5630 twice, opus-5-5 4939) would not
+have fired. 6.1-sol 6481 (mean 19.2s) still would: one 300s stalled request
+dominates the mean while the median was 1.7s. Known gap: the check uses the
+mean, and large prompts (20-100k context, p50 17-34s) exceed any fixed limit.
