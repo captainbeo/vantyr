@@ -6006,3 +6006,67 @@ both.
   not succeeded since 2026-10-26 16:50, so sonnet-5 has no working backup.
 - First minutes after the swap: claude-opus-5-5 4 Kiro / 0 A6, haiku 1/0, no
   errors (24h before: opus-5-5 2604 Kiro / 556 A6).
+
+## 2026-10-27e — cctest-monitor pin-pool upgrade (LIVE)
+
+**Problems.**
+- Post-promotion grace sliced the success count but not the error rows, and
+  only started at a monitor promotion. fable-5's only pin (ch51) was benched
+  at 14:01 on errors from its previous stint; ch9 (enabled through the API at
+  ~17:05) was benched at 17:29 on 20 errors from 12:54, and the cycle then
+  promoted the delisted legacy pin ch8, which tested attr_swapped at 18:36.
+- The 5-minute breaker and the primary (Kiro) sweep took the mutation lock
+  non-blocking and skipped whenever the hourly cycle was mid-check: 29
+  `[primary] ... skipping this tick` lines on 2026-10-27, up to three in a row
+  (09:22-09:32). The 1-minute restore probe shares that lock.
+- Nothing topped a pool up to MIN_ACTIVE_PINS; promotion only ran after a
+  failure. A promotion with an inconclusive direct check fell back to
+  enable-then-verify even while another pin still served the model.
+- Gateway-routed checks tested whichever channel the router picked: for the
+  Kiro models that was kiro-pool, so their A6 pins went 13-35h without a
+  verdict of their own.
+
+**Fix (e063404c1, `fix/a6-pool-hardening`).**
+- Grace: error rows are sliced to the grace start, which is the later of
+  `promoted_at` and the gateway's `other_info.status_time` (any enable).
+- Lock: fast ticks wait up to FAST_TICK_LOCK_WAIT_SECONDS (360); the cycle
+  yields to a waiting fast tick between channels.
+- Fast bench: CIRCUIT_POOL_ERROR_STREAK (3) A6 pool errors since the last
+  success benches a pin on the next breaker tick, never the pool's last pin.
+- Refill: `refill_active_pins` at the end of each cycle enables standbys that
+  PASS an own-key check, at most REFILL_MAX_CHECKS (2) per pool per cycle;
+  skips quarantined, cooldown-marked and delisted standbys; pools with no
+  active pin stay with the failover path.
+- Promotion while the model is still served: PASS only (inconclusive or no
+  revealable key = not enabled). The fail-open path is kept for a pool with
+  no serving pin (2026-10-24 deadlock guard).
+- Active pins are checked with their own A6 key, using the upstream spelling
+  (gpt-6.1-sol); no gateway attribution hop for a direct check.
+- Per-model targets: MIN_ACTIVE_PINS_BY_MODEL ("claude-fable-5-1:3", any alias
+  spelling). Haiku A6 keys ("HAIKU 5.5 | <id>") map to `a6pin-haiku-5-5-<id>`.
+- The breaker keys active pins by model pool (a dual-spelling pin was scored
+  twice per tick).
+- Not built: margin guard (owner to pick the rule).
+Tests (python:3.12-slim): test_monitor_pool.py 28/28 (new),
+test_monitor_hardening.py 27/27, test_monitor.py 94/94. Three dedup tests had
+been failing on the deployed code since the 2026-10-26 default of 2 pins; they
+now run with `single_pin_target()`.
+
+**Deploy (2026-10-27 23:20 UTC).**
+- Pre-flight: previous cycle finished 23:18:38; compose + .env vs the live
+  container: 45 env keys, none differ (the new knobs are not in the server
+  compose yet and use the code defaults, which equal the repo compose
+  defaults); gateway and kiro-proxy healthy; disk 31%.
+- `/app/monitor.py` md5 ef2562ce4681307055bd2f52713f0112 (LF, = `git show
+  e063404c1:...`; the Windows working copy is CRLF). `docker compose -f
+  compose.yaml build cctest-monitor` + `up -d --no-deps cctest-monitor`; image
+  sha256:f1e99750dd76, started 23:20:40.
+- Rollback: image `vantyr/cctest-monitor:rollback-pre-e063404c1-20261027T232028Z`
+  (b425fa42ae5a), `cctest-monitor/monitor.py.bak-pre-e063404c1-20261027T232028Z`,
+  state `/opt/vantyr/backups/cctest-state-pre-e063404c1-20261027T232028Z.json`.
+- First cycle 23:20:41-23:27:41: 18 own-key direct checks (17 attr_match,
+  6.1-sol 5110 attr_upgraded), one gateway-routed check (kiro-pool sonnet-5,
+  attr_match), 0 attribution hops, 0 lock skips, 0 tracebacks, no refill or
+  bench needed (every pool at 2/2). Breaker ticks 23:25 and 23:30 ran on time;
+  ch9 scored in grace ("enabled 233.3m ago"). Channel states unchanged.
+- The gateway retry fix 14c98d6ab is NOT deployed (live gateway still vt-27c).
