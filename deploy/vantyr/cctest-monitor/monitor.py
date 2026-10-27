@@ -716,7 +716,13 @@ class A6Market:
         the 2026-10-23 sonnet-5 outage (auto-promote picked delisted
         merchant 1204). Merchant ids arrive as strings (channel-name
         suffixes) but the listing's channel_id is an int — compare as
-        strings."""
+        strings.
+
+        Every spelling in the model's pool is searched (2026-10-27): A6
+        lists gpt-6-1-sol only as gpt-6.1-sol, so a search for the canonical
+        SKU returned nothing and EVERY 6-1-sol merchant read as delisted. The
+        ranking then meant nothing and promotion flapped between delisted
+        #85 and degraded #89 while eight 97-100% merchants sat unused."""
         our = {str(x) for x in our_merchant_ids}
         # Seed every requested merchant as unlisted/unhealthy; listed ones
         # overwrite with their live telemetry.
@@ -732,9 +738,13 @@ class A6Market:
             }
             for cid in our
         }
-        for item in self.search(model):
+        items = []
+        for spelling in sorted(model_pool_names(model)):
+            items.extend(self.search(spelling))
+        for item in items:
             cid = str(item.get("channel_id"))
-            if cid in our:
+            # First listing wins when a merchant appears under two spellings.
+            if cid in our and out[cid]["unlisted"]:
                 success = item.get("recent_success_rate")
                 samples = item.get("sample_count") or 0
                 avail = item.get("listing_availability")
@@ -824,6 +834,65 @@ class A6Management:
         if not key:
             raise RuntimeError(f"A6 key reveal returned empty key for token {token_id}")
         return key
+
+    def wallet_balance_usd(self, quota_per_unit=500000):
+        """The account wallet's remaining balance in USD (GET /api/user/self,
+        data.quota / quota_per_unit — A6 /api/status reports 500000). Every
+        A6 key is unlimited_quota, so this wallet is what every merchant
+        spends from (2026-10-27). Raises on any failure."""
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "New-Api-User": str(self.user_id),
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        }
+        req = urllib.request.Request(f"{self.base}/api/user/self", headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode())
+        if not payload.get("success"):
+            raise RuntimeError(f"A6 user/self failed: {payload.get('message')}")
+        quota = (payload.get("data") or {}).get("quota")
+        if not isinstance(quota, (int, float)):
+            raise RuntimeError("A6 user/self returned no quota")
+        return quota / float(quota_per_unit)
+
+
+# A6 wallet low-balance alert (checklist C4, 2026-10-27). An empty wallet
+# fails EVERY merchant at once with 403 当前可用额度不足 — the sick rotation
+# now ignores those errors (is_wallet_error), so this alert is the signal.
+# Alerts once when the balance drops below A6_WALLET_ALERT_USD, once more below
+# A6_WALLET_CRITICAL_USD, and re-arms after a top-up lifts it back above the
+# warning level (a partial top-up into the low band re-arms only the critical
+# alert). A failed balance read never alerts (and never clears).
+def check_wallet(a6m, state, discord, warn_usd, critical_usd, quota_per_unit=500000):
+    try:
+        balance = a6m.wallet_balance_usd(quota_per_unit)
+    except Exception as e:
+        LOG.warning("[wallet] A6 balance check failed: %s", e)
+        return None
+    wallet = state.setdefault("_wallet", {})
+    wallet["balance_usd"] = round(balance, 2)
+    wallet["checked_at"] = datetime.now(timezone.utc).isoformat()
+    level = "critical" if balance < critical_usd else "low" if balance < warn_usd else "ok"
+    alerted = wallet.get("alerted")  # None | "low" | "critical"
+    if level == "ok":
+        if alerted:
+            LOG.info("[wallet] A6 balance back to $%.2f — alert re-armed", balance)
+            discord_alert(discord, f"cctest: A6 wallet topped up — balance ${balance:.2f}")
+        wallet["alerted"] = None
+    elif level == "critical" and alerted != "critical":
+        LOG.warning("[wallet] A6 balance CRITICAL: $%.2f (< $%.2f)", balance, critical_usd)
+        discord_alert(discord, f"cctest: CRITICAL — A6 wallet at ${balance:.2f} (below ${critical_usd:.2f}). "
+                               f"When it hits $0 every A6 merchant fails with 403. Top up now.")
+        wallet["alerted"] = "critical"
+    elif level == "low" and alerted is None:
+        LOG.warning("[wallet] A6 balance low: $%.2f (< $%.2f)", balance, warn_usd)
+        discord_alert(discord, f"cctest: A6 wallet low — ${balance:.2f} left (below ${warn_usd:.2f}). Top up soon.")
+        wallet["alerted"] = "low"
+    elif level == "low" and alerted == "critical":
+        # Partial top-up out of the critical band: no message, but a second
+        # drain below critical must page again.
+        wallet["alerted"] = "low"
+    return balance
 
 
 # ---------------------------------------------------------------------------
@@ -1058,8 +1127,12 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
       - client_gone ratio over STREAMING consume rows (non-stream rows log
         frt=-1000 with no stream_status on every success — the ch25 false
         positive, 2026-10-22). The ch52 case: 46%.
-      - mean frt (ms) over streaming rows; frt == -1000 on a STREAM row is
-        a hang (no first token ever — the ch40 case, 11 hangs at 8% gone).
+      - median frt (ms) over streaming rows with normal-size prompts (owner
+        refinement 2026-10-27): the mean was skewed by outlier spikes and by
+        large prompts whose baseline is legitimately higher. frt == -1000 on
+        a STREAM row is a hang (no first token ever — the ch40 case, 11
+        hangs at 8% gone). Prompts over 10K input tokens are excluded from
+        the frt baseline (large context deserves a higher threshold).
       - hard-error ratio: type=5 rows vs type=2 rows in the window. The
         ch74 opus-5 case: 25 x 502 "smart-routing candidates all failed"
         interleaved with 465 successes — invisible to both older checks.
@@ -1113,11 +1186,21 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
         if is_gone:
             gone += 1
         if frt is not None and frt >= 0:
-            frts.append(frt)
+            # Owner refinement 2026-10-27: only normal-size prompts count
+            # toward the latency baseline (large context deserves a higher
+            # threshold and was skewing the mean). usage_semantic holds the
+            # PROMPT token count (input_tokens_total includes cache hits).
+            try:
+                usage = _parse_other(row).get("usage_semantic") or {}
+                input_tokens = int(usage.get("input_tokens_total") or 0)
+            except (TypeError, ValueError):
+                input_tokens = 0
+            if input_tokens <= 10000:
+                frts.append(frt)
         elif frt == -1000:
             # Streaming row that never produced a first token = hang.
             # Counted in `hangs` only — NOT in `gone` (separate axis) and
-            # NOT in `frts` (the mean must stay an honest mean of observed
+            # NOT in `frts` (the median must stay an honest median of observed
             # first-token times; hangs already trip via hang_threshold).
             hangs += 1
     # Judge latency only with enough streaming traffic (fail-open on thin
@@ -1127,12 +1210,19 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
     latency_sick = False
     if len(stream_rows) >= min_samples:
         ratio = gone / len(stream_rows)
-        mean_frt = (sum(frts) / len(frts)) if frts else 0
-        latency_sick = (ratio >= client_gone_ratio or mean_frt >= frt_ms_threshold
+        # Owner refinement 2026-10-27: median frt instead of mean — more
+        # robust against outlier spikes that skewed the mean above the
+        # threshold (large prompts are already excluded from frts).
+        if frts:
+            sorted_frts = sorted(frts)
+            median_frt = sorted_frts[len(sorted_frts) // 2]
+        else:
+            median_frt = 0
+        latency_sick = (ratio >= client_gone_ratio or median_frt >= frt_ms_threshold
                         or hangs >= hang_threshold)
     else:
         ratio = -1.0
-        mean_frt = -1
+        median_frt = -1
     # Error-axis trip requires BOTH a ratio AND an absolute count (owner
     # decision 2026-10-25): at Kiro's bursty volume a quiet 15-minute window
     # can hold ~30 requests, so 3 failures read as 10% and disabled the
@@ -1143,9 +1233,9 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
                   and hard_errors >= min_errors)
     sick = latency_sick or error_sick
     LOG.info(
-        "[latency] ch %s: hard_err=%d ok=%d (ratio=%.2f, all_err=%d), stream=%d, client_gone=%d (%.0f%%), hangs=%d, mean_frt=%dms -> %s",
+        "[latency] ch %s: hard_err=%d ok=%d (ratio=%.2f, all_err=%d), stream=%d, client_gone=%d (%.0f%%), hangs=%d, median_frt=%dms -> %s",
         channel_id, hard_errors, successes, error_ratio, total_errors, len(stream_rows), gone,
-        ratio * 100 if ratio >= 0 else 0, hangs, mean_frt, "SICK" if sick else "ok",
+        ratio * 100 if ratio >= 0 else 0, hangs, median_frt, "SICK" if sick else "ok",
     )
     # Thin evidence on BOTH axes → no verdict at all (fail-open). A pin
     # serving a handful of requests an hour must not be judged "healthy"
@@ -1153,6 +1243,34 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
     if len(stream_rows) < min_samples and total < min_samples:
         return None
     return sick
+
+
+# A6 wallet exhaustion (2026-10-27): every A6 key on the account is
+# unlimited_quota, so "当前可用额度不足" (403) means the ACCOUNT wallet is
+# empty — every merchant fails identically and none of them is at fault.
+# Rotating on it burns through good standbys and promotes nothing better.
+WALLET_ERROR_MARKERS = ("当前可用额度不足", "insufficient_user_quota")
+
+
+def is_wallet_error(content):
+    text = str(content or "")
+    return any(marker in text for marker in WALLET_ERROR_MARKERS)
+
+
+def _non_wallet_error_count(gateway, channel_id, window_minutes, errors, since_ts=None):
+    """errors minus the wallet-exhaustion rows among them. Rows the paginated
+    query did not return are assumed to be merchant errors (conservative: the
+    old behavior). A failed row query also keeps the old behavior. since_ts
+    narrows the rows the same way it narrowed `errors` (post-restore grace)."""
+    rows = gateway.recent_error_logs(channel_id, window_minutes)
+    if rows is None:
+        return errors
+    wallet = sum(
+        1 for r in rows
+        if is_wallet_error(r.get("content"))
+        and (since_ts is None or int(r.get("created_at") or 0) >= int(since_ts))
+    )
+    return max(0, errors - wallet)
 
 
 def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None,
@@ -1182,6 +1300,13 @@ def pin_is_sick(gateway, channel_id, window_minutes, latency_cfg=None,
         if successes is None:
             return None
         if successes == 0:
+            # Wallet exhaustion is not the merchant's fault (see
+            # WALLET_ERROR_MARKERS); the wallet alert covers it. Only the
+            # remaining errors can make the pin sick.
+            if _non_wallet_error_count(gateway, channel_id, window_minutes, errors, since_ts) == 0:
+                LOG.warning("[sick] ch %s: all %d errors are A6 wallet exhaustion — "
+                            "not rotating (wallet problem, not merchant)", channel_id, errors)
+                return None
             return True
     # No all-failures verdict: fall through to the degraded-merchant signal
     # (slow / abandoned / hard-5xx ratio), which needs enough samples and
@@ -1252,6 +1377,17 @@ def _watchdog_env_int(name, default, lo=1):
         LOG.error("bad %s=%r — using default %s", name, os.environ.get(name), default)
         return default
     return max(lo, value)
+
+
+def _env_float(name, default, lo=0.0):
+    """Module-level float env reader (the sync loop runs outside main()).
+    Malformed or out-of-range values fall back to the default."""
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        LOG.error("bad %s=%r — using default %s", name, os.environ.get(name), default)
+        return default
+    return value if value >= lo else default
 
 
 def gateway_liveness(base_url, timeout=10.0):
@@ -1350,7 +1486,7 @@ def park(reason):
 RUNTIME = None
 
 # Top-level state keys that are not per-channel state entries.
-RESERVED_STATE_KEYS = ("bad_standbys", "_meta", "_sync")
+RESERVED_STATE_KEYS = ("bad_standbys", "_meta", "_sync", "_wallet")
 
 
 def read_display_config():
@@ -2158,6 +2294,16 @@ def sync_loop(a6m, interval_minutes):
                 save_state(RUNTIME["state"])
         except Exception:
             LOG.exception("[sync] sync-loop tick failed")
+        # Wallet check in its own try: a failed key sync (gateway down, A6
+        # token list error) must not also silence the low-balance alert.
+        try:
+            if RUNTIME is not None:
+                check_wallet(a6m, RUNTIME["state"], RUNTIME["discord"],
+                             _env_float("A6_WALLET_ALERT_USD", 10.0),
+                             _env_float("A6_WALLET_CRITICAL_USD", 3.0))
+                save_state(RUNTIME["state"])
+        except Exception:
+            LOG.exception("[wallet] wallet check tick failed")
         time.sleep(interval_minutes * 60)
 
 
@@ -2335,7 +2481,11 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes, restore
                         rt["discord"],
                         f"cctest: primary {name} degraded — disabled; a6pin backup now serving. "
                         f"Restores automatically as soon as a live probe succeeds "
-                        f"(checked every {_env_int('PRIMARY_PROBE_INTERVAL_MINUTES', 1)}m).",
+                        # Module-level helper: _env_int is local to main(), and
+                        # calling it here raised NameError AFTER the disable,
+                        # so the alert never sent and save_state was skipped
+                        # (2026-10-25..27, caught by the test suite's tracebacks).
+                        f"(checked every {_watchdog_env_int('PRIMARY_PROBE_INTERVAL_MINUTES', 1)}m).",
                     )
                 else:
                     entry["healthy_since"] = None
@@ -2432,20 +2582,24 @@ def circuit_breaker_tick(circuit_cfg, window_minutes):
         return 0
     try:
         channels = rt["gateway"].list_channels()
-        active_pins = {}
+        # C2 (checklist 2026-10-26): collect all active pins per model.
+        active_pins = {}  # {model: [ch1, ch2, ...]}
         for ch in channels:
             if not (is_pinned_channel(ch.get("name") or "")
                     and int(ch.get("status") or 0) == CHANNEL_ENABLED):
                 continue
             for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
-                active_pins.setdefault(m, ch)
+                if m not in active_pins:
+                    active_pins[m] = []
+                if ch not in active_pins[m]:
+                    active_pins[m].append(ch)
         _run_sick_rotation(
             rt["gateway"], rt["cctest"], rt["sellers"], active_pins, rt["state"],
             rt["discord"], True, window_minutes, rt.get("seller_registry"),
             latency_cfg=circuit_cfg,
         )
         save_state(rt["state"])
-        return len(active_pins)
+        return sum(len(pins) for pins in active_pins.values())
     except Exception:
         LOG.exception("[circuit] tick failed")
         return 0
@@ -2584,38 +2738,43 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
             except Exception as e:
                 LOG.error("[release] auto-release FAILED for %s: %s", name, e)
     # Active pins per model, for sick-pin rotation after their checks.
-    # INVARIANT (owner rule 2026-10-22): exactly ONE enabled pin per model.
-    # Manually-enabled extras (via the channels page) create a lottery the
-    # owner explicitly retired — the first-seen pin wins, extras are disabled
-    # back to standby with an alert.
-    active_pins = {}
-    extra_actives = []
+    # C2 (checklist 2026-10-26): min-active target per model (default 2).
+    # Manually-enabled extras beyond the target create a lottery the owner
+    # explicitly retired — extras are disabled back to standby with an alert.
+    # When below target, promote_next_standby refills to the target.
+    min_active = max(1, int(os.environ.get("MIN_ACTIVE_PINS", "2")))
+    active_pins = {}  # {pool_key: [ch1, ch2, ...]}
     for ch in channels:
         if not (is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED):
             continue
         for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
             # Model aliases share ONE pool (gpt-6-1-sol == gpt-6.1-sol): two
             # enabled pins on the same pool — whatever spelling each serves —
-            # is still a duplicate. Track per canonical pool representative.
+            # count against the same target. Track per canonical pool representative.
             pool_key = sorted(model_pool_names(m))[0]
-            if pool_key in active_pins and active_pins[pool_key].get("name") != ch.get("name"):
-                extra_actives.append((m, ch))
-            elif pool_key not in active_pins:
-                active_pins[pool_key] = ch
+            if pool_key not in active_pins:
+                active_pins[pool_key] = []
+            if ch not in active_pins[pool_key]:
+                active_pins[pool_key].append(ch)
+    extra_actives = []
+    for pool_key, pins in active_pins.items():
+        if len(pins) > min_active:
+            # Keep the first min_active, disable the rest.
+            for extra in pins[min_active:]:
+                extra_actives.append((pool_key, extra))
     if extra_actives and enforce and _MUTATION_LOCK.acquire(blocking=False):
       try:
-        for model, extra in extra_actives:
+        for pool_key, extra in extra_actives:
             extra_name = extra.get("name")
-            pool_key = sorted(model_pool_names(model))[0]
-            keeper = active_pins[pool_key].get("name")
-            LOG.warning("[dedup] %s has %d active pins — disabling extra %s (keeping %s)",
-                        model, len([e for _, e in extra_actives if _ == model]) + 1, extra_name, keeper)
+            keepers = ", ".join(ch.get("name") or "" for ch in active_pins[pool_key][:min_active])
+            LOG.warning("[dedup] %s has %d active pins (target %d) — disabling extra %s (keeping %s)",
+                        pool_key, len(active_pins[pool_key]), min_active, extra_name, keepers)
             try:
                 gateway.set_status(int(extra["id"]), CHANNEL_MANUALLY_DISABLED)
             except Exception as e:
                 LOG.error("[dedup] failed to disable extra pin %s: %s", extra_name, e)
                 continue
-            discord_alert(discord, f"cctest: {model} had multiple active pins — disabled {extra_name}, keeping {keeper}")
+            discord_alert(discord, f"cctest: {pool_key} had {len(active_pins[pool_key])} active pins (target {min_active}) — disabled {extra_name}")
         if extra_actives:
             try:
                 gateway.fix_abilities()
@@ -2690,12 +2849,27 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
 
 
 def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None, latency_cfg=None):
+    """Rotate sick active pins. active_pins is now {model: [ch1, ch2, ...]} (C2,
+    checklist 2026-10-26), supporting multiple active pins per model."""
     if enforce:
-        for model, pin in list(active_pins.items()):
-            sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes, latency_cfg=latency_cfg)
+        # Flatten the multi-active structure: [(model, pin), ...].
+        pin_list = [(model, pin) for model, pins in active_pins.items() for pin in pins]
+        for model, pin in pin_list:
+            pin_name = pin.get("name")
+            # Post-promotion grace (owner refinement 2026-10-27): a newly promoted
+            # pin is scored only on traffic since its promotion, not on inherited
+            # errors from the previous active pin. Grace window matches the sick
+            # window (typically 15 minutes).
+            grace_since = None
+            pin_state = state.get(pin_name) or {}
+            promoted_at = pin_state.get("promoted_at")
+            if promoted_at and time.time() - promoted_at < sick_window_minutes * 60:
+                grace_since = promoted_at
+                LOG.info("[sick] %s in post-promotion grace (promoted %.1fm ago) — scoring since promotion",
+                         pin_name, (time.time() - promoted_at) / 60)
+            sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes, latency_cfg=latency_cfg, since_ts=grace_since)
             if sick is not True:
                 continue
-            pin_name = pin.get("name")
             # Re-list live: process_channel (fake-verdict path) may have
             # already rotated this model this cycle, and the snapshot this
             # loop captured is pre-rotation — promoting against it re-enables
@@ -2705,21 +2879,20 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
             except Exception as e:
                 LOG.warning("[sick] live channel list failed (%s); skipping rotation for %s", e, pin_name)
                 continue
-            live_active = next(
-                (ch for ch in live
-                 if is_pinned_channel(ch.get("name") or "")
-                 and int(ch.get("status") or 0) == CHANNEL_ENABLED
-                 and model_pool_names(model) & {x.strip() for x in (ch.get("models") or "").split(",") if x.strip()}),
-                None,
-            )
-            if live_active is not None and live_active.get("name") != pin_name:
-                # A different pin is serving now (rotated earlier this cycle).
-                LOG.info("[sick] %s already rotated this cycle — %s is active now", pin_name, live_active.get("name"))
+            live_actives = [
+                ch for ch in live
+                if is_pinned_channel(ch.get("name") or "")
+                and int(ch.get("status") or 0) == CHANNEL_ENABLED
+                and model_pool_names(model) & {x.strip() for x in (ch.get("models") or "").split(",") if x.strip()}
+            ]
+            live_names = {ch.get("name") for ch in live_actives}
+            if pin_name not in live_names:
+                # This pin was rotated earlier this cycle.
+                LOG.info("[sick] %s already rotated this cycle — %s active now",
+                         pin_name, ", ".join(live_names) or "(none)")
                 continue
-            if live_active is not None and live_active.get("name") == pin_name:
-                # Still the active pin — confirm it is genuinely the one we
-                # quarantined (status may have flipped while we iterate).
-                pin = live_active
+            # Re-fetch the live version of this pin (status may have changed).
+            live_pin = next((ch for ch in live if ch.get("name") == pin_name), pin)
             # Label the rotation honestly: the all-failures rule and the
             # degraded-merchant rule (latency/errors with successes) are
             # different diagnoses and the owner's alert must not claim
@@ -2728,7 +2901,7 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
             reason = ("degraded (slow / abandoned streams / hard errors — see the "
                       "[latency] log line for this channel)" if degraded
                       else "failing with no successes")
-            LOG.warning("[sick] active pin %s (ch %s) %s — rotating", pin_name, pin.get("id"), reason)
+            LOG.warning("[sick] active pin %s (ch %s) %s — rotating", pin_name, live_pin.get("id"), reason)
             ch_state = state.setdefault(pin_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
             ch_state.update({
                 "quarantined": True,
@@ -2737,14 +2910,14 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
                 "model": model,
             })
             try:
-                gateway.set_status(int(pin["id"]), CHANNEL_MANUALLY_DISABLED)
+                gateway.set_status(int(live_pin["id"]), CHANNEL_MANUALLY_DISABLED)
                 gateway.fix_abilities()
                 discord_alert(discord, f"cctest: active pin {pin_name} for {model} is {reason} — rotating to next standby")
                 fresh = gateway.list_channels()  # post-disable, pre-promotion
                 entry = find_seller_entry(sellers, fresh, pin_name)
                 if entry:
                     promote_next_standby(
-                        gateway, cctest, pin, entry[0], entry[1], model,
+                        gateway, cctest, live_pin, entry[0], entry[1], model,
                         enforce, discord, state, fresh, seller_registry,
                     )
                 else:
@@ -2776,6 +2949,55 @@ def is_pinned_channel(name):
     return (name or "").startswith("a6pin")
 
 
+def _standby_score(gateway, channel_id, window_minutes, state, channel_name):
+    """Compute standby ranking metrics: our success rate, median FRT, and
+    sample size. Returns (success_rate, median_frt_ms, samples) or None on
+    insufficient data. Used by C1 (checklist 2026-10-26) to rank standby pins
+    by OUR OWN traffic, with A6 marketplace health only as a tiebreak.
+
+    Post-promotion grace (owner refinement 2026-10-27): score only traffic
+    since the pin was last promoted. A newly promoted pin inherits no errors
+    from the previous active pin — scoring starts fresh."""
+    ch_state = state.get(channel_name) or {}
+    since_ts = ch_state.get("promoted_at")
+    try:
+        errors = gateway.count_logs(5, channel_id, window_minutes, since_ts=since_ts)
+        successes = gateway.count_logs(2, channel_id, window_minutes, since_ts=since_ts)
+    except Exception:
+        return None
+    if errors is None or successes is None:
+        return None
+    total = errors + successes
+    if total < 5:
+        # Thin data: not enough to rank meaningfully.
+        return None
+    success_rate = successes / total if total > 0 else 0.0
+    # Median FRT from streaming consume logs.
+    try:
+        rows = gateway.recent_consume_logs(channel_id, window_minutes)
+    except Exception:
+        rows = None
+    if rows is None:
+        median_frt = 0
+    else:
+        stream_rows = [r for r in rows if isinstance(_parse_other(r).get("stream_status"), dict)]
+        frts = []
+        for row in stream_rows:
+            other = _parse_other(row)
+            try:
+                frt = int(other.get("frt"))
+            except (TypeError, ValueError):
+                frt = None
+            if frt is not None and frt >= 0:
+                frts.append(frt)
+        if frts:
+            sorted_frts = sorted(frts)
+            median_frt = sorted_frts[len(sorted_frts) // 2]
+        else:
+            median_frt = 0
+    return (success_rate, median_frt, total)
+
+
 def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                          model, enforce, discord, state, channels_snapshot,
                          seller_registry=None, preferred_name=None):
@@ -2793,19 +3015,26 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     the following cycle. Inconclusive verdicts leave it active — the
     regular cycle check keeps watching it.
 
-    Idempotency: promotion stops once any pin for the model is enabled.
-    Standby discovery uses MODEL-MEMBERSHIP, not name prefixes —
-    a6pin-sonnet-5-* and a6pin-sonnet-5-5-* are different models."""
+    Idempotency: promotion stops once the model has MIN_ACTIVE_PINS (default 2)
+    enabled pins (C2, checklist 2026-10-26). Standby discovery uses
+    MODEL-MEMBERSHIP, not name prefixes — a6pin-sonnet-5-* and
+    a6pin-sonnet-5-5-* are different models."""
     if not model:
         LOG.warning("[pin] quarantined pin has no model; no standby search")
         return
     pool = model_pool_names(model)
-    # stop if a pin for this model is already active again (idempotence)
-    for ch in (channels_snapshot or []):
-        if is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED \
-                and pool & {mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()}:
-            LOG.info("[pin] %s already has an active pin (%s) — no promotion", model, ch.get("name"))
-            return
+    min_active = max(1, int(os.environ.get("MIN_ACTIVE_PINS", "2")))
+    # C2: stop promoting once the model has min_active pins (idempotence).
+    actives_for_model = [
+        ch for ch in (channels_snapshot or [])
+        if is_pinned_channel(ch.get("name") or "")
+        and int(ch.get("status") or 0) == CHANNEL_ENABLED
+        and pool & {mm.strip() for mm in (ch.get("models") or "").split(",") if mm.strip()}
+    ]
+    if len(actives_for_model) >= min_active:
+        LOG.info("[pin] %s already has %d active pin(s) (target %d) — no promotion",
+                 model, len(actives_for_model), min_active)
+        return
     # standby set = disabled pins serving this model (any alias spelling).
     # Model-membership, not name prefixes — a6pin-sonnet-5-* and
     # a6pin-sonnet-5-5-* are different models; gpt-6-1-sol and gpt-6.1-sol
@@ -2900,6 +3129,16 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         # sorts last and an unavailable one is skipped when any healthy
         # candidate exists. Health data unavailable (A6 fetch failed) →
         # fall back to first-fresh (fail-open, never worse than before).
+        # C1 (checklist 2026-10-26): rank by OUR success rate + FRT first, then
+        # A6 marketplace health as a tiebreak. Our metrics are primary evidence
+        # (real customer traffic); A6 health is still consulted (delisted pins
+        # sort last), but no longer the only ranking factor.
+        our_scores = {}  # {channel_name: (success_rate, median_frt, samples) | None}
+        window_h = int(os.environ.get("USAGE_WINDOW_HOURS", "7"))
+        for ch in candidates:
+            ch_id = int(ch.get("id") or 0)
+            ch_name = ch.get("name") or ""
+            our_scores[ch_name] = _standby_score(gateway, ch_id, window_h * 60, state, ch_name)
         try:
             market = A6Market()
             candidates_health = market.health_for(
@@ -2907,21 +3146,34 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                 {c.get("name", "").rsplit("-", 1)[-1] for c in candidates},
             )
             def _rank(ch):
-                h = candidates_health.get((ch.get("name") or "").rsplit("-", 1)[-1]) or {}
+                ch_name = ch.get("name") or ""
+                # Primary: our own metrics (success rate desc, FRT asc).
+                our = our_scores.get(ch_name)
+                if our is not None:
+                    success_rate, median_frt, samples = our
+                    primary = (success_rate, -median_frt, samples)
+                else:
+                    # No data: sort after those with data, but before delisted.
+                    primary = (-1.0, 0, 0)
+                # Tiebreak: A6 marketplace health.
+                h = candidates_health.get(ch_name.rsplit("-", 1)[-1]) or {}
                 if h.get("unlisted"):
-                    return (0, 0, 0)  # delisted — dead last
-                return (
-                    1 if h.get("healthy") else 0,
-                    h.get("success_rate") or 0,
-                    -(h.get("price_micros") or 10**9),
-                )
+                    tiebreak = (0, 0, 0)
+                else:
+                    tiebreak = (
+                        1 if h.get("healthy") else 0,
+                        h.get("success_rate") or 0,
+                        -(h.get("price_micros") or 10**9),
+                    )
+                return primary + tiebreak
             candidates = sorted(candidates, key=_rank, reverse=True)
             top = candidates[0]
-            if (candidates_health.get((top.get("name") or "").rsplit("-", 1)[-1]) or {}).get("unlisted"):
+            top_name = top.get("name") or ""
+            if (candidates_health.get(top_name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
                 LOG.warning("[pin] only delisted standby candidates for %s — "
-                            "promoting %s anyway (fail-open)", model, top.get("name"))
+                            "promoting %s anyway (fail-open)", model, top_name)
         except Exception as e:
-            LOG.warning("[pin] A6 marketplace health unavailable for %s (%s); "
+            LOG.warning("[pin] standby ranking (our metrics + A6 health) failed for %s (%s); "
                         "first-fresh fallback", model, e)
         standby = candidates[0]
     standby_name = standby["name"]
@@ -2977,6 +3229,13 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     except Exception as e:
         LOG.error("[pin] standby promotion FAILED for %s: %s", standby_name, e)
         return
+    # Record promotion timestamp (owner refinement 2026-10-27): newly promoted
+    # pins are scored only on traffic SINCE the promotion, not on inherited
+    # errors from the previous active pin (post-promotion grace).
+    st_state = state.setdefault(
+        standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
+    )
+    st_state["promoted_at"] = time.time()
     LOG.warning("[pin] promoted %s for %s — %s", standby_name, model,
                 "pre-verified" if pre_checked else "verifying now")
     if pre_checked:
