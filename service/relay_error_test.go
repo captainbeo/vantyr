@@ -151,6 +151,23 @@ func TestDecideRelayRetryReasons(t *testing.T) {
 			RequestPolicy(c).SessionModeSource = "global"
 		}, want: PolicyDecision{Action: "stop", Reason: "strict_session", Source: "global"}},
 		{name: "nil error", retries: 1, want: PolicyDecision{Action: "stop", Reason: "request_completed", Source: "system"}},
+		{name: "content already sent to client", err: upstream(http.StatusInternalServerError), retries: 2, setup: func(c *gin.Context) {
+			_, _ = c.Writer.Write([]byte("event: content_block_delta\ndata: {}\n\n"))
+		}, want: PolicyDecision{Action: "stop", Reason: "client_content_sent", Source: "system"}},
+		{name: "content sent wins over channel error", err: types.NewError(errors.New("no key"), types.ErrorCodeChannelNoAvailableKey), retries: 2, setup: func(c *gin.Context) {
+			_, _ = c.Writer.Write([]byte("event: content_block_delta\ndata: {}\n\n"))
+		}, want: PolicyDecision{Action: "stop", Reason: "client_content_sent", Source: "system"}},
+		{name: "keep-alive frames alone still retry", err: upstream(http.StatusInternalServerError), retries: 2, setup: func(c *gin.Context) {
+			n, _ := c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+			common.AddKeepAliveBytes(c, n)
+			n, _ = c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+			common.AddKeepAliveBytes(c, n)
+		}, want: PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"}},
+		{name: "content after keep-alive stops", err: upstream(http.StatusInternalServerError), retries: 2, setup: func(c *gin.Context) {
+			n, _ := c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+			common.AddKeepAliveBytes(c, n)
+			_, _ = c.Writer.Write([]byte("event: message_start\ndata: {}\n\n"))
+		}, want: PolicyDecision{Action: "stop", Reason: "client_content_sent", Source: "system"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())

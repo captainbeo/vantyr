@@ -120,6 +120,26 @@ func GetRandomSatisfiedChannel(
 	retry int,
 	filters []dto.ChannelFilter,
 ) (*Channel, error) {
+	return GetRandomSatisfiedChannelAvoiding(group, model, retry, filters, nil)
+}
+
+// GetRandomSatisfiedChannelAvoiding (Vantyr fork, 2026-10-27) is
+// GetRandomSatisfiedChannel for retries: tried lists the channels this request
+// already attempted. Upstream picks the retry tier by index and draws at random
+// inside it, so a tier with one healthy channel hands a retry straight back to
+// the channel that just failed (production trails 47>47>47, 1->3->3). Here the
+// draw skips tried channels: first inside the tier the retry index selects,
+// then in the highest other tier that still has an untried channel. Only when
+// every candidate has been tried does it fall back to upstream behavior. The
+// database path (memory cache off) is unchanged; production always runs with
+// the cache because Redis forces it on (main.go).
+func GetRandomSatisfiedChannelAvoiding(
+	group string,
+	model string,
+	retry int,
+	filters []dto.ChannelFilter,
+	tried []int,
+) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
 		return GetChannel(group, model, retry, filters)
@@ -167,12 +187,24 @@ func GetRandomSatisfiedChannel(
 	}
 	targetPriority := int64(sortedUniquePriorities[retry])
 
+	skip := make(map[int]bool, len(tried))
+	for _, id := range tried {
+		skip[id] = true
+	}
+	if len(skip) > 0 {
+		if priority, ok := untriedTier(channels, sortedUniquePriorities, retry, skip); ok {
+			targetPriority = priority
+		} else {
+			skip = nil
+		}
+	}
+
 	// get the priority for the given retry number
 	var sumWeight = 0
 	var targetChannels []*Channel
 	for _, channelId := range channels {
 		if channel, ok := channelsIDM[channelId]; ok {
-			if channel.GetPriority() == targetPriority {
+			if channel.GetPriority() == targetPriority && !skip[channelId] {
 				sumWeight += channel.GetWeight()
 				targetChannels = append(targetChannels, channel)
 			}
@@ -214,6 +246,28 @@ func GetRandomSatisfiedChannel(
 	}
 	// return null if no channel is not found
 	return nil, errors.New("channel not found")
+}
+
+// untriedTier returns the tier a retry should draw from: the one the retry
+// index selects when it still has an untried channel, otherwise the highest
+// tier that does. ok is false when every candidate was tried. Caller holds
+// channelSyncLock and has checked that every id is in channelsIDM.
+func untriedTier(ids []int, prioritiesDesc []int, retry int, tried map[int]bool) (int64, bool) {
+	hasUntried := make(map[int64]bool, len(prioritiesDesc))
+	for _, id := range ids {
+		if !tried[id] {
+			hasUntried[channelsIDM[id].GetPriority()] = true
+		}
+	}
+	if selected := int64(prioritiesDesc[retry]); hasUntried[selected] {
+		return selected, true
+	}
+	for _, priority := range prioritiesDesc {
+		if hasUntried[int64(priority)] {
+			return int64(priority), true
+		}
+	}
+	return 0, false
 }
 
 func CacheGetChannel(id int) (*Channel, error) {

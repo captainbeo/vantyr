@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -116,7 +117,9 @@ func PingData(c *gin.Context) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	if _, err := c.Writer.Write([]byte(": PING\n\n")); err != nil {
+	n, err := c.Writer.Write([]byte(": PING\n\n"))
+	common.AddKeepAliveBytes(c, n)
+	if err != nil {
 		return fmt.Errorf("write ping data failed: %w", err)
 	}
 	return FlushWriter(c)
@@ -163,7 +166,9 @@ func PingResponsesEventData(c *gin.Context) error {
 	// KeepAliveResponseID (service.KeepAliveResponseID) must match the id
 	// here: the accumulator uses it to recognise the frame as a keep-alive
 	// and never mark the stream started/billable.
-	if _, err := c.Writer.Write([]byte("event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_ping_keepalive\",\"status\":\"in_progress\"},\"sequence_number\":-1}\n\n")); err != nil {
+	n, err := c.Writer.Write([]byte("event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_ping_keepalive\",\"status\":\"in_progress\"},\"sequence_number\":-1}\n\n"))
+	common.AddKeepAliveBytes(c, n)
+	if err != nil {
 		return fmt.Errorf("write responses ping event data failed: %w", err)
 	}
 	return FlushWriter(c)
@@ -178,7 +183,9 @@ func PingEventData(c *gin.Context) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	if _, err := c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n")); err != nil {
+	n, err := c.Writer.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+	common.AddKeepAliveBytes(c, n)
+	if err != nil {
 		return fmt.Errorf("write ping event data failed: %w", err)
 	}
 	return FlushWriter(c)
@@ -197,6 +204,58 @@ func ObjectData(c *gin.Context, object any) error {
 
 func Done(c *gin.Context) {
 	_ = StringData(c, "[DONE]")
+}
+
+// EventStreamStarted reports whether the response is already an event stream
+// on the wire: SSE headers set and at least one frame (keep-alives included)
+// written. Past that point the status is committed as 200 and a JSON error
+// body would land inside the stream (Vantyr fork, 2026-10-27).
+func EventStreamStarted(c *gin.Context) bool {
+	if c == nil || c.Writer == nil || !c.Writer.Written() {
+		return false
+	}
+	return strings.HasPrefix(c.Writer.Header().Get("Content-Type"), "text/event-stream")
+}
+
+// StreamErrorFrames renders a relay error as the closing frames of an event
+// stream in the client's protocol, instead of the raw JSON body the relay
+// writes for a request that has not started streaming: Claude gets an
+// `error` event, OpenAI Responses an `error` event plus `response.failed`,
+// everything else an OpenAI-style `data: {"error": ...}` frame.
+func StreamErrorFrames(relayFormat types.RelayFormat, apiErr *types.NewAPIError, responseID string) string {
+	switch relayFormat {
+	case types.RelayFormatClaude:
+		data, _ := common.Marshal(map[string]any{"type": "error", "error": apiErr.ToClaudeError()})
+		return "event: error\ndata: " + string(data) + "\n\n"
+	case types.RelayFormatOpenAIResponses:
+		oaiErr := apiErr.ToOpenAIError()
+		code := fmt.Sprint(oaiErr.Code)
+		if oaiErr.Code == nil || code == "" {
+			code = oaiErr.Type
+		}
+		errEvent, _ := common.Marshal(map[string]any{"type": "error", "code": code, "message": oaiErr.Message, "param": nil})
+		failed, _ := common.Marshal(map[string]any{"type": "response.failed", "response": map[string]any{
+			"id": responseID, "object": "response", "status": "failed",
+			"error": map[string]any{"code": code, "message": oaiErr.Message},
+		}})
+		return "event: error\ndata: " + string(errEvent) + "\n\nevent: response.failed\ndata: " + string(failed) + "\n\n"
+	default:
+		data, _ := common.Marshal(map[string]any{"error": apiErr.ToOpenAIError()})
+		return "data: " + string(data) + "\n\n"
+	}
+}
+
+// WriteStreamError ends a started event stream with StreamErrorFrames.
+func WriteStreamError(c *gin.Context, relayFormat types.RelayFormat, apiErr *types.NewAPIError) {
+	if c == nil || c.Writer == nil || apiErr == nil || requestContextDone(c) {
+		return
+	}
+	responseID := "resp_" + c.GetString(common.RequestIdKey)
+	if _, err := c.Writer.Write([]byte(StreamErrorFrames(relayFormat, apiErr, responseID))); err != nil {
+		logger.LogError(c, "write stream error frame failed: "+err.Error())
+		return
+	}
+	_ = FlushWriter(c)
 }
 
 func WssString(c *gin.Context, ws *websocket.Conn, str string) error {

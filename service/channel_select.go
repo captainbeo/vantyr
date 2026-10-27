@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -117,6 +118,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	filters := GetChannelConstraints(param.Ctx).Filters
+	tried := triedChannelIDs(param.Ctx)
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -147,11 +149,12 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannel(
+			channel, _ = model.GetRandomSatisfiedChannelAvoiding(
 				autoGroup,
 				param.ModelName,
 				priorityRetry,
 				filters,
+				tried,
 			)
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
@@ -190,11 +193,12 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			break
 		}
 	} else {
-		channel, err = model.GetRandomSatisfiedChannel(
+		channel, err = model.GetRandomSatisfiedChannelAvoiding(
 			param.TokenGroup,
 			param.ModelName,
 			param.GetRetry(),
 			filters,
+			tried,
 		)
 		if err != nil {
 			return nil, param.TokenGroup, err
@@ -389,4 +393,21 @@ func pinnedChannelUnavailable(pin dto.ChannelPin, statusCode int, messageID stri
 // trail, which the retry log and the consume log's admin_info both read.
 func AppendUsedChannel(c *gin.Context, channelID int) {
 	c.Set("use_channel", append(c.GetStringSlice("use_channel"), fmt.Sprintf("%d", channelID)))
+}
+
+// triedChannelIDs reads the channel trail back as ids, so a retry can avoid
+// the channels this request already attempted (Vantyr fork, 2026-10-27; see
+// model.GetRandomSatisfiedChannelAvoiding).
+func triedChannelIDs(c *gin.Context) []int {
+	if c == nil {
+		return nil
+	}
+	trail := c.GetStringSlice("use_channel")
+	ids := make([]int, 0, len(trail))
+	for _, entry := range trail {
+		if id, err := strconv.Atoi(entry); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

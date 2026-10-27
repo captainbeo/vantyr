@@ -22,6 +22,13 @@ func DecideRelayRetry(c *gin.Context, err *types.NewAPIError, retryTimes int) Po
 	if err == nil {
 		return PolicyDecision{Action: "stop", Reason: "request_completed", Source: "system"}
 	}
+	// Vantyr fork (2026-10-27): once part of an answer reached the client, a
+	// retry would splice a second response into the same stream. Stop and let
+	// the relay end the stream with an error event instead (see
+	// common.ClientContentWritten).
+	if common.ClientContentWritten(c) {
+		return PolicyDecision{Action: "stop", Reason: "client_content_sent", Source: "system"}
+	}
 	if ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		source := RequestPolicy(c).SessionModeSource
 		if source == "" {
