@@ -2705,12 +2705,14 @@ def test_large_prompts_excluded_from_frt_baseline():
            "error_ratio_threshold": 0.10}
     import json as _json
     def _usage_row(end_reason, frt, input_tokens):
+        # Live row shape: prompt size is the row's prompt_tokens column;
+        # other.usage_semantic is a plain string.
         payload = {
             "frt": frt,
             "stream_status": {"end_reason": end_reason},
-            "usage_semantic": {"input_tokens_total": input_tokens},
+            "usage_semantic": "anthropic",
         }
-        return {"other": _json.dumps(payload)}
+        return {"other": _json.dumps(payload), "prompt_tokens": input_tokens}
     # 15 normal at 3s + 10 large (12K tokens) at 18s → median of the 15 is 3s
     rows = [_usage_row("eof", 3000, 800)] * 15 + [_usage_row("eof", 18000, 12000)] * 10
     gw = LatencyGW({1: 0}, {1: 25}, rows)

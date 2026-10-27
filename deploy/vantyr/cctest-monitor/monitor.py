@@ -1188,11 +1188,12 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
         if frt is not None and frt >= 0:
             # Owner refinement 2026-10-27: only normal-size prompts count
             # toward the latency baseline (large context deserves a higher
-            # threshold and was skewing the mean). usage_semantic holds the
-            # PROMPT token count (input_tokens_total includes cache hits).
+            # threshold and was skewing the mean). The prompt size is the log
+            # row's prompt_tokens column — other.usage_semantic is a STRING
+            # ("anthropic"/"openai") on live rows, not a usage dict (reading
+            # it as a dict crashed every cycle, 2026-10-27 04:45).
             try:
-                usage = _parse_other(row).get("usage_semantic") or {}
-                input_tokens = int(usage.get("input_tokens_total") or 0)
+                input_tokens = int(row.get("prompt_tokens") or 0)
             except (TypeError, ValueError):
                 input_tokens = 0
             if input_tokens <= 10000:
