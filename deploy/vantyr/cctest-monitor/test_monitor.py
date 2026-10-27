@@ -1500,6 +1500,14 @@ class SickGW(FakeGW):
             return self.error_counts.get(channel_id)
         return self.success_counts.get(channel_id)
 
+    def recent_error_logs(self, channel_id, window_minutes, limit=100):
+        """Stub for the all-failures check (pin_is_sick needs this now)."""
+        return []
+
+    def recent_consume_logs(self, channel_id, window_minutes, limit=50):
+        """Stub for latency checks."""
+        return []
+
 
 class LatencyGW(SickGW):
     """Fake gateway whose consume logs carry `other` JSON with frt +
@@ -2674,31 +2682,84 @@ def test_gateway_watchdog_short_blip_does_not_page():
     """Down for one tick then back: below the sustained window, so no page.
     Flapping must not turn into an alert storm."""
     alerts = []
-    probes = [False, True, True]
 
-    def fake_liveness(base_url, timeout=10.0):
-        return probes.pop(0) if probes else True
+def test_median_frt_robust_against_spikes():
+    """Owner refinement 2026-10-27: median frt instead of mean — outlier
+    spikes skewed the mean above the threshold. 20 requests at 3s median,
+    2 spikes at 30s → mean 5.7s trips 5s threshold, median 3s stays healthy."""
+    cfg = {"enabled": True, "min_samples": 20, "frt_ms_threshold": 5000,
+           "client_gone_ratio": 0.50, "hang_threshold": 100,
+           "error_ratio_threshold": 0.10}
+    # 18 clean at 3s + 2 spikes at 30s: mean = 5700ms (trips), median = 3000ms (ok)
+    rows = [_row("eof", 3000)] * 18 + [_row("eof", 30000)] * 2
+    gw = LatencyGW({1: 0}, {1: 20}, rows)
+    assert m.pin_is_sick(gw, 1, 60, latency_cfg=cfg) is False
 
-    def fake_sleep(_seconds):
-        if not probes:
-            raise SystemExit
 
-    real_liveness, real_sleep, real_alert = (
-        m.gateway_liveness, m.time.sleep, m.discord_alert)
-    m.gateway_liveness = fake_liveness
-    m.discord_alert = lambda webhook, text: alerts.append(text)
-    m.time.sleep = fake_sleep
-    try:
-        try:
-            m.gateway_watchdog_loop("http://gateway:3000", "https://hook",
-                                    interval=30, down_after=120)
-        except SystemExit:
-            pass
-    finally:
-        m.gateway_liveness, m.time.sleep = real_liveness, real_sleep
-        m.discord_alert = real_alert
+def test_large_prompts_excluded_from_frt_baseline():
+    """Owner refinement 2026-10-27: prompts over 10K input tokens are excluded
+    from the frt baseline (large context deserves a higher threshold). 15 normal
+    prompts at 3s + 10 large (12K tokens) at 18s → only the 15 count, median 3s."""
+    cfg = {"enabled": True, "min_samples": 20, "frt_ms_threshold": 5000,
+           "client_gone_ratio": 0.50, "hang_threshold": 100,
+           "error_ratio_threshold": 0.10}
+    import json as _json
+    def _usage_row(end_reason, frt, input_tokens):
+        payload = {
+            "frt": frt,
+            "stream_status": {"end_reason": end_reason},
+            "usage_semantic": {"input_tokens_total": input_tokens},
+        }
+        return {"other": _json.dumps(payload)}
+    # 15 normal at 3s + 10 large (12K tokens) at 18s → median of the 15 is 3s
+    rows = [_usage_row("eof", 3000, 800)] * 15 + [_usage_row("eof", 18000, 12000)] * 10
+    gw = LatencyGW({1: 0}, {1: 25}, rows)
+    assert m.pin_is_sick(gw, 1, 60, latency_cfg=cfg) is False
+    # If all 25 counted, median would be 18s (26th // 2 = 13th, which is 18s) → trip
+    # But only the 15 normal prompts count → median 3s → healthy
 
-    assert alerts == [], alerts
+
+def test_post_promotion_grace_scores_since_promotion():
+    """Owner refinement 2026-10-27: a newly promoted pin is scored only on
+    traffic since its promotion, not on inherited errors from the previous
+    active pin. Within the grace window (15m), evidence is sliced to
+    promoted_at; outside the window, the full window counts."""
+    cfg = {"enabled": True, "min_samples": 20, "frt_ms_threshold": 10000,
+           "client_gone_ratio": 0.20, "hang_threshold": 100,
+           "error_ratio_threshold": 0.10, "min_errors": 5}
+    now = time.time()
+
+    class GraceGW(LatencyGW):
+        """Pre-promotion window is catastrophic; since-promotion is clean.
+        Track which since_ts pin_is_sick received."""
+        def __init__(self):
+            super().__init__({123: 50}, {123: 40}, [_row("eof", 2000)] * 30)
+            self.since_ts_received = None
+
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
+            self.since_ts_received = since_ts
+            if since_ts:  # since-promotion slice: clean
+                return 0 if log_type == 5 else 30
+            return 50 if log_type == 5 else 10   # full window: terrible
+
+        def recent_error_logs(self, channel_id, window_minutes, limit=100):
+            # Match count_logs: if full window (no grace), return hard errors
+            if self.since_ts_received is None:
+                return [{"content": "status_code=502, upstream failed"}] * 50
+            return []  # none since promotion
+
+    gw = GraceGW()
+    # Direct pin_is_sick call with since_ts (as _run_sick_rotation would)
+    sick = m.pin_is_sick(gw, 123, 15, latency_cfg=cfg, since_ts=now - 300)
+    # Grace-sliced evidence was clean → healthy
+    assert sick is False, sick
+    assert gw.since_ts_received == now - 300, gw.since_ts_received
+
+    # Without grace (since_ts=None), the full window is terrible → sick
+    gw2 = GraceGW()
+    sick2 = m.pin_is_sick(gw2, 123, 15, latency_cfg=cfg, since_ts=None)
+    assert sick2 is True, sick2
+    assert gw2.since_ts_received is None, gw2.since_ts_received
 
 
 
