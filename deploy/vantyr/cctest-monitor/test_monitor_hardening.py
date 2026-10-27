@@ -463,6 +463,71 @@ def test_promote_stops_at_min_active():
             m.os.environ.pop("MIN_ACTIVE_PINS", None)
 
 
+# ---------------------------------------------------------------------------
+# Ranking gate: a delisted merchant always sorts last (2026-10-27 6.1-sol flap)
+# ---------------------------------------------------------------------------
+
+def _observe_pick(channels, metrics, listed):
+    """Run promote_next_standby observe-only and return the standby it
+    would promote. `listed` = merchant ids on the A6 listing."""
+    import logging
+
+    picked = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            msg = record.getMessage()
+            if "OBSERVE-ONLY: would promote standby" in msg:
+                picked.append(msg.split("standby ", 1)[1].split(" ", 1)[0])
+
+    def fake_search(self, model):
+        return [
+            {"channel_id": int(cid), "listing_availability": 1, "recent_success_rate": 10000,
+             "sample_count": 100, "input_price_micros": 14244, "supplier_name": "s"}
+            for cid in listed
+        ] if model == "gpt-6.1-sol" else []
+
+    handler = _Capture()
+    m.LOG.addHandler(handler)
+    original = m.A6Market.search
+    m.A6Market.search = fake_search
+    try:
+        with _Alerts():
+            m.promote_next_standby(_RankGW(metrics), None, None, "https://vantyr.xyz", "",
+                                   "gpt-6-1-sol", False, None, {}, channels)
+    finally:
+        m.A6Market.search = original
+        m.LOG.removeHandler(handler)
+    return picked[0] if picked else None
+
+
+def test_promote_delisted_with_history_loses_to_listed_without_history():
+    """Live 2026-10-27: delisted #85 (5151) had our traffic data, the listed
+    standbys had none, so 5151 kept winning and promotion flapped 85<->89."""
+    channels = [
+        {"id": 85, "name": "a6pin-6-1-sol-5151", "status": 2, "models": "gpt-6-1-sol,gpt-6.1-sol"},
+        {"id": 88, "name": "a6pin-6-1-sol-3016", "status": 2, "models": "gpt-6-1-sol,gpt-6.1-sol"},
+    ]
+    metrics = {85: (10, 106, [8000] * 5)}  # 88 has no data
+    assert _observe_pick(channels, metrics, listed={"3016"}) == "a6pin-6-1-sol-3016"
+
+
+def test_promote_listed_ranks_by_our_metrics_first():
+    channels = [
+        {"id": 88, "name": "a6pin-6-1-sol-3016", "status": 2, "models": "gpt-6-1-sol,gpt-6.1-sol"},
+        {"id": 59, "name": "a6pin-6-1-sol-5110", "status": 2, "models": "gpt-6-1-sol,gpt-6.1-sol"},
+    ]
+    metrics = {59: (3, 82, [4300] * 5)}
+    assert _observe_pick(channels, metrics, listed={"3016", "5110"}) == "a6pin-6-1-sol-5110"
+
+
+def test_promote_only_delisted_still_fails_open():
+    channels = [
+        {"id": 85, "name": "a6pin-6-1-sol-5151", "status": 2, "models": "gpt-6-1-sol,gpt-6.1-sol"},
+    ]
+    assert _observe_pick(channels, {}, listed=set()) == "a6pin-6-1-sol-5151"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

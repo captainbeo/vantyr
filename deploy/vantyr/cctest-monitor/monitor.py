@@ -3147,6 +3147,12 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             )
             def _rank(ch):
                 ch_name = ch.get("name") or ""
+                h = candidates_health.get(ch_name.rsplit("-", 1)[-1]) or {}
+                # Gate: a delisted merchant ALWAYS sorts last, whatever our
+                # history says (2026-10-27 6.1-sol flap: delisted #85 had
+                # traffic data, so it outranked six listed never-used
+                # standbys that had none).
+                listed = 0 if h.get("unlisted") else 1
                 # Primary: our own metrics (success rate desc, FRT asc).
                 our = our_scores.get(ch_name)
                 if our is not None:
@@ -3156,7 +3162,6 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                     # No data: sort after those with data, but before delisted.
                     primary = (-1.0, 0, 0)
                 # Tiebreak: A6 marketplace health.
-                h = candidates_health.get(ch_name.rsplit("-", 1)[-1]) or {}
                 if h.get("unlisted"):
                     tiebreak = (0, 0, 0)
                 else:
@@ -3165,7 +3170,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                         h.get("success_rate") or 0,
                         -(h.get("price_micros") or 10**9),
                     )
-                return primary + tiebreak
+                return (listed,) + primary + tiebreak
             candidates = sorted(candidates, key=_rank, reverse=True)
             top = candidates[0]
             top_name = top.get("name") or ""
