@@ -316,6 +316,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	if retry.GetRetry() == 0 {
 		if preferredChannelID, found := GetPreferredChannelByAffinity(c, modelName, usingGroup); found {
 			affinityUsable := false
+			onFallbackTier := false
 			preferred, err := model.CacheGetChannel(preferredChannelID)
 			affinitySatisfied := false
 			if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled {
@@ -326,6 +327,10 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 					userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 					for _, g := range GetRequestAutoGroups(c, userGroup) {
 						if model.IsChannelEnabledForGroupModel(g, modelName, preferred.Id) {
+							if affinityOnFallbackTier(c, g, modelName, preferred.Id, constraints.Filters) {
+								onFallbackTier = true
+								break
+							}
 							selectGroup = g
 							common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
 							channel = preferred
@@ -335,13 +340,20 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 						}
 					}
 				} else if model.IsChannelEnabledForGroupModel(usingGroup, modelName, preferred.Id) {
-					channel = preferred
-					selectGroup = usingGroup
-					affinityUsable = true
-					MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
+					if affinityOnFallbackTier(c, usingGroup, modelName, preferred.Id, constraints.Filters) {
+						onFallbackTier = true
+					} else {
+						channel = preferred
+						selectGroup = usingGroup
+						affinityUsable = true
+						MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
+					}
 				}
 			}
-			if !affinityUsable && !ShouldKeepChannelAffinityOnChannelDisabled() {
+			if onFallbackTier {
+				RequestPolicy(c).AddEvent(PolicyEvent{ChannelID: preferred.Id, Decision: PolicyDecision{Action: "skip", Reason: "affinity_fallback_tier", Source: "session_rule"}})
+			}
+			if !affinityUsable && (onFallbackTier || !ShouldKeepChannelAffinityOnChannelDisabled()) {
 				ClearCurrentChannelAffinityCache(c)
 			}
 			if !affinityUsable && RequestPolicy(c).SessionMode == "strict" {
@@ -378,6 +390,20 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		}
 	}
 	return channel, selectGroup, nil
+}
+
+// affinityOnFallbackTier (Vantyr fork, 2026-10-27) reports whether a session
+// binding points at a channel below the best enabled tier for this group and
+// model. Such a binding is dropped so the request goes back to the first
+// choice: one failed request on the primary used to rebind the session to the
+// backup, and every later success there refreshed the binding, so the session
+// never returned (Kiro sessions held on A6). Strict sessions keep their
+// binding, since they ask for the original channel and would otherwise fail.
+func affinityOnFallbackTier(c *gin.Context, group, modelName string, channelID int, filters []dto.ChannelFilter) bool {
+	if RequestPolicy(c).SessionMode == "strict" {
+		return false
+	}
+	return !model.IsChannelInTopPriorityTier(group, modelName, channelID, filters)
 }
 
 // Origin-task pins report a fixed code so task polling can tell a retired

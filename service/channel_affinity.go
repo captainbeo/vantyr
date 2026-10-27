@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -738,6 +739,20 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 	if setting.SwitchOnSuccess && c != nil {
 		if successChannelID := c.GetInt("channel_id"); successChannelID > 0 {
 			channelID = successChannelID
+		}
+	}
+	// Vantyr fork (2026-10-27): a request that only succeeded on a fallback
+	// tier must not bind the session there, or the next request skips the
+	// primary (Kiro sessions stuck on A6). The existing binding, if any, stays.
+	if c != nil && RequestPolicy(c).SessionMode != "strict" {
+		if meta, ok := getChannelAffinityMeta(c); ok {
+			group := meta.UsingGroup
+			if group == "auto" {
+				group = common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
+			}
+			if !model.IsChannelInTopPriorityTier(group, meta.ModelName, channelID, GetChannelConstraints(c).Filters) {
+				return
+			}
 		}
 	}
 	cacheKey, ttlSeconds, ok := getChannelAffinityContext(c)

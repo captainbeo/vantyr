@@ -5924,3 +5924,42 @@ Effect on the 2026-10-26/27 rotations: the three latency-only rotations with a
 have fired. 6.1-sol 6481 (mean 19.2s) still would: one 300s stalled request
 dominates the mean while the median was 1.7s. Known gap: the check uses the
 mean, and large prompts (20-100k context, p50 17-34s) exceed any fixed limit.
+
+## 2026-10-27c — session affinity stays on the first-choice tier (Kiro)
+
+**Problem.** A6 spend ran ~$23/24h, ~$17 of it Opus 5.5, although Kiro (ch95,
+P30) is first choice for the five Claude models and the a6pin channels (P20)
+are backup. Cause: Kiro failed a request before any output, the retry
+succeeded on an A6 pin, and that was a genuine success, so the 27a gate let
+`RecordChannelAffinity` bind the session to A6. Every later request then went
+straight to A6 and each success refreshed the binding, so the session never
+returned to Kiro (24h: Opus 5.5 951 A6 requests, 906 from one user; sessions
+alternating kiro_ok/a6_ok in long runs).
+
+**Fix.** `model.IsChannelInTopPriorityTier(group, model, channel, filters)`
+reports whether a channel is in the highest priority tier among the enabled
+channels that serve that group and model. Session affinity uses it twice:
+- write (`service/channel_affinity.go` `RecordChannelAffinity`): a success on
+  a lower tier does not bind the session, and an existing binding stays;
+- read (`service/channel_select.go` `SelectChannelForRequest`): a binding to a
+  lower tier is skipped (policy event `skip`/`affinity_fallback_tier`) and
+  cleared, so the request goes through normal tier selection (Kiro first).
+
+When Kiro is disabled it leaves the cache candidate list, A6 becomes the top
+enabled tier, and binding to A6 works as before; once Kiro is re-enabled the
+next request drops the A6 binding. Single-tier models (Fable, GPT) are
+unaffected. Strict sessions are exempt (they must keep their channel). Fail
+open: memory cache off, unknown channel or no candidates reports "top tier".
+B1 (retry avoids tried channels), B2 (no retry after client bytes) and the 27a
+success gate are unchanged.
+
+Trade-off: a session whose requests keep failing on Kiro now pays the Kiro
+attempt each time instead of sticking to A6.
+
+Tests: `model/channel_top_tier_test.go`,
+`service/channel_affinity_fallback_tier_test.go` (fallback success does not
+bind or overwrite; stale fallback binding skipped + cleared; primary disabled
+binds fallback; strict keeps it). `controller/channel_pin_retry_test.go`
+`TestRequestPolicyRoutingDatabaseMatrix` had been failing since 27a (it runs
+`Distribute()` without a relay, so the request was never marked successful);
+it now marks success before `Distribute()` and passes.
