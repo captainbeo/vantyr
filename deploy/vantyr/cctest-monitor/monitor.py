@@ -183,6 +183,62 @@ _STATE_LOCK = threading.Lock()
 # just the state save — the lock's job is the gateway writes, not the file.
 _MUTATION_LOCK = threading.Lock()
 
+# Fast ticks vs the hourly cycle (2026-10-27). The cycle holds the mutation
+# lock through each channel's cctest check (30-150s), and the 5-minute breaker
+# and the primary sweep took it non-blocking, so they skipped whenever the
+# cycle was mid-check: 13 skipped [primary] ticks in 24h, 09:22-09:32 in a row,
+# i.e. a Kiro outage in that window would not have failed over. Fast ticks now
+# wait for the lock (FAST_TICK_LOCK_WAIT_SECONDS), and the cycle yields to a
+# waiting or running fast tick at its next lock boundary. _FAST_ACTIVE counts
+# fast ticks from the moment they ask for the lock until they release it.
+_FAST_COND = threading.Condition()
+_FAST_ACTIVE = 0
+# Upper bound on how long the cycle waits for a fast tick to finish (a breaker
+# rotation can include one pre-promotion cctest check, up to ~300s).
+CYCLE_YIELD_MAX_SECONDS = 600
+
+
+def _fast_lock_acquire():
+    """Mutation lock for the breaker tick and the primary sweep. Waits up to
+    FAST_TICK_LOCK_WAIT_SECONDS (default 360: longer than one worst-case
+    cctest check, ~300s, so the cycle step in flight always finishes first;
+    0 = the old non-blocking try). Returns True when held; release with
+    _fast_lock_release()."""
+    global _FAST_ACTIVE
+    with _FAST_COND:
+        _FAST_ACTIVE += 1
+    wait = _watchdog_env_int("FAST_TICK_LOCK_WAIT_SECONDS", 360, lo=0)
+    acquired = (_MUTATION_LOCK.acquire(timeout=wait) if wait > 0
+                else _MUTATION_LOCK.acquire(blocking=False))
+    if not acquired:
+        _fast_lock_release(held=False)
+    return acquired
+
+
+def _fast_lock_release(held=True):
+    global _FAST_ACTIVE
+    if held:
+        _MUTATION_LOCK.release()
+    with _FAST_COND:
+        _FAST_ACTIVE -= 1
+        _FAST_COND.notify_all()
+
+
+def _cycle_lock_acquire():
+    """Mutation lock for one step of the hourly cycle. A fast tick that is
+    waiting or running goes first: the cycle waits for it to finish, then
+    takes the lock. Otherwise the cycle waits CYCLE_LOCK_WAIT_SECONDS
+    (default 0: skip the step when an operator action holds the lock, the
+    old behavior). Returns True when held; release _MUTATION_LOCK."""
+    wait = _watchdog_env_int("CYCLE_LOCK_WAIT_SECONDS", 0, lo=0)
+    with _FAST_COND:
+        if _FAST_ACTIVE:
+            _FAST_COND.wait_for(lambda: _FAST_ACTIVE == 0, timeout=CYCLE_YIELD_MAX_SECONDS)
+            # The tick just released; a short wait covers anyone who slipped in.
+            wait = max(wait, 30)
+    return (_MUTATION_LOCK.acquire(timeout=wait) if wait > 0
+            else _MUTATION_LOCK.acquire(blocking=False))
+
 
 def save_state(state):
     # Three writers share this file (cycle thread, sync thread, HTTP action
@@ -554,6 +610,9 @@ A6_KEY_NAME_TO_SKU = {
     "sol": "gpt-6-sol",
     "6 sol": "gpt-6-sol",
     "6.1 sol": "gpt-6-1-sol",
+    # Kiro serves haiku today; A6 haiku keys bought later join the pool as
+    # standby pins like every other model (2026-10-27).
+    "haiku 5.5": "claude-haiku-5-5",
 }
 
 # Model spellings that name the SAME underlying model — a pin serving any of
@@ -624,6 +683,27 @@ def accepted_upgrade(expected, predicted):
 def model_pool_names(model):
     """The set of spellings that share one merchant pool for `model`."""
     return MODEL_ALIASES.get(model, {model})
+
+
+def min_active_for(model):
+    """Active-pin target for one model's pool: MIN_ACTIVE_PINS (default 2),
+    overridden per model by MIN_ACTIVE_PINS_BY_MODEL ("claude-fable-5-1:3,
+    gpt-6-astra:3"; any alias spelling). Malformed values fall back to the
+    default (a typo must never disable a pool or crash the cycle)."""
+    try:
+        default = max(1, int(os.environ.get("MIN_ACTIVE_PINS", "2")))
+    except (TypeError, ValueError):
+        default = 2
+    pool = model_pool_names(model)
+    for entry in os.environ.get("MIN_ACTIVE_PINS_BY_MODEL", "").split(","):
+        name, sep, value = entry.strip().partition(":")
+        if not sep or name.strip() not in pool:
+            continue
+        try:
+            return max(1, int(value.strip()))
+        except ValueError:
+            LOG.error("bad MIN_ACTIVE_PINS_BY_MODEL entry %r — using %d", entry.strip(), default)
+    return default
 
 
 def parse_a6_key_name(raw):
@@ -1104,6 +1184,46 @@ def _prune_phantom_pins(gateway, channels, a6_merchants, discord):
     return pruned
 
 
+def _row_created_at(row):
+    """A log row's created_at as int epoch seconds, or None when absent."""
+    try:
+        value = row.get("created_at")
+        return None if value is None else int(value)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+# A6 smart-routing failures that mean THIS merchant's candidate pool is
+# exhausted or empty (502/500 "all candidates failed", 503 "pool has no
+# active candidate", 503 "every merchant in the subscription pool is
+# unavailable"). A6 platform-side 503s (billing DB saturation, relay memory
+# guard) hit every merchant at once and are deliberately not listed.
+POOL_ERROR_MARKERS = ("智能路由候选均请求失败", "个人智能路由池没有活跃候选", "订阅池内商家当前全部不可用")
+
+
+def is_pool_error(content):
+    text = str(content or "")
+    return text.lstrip().startswith("status_code=5") and any(m in text for m in POOL_ERROR_MARKERS)
+
+
+def pin_pool_dead(gateway, channel_id, window_minutes, streak, since_ts=None):
+    """Fast "pool dead" signal (2026-10-27): True when the pin answered at
+    least `streak` A6 pool errors since its last success (and since
+    `since_ts`, the promotion time). The breaker's ratio rule needs 10 hard
+    errors and a 10% share, so a pin whose A6 pool just died after a busy hour
+    keeps receiving its share of every request until the hourly cycle; the
+    gateway retries those on another channel, but each one costs the customer
+    a failed attempt first. Returns None when a log query fails."""
+    errors = gateway.recent_error_logs(channel_id, window_minutes)
+    ok_rows = gateway.recent_consume_logs(channel_id, window_minutes, limit=1)
+    if errors is None or ok_rows is None:
+        return None
+    last_ok = max((_row_created_at(r) or 0 for r in ok_rows), default=0)
+    floor = max(last_ok, int(since_ts or 0))
+    streak_rows = [r for r in errors if (_row_created_at(r) or 0) > floor]
+    return sum(1 for r in streak_rows if is_pool_error(r.get("content"))) >= streak
+
+
 def _parse_other(row):
     """`other` is a JSON string column; tolerate missing/invalid."""
     try:
@@ -1154,6 +1274,15 @@ def pin_latency_sick(gateway, channel_id, window_minutes, latency_cfg,
     successes = gateway.count_logs(2, channel_id, window_minutes, since_ts=since_ts)
     if error_rows is None or successes is None:
         return None
+    if since_ts:
+        # Grace (post-promotion / post-restore) slices the error ROWS too. The
+        # success count was sliced but the rows were not, so a re-promoted pin
+        # was scored on its previous stint's errors against a handful of fresh
+        # successes: fable-5's only pin (ch51) was benched with hard_err=30
+        # ok=3 "in grace" (2026-10-27 14:01) and the model went dark. Rows
+        # without a timestamp still count (the old behavior).
+        error_rows = [r for r in error_rows
+                      if _row_created_at(r) is None or _row_created_at(r) >= int(since_ts)]
     hard_errors = sum(
         1 for r in error_rows
         if str(r.get("content") or "").lstrip().startswith("status_code=5")
@@ -2252,6 +2381,10 @@ def main():
         # 3 failures in a quiet 30-request window read as 10% and disabled
         # the whole primary on noise. Require this many hard errors too.
         "min_errors": _env_int("CIRCUIT_MIN_ERRORS", 10),
+        # Fast bench (2026-10-27): a pin answering this many A6 pool errors in
+        # a row since its last success is benched on the next tick, provided
+        # another pin still serves its pool (pin_pool_dead). 0 disables.
+        "pool_error_streak": _env_int("CIRCUIT_POOL_ERROR_STREAK", 3, lo=0),
     }
     circuit_window = _env_int("CIRCUIT_WINDOW_MINUTES", 15)
     circuit_interval = _env_int("CIRCUIT_INTERVAL_MINUTES", 5)
@@ -2422,8 +2555,8 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes, restore
     rt = RUNTIME
     if rt is None or not rt.get("enforce") or not rt.get("primary_channels"):
         return 0
-    if not _MUTATION_LOCK.acquire(blocking=False):
-        LOG.info("[primary] another rotation is in flight — skipping this tick")
+    if not _fast_lock_acquire():
+        LOG.warning("[primary] mutation lock still busy after the wait — skipping this tick")
         return 0
     acted = 0
     try:
@@ -2563,7 +2696,7 @@ def sweep_primary_channels(circuit_cfg, window_minutes, restore_minutes, restore
         LOG.exception("[primary] sweep failed")
         return acted
     finally:
-        _MUTATION_LOCK.release()
+        _fast_lock_release()
 
 
 def circuit_breaker_tick(circuit_cfg, window_minutes):
@@ -2573,27 +2706,38 @@ def circuit_breaker_tick(circuit_cfg, window_minutes):
     for the regular hourly cycle. Returns the number of rotations attempted.
 
     Mutation-locked like the cycle's rotation: an operator promote/verify
-    landing mid-sweep would race it. A busy lock skips this tick.
+    landing mid-sweep would race it. The tick waits for the lock (see
+    _fast_lock_acquire) and skips only when it stays busy.
+
+    With circuit_cfg["pool_error_streak"] set, a pin that answered that many
+    A6 pool errors in a row since its last success is benched first (never
+    the pool's last active pin).
     """
     rt = RUNTIME
     if rt is None or not rt.get("enforce"):
         return 0
-    if not _MUTATION_LOCK.acquire(blocking=False):
-        LOG.info("[circuit] another rotation is in flight — skipping this tick")
+    if not _fast_lock_acquire():
+        LOG.warning("[circuit] mutation lock still busy after the wait — skipping this tick")
         return 0
     try:
         channels = rt["gateway"].list_channels()
-        # C2 (checklist 2026-10-26): collect all active pins per model.
-        active_pins = {}  # {model: [ch1, ch2, ...]}
+        # C2 (checklist 2026-10-26): collect all active pins per model POOL,
+        # like run_cycle does. Keying by raw model scored a dual-spelling pin
+        # (gpt-6-1-sol + gpt-6.1-sol) twice per tick and could rotate it twice.
+        active_pins = {}  # {pool_key: [ch1, ch2, ...]}
         for ch in channels:
             if not (is_pinned_channel(ch.get("name") or "")
                     and int(ch.get("status") or 0) == CHANNEL_ENABLED):
                 continue
             for m in [x.strip() for x in (ch.get("models") or "").split(",") if x.strip()]:
-                if m not in active_pins:
-                    active_pins[m] = []
-                if ch not in active_pins[m]:
-                    active_pins[m].append(ch)
+                pool_key = sorted(model_pool_names(m))[0]
+                if pool_key not in active_pins:
+                    active_pins[pool_key] = []
+                if ch not in active_pins[pool_key]:
+                    active_pins[pool_key].append(ch)
+        streak = int(circuit_cfg.get("pool_error_streak") or 0)
+        if streak > 0:
+            _bench_pool_dead_pins(rt, active_pins, window_minutes, streak)
         _run_sick_rotation(
             rt["gateway"], rt["cctest"], rt["sellers"], active_pins, rt["state"],
             rt["discord"], True, window_minutes, rt.get("seller_registry"),
@@ -2605,7 +2749,55 @@ def circuit_breaker_tick(circuit_cfg, window_minutes):
         LOG.exception("[circuit] tick failed")
         return 0
     finally:
-        _MUTATION_LOCK.release()
+        _fast_lock_release()
+
+
+def _bench_pool_dead_pins(rt, active_pins, window_minutes, streak):
+    """Bench (quarantine) every active pin whose A6 pool is answering only
+    pool errors (pin_pool_dead), as long as another pin still serves its
+    pool, then try to refill the pool from a PASS-verified standby. Benched
+    pins leave active_pins so the sick rotation that follows skips them.
+    Caller holds the mutation lock."""
+    gateway, state, discord = rt["gateway"], rt["state"], rt["discord"]
+    for pool_key, pins in active_pins.items():
+        for pin_ch in list(pins):
+            if len(pins) <= 1:
+                break  # never bench the pool's last pin on this signal alone
+            name = pin_ch.get("name") or ""
+            since = _grace_start(pin_ch, state)
+            if pin_pool_dead(gateway, int(pin_ch["id"]), window_minutes, streak,
+                             since_ts=since) is not True:
+                continue
+            try:
+                gateway.set_status(int(pin_ch["id"]), CHANNEL_MANUALLY_DISABLED)
+                gateway.fix_abilities()
+            except Exception as e:
+                LOG.error("[circuit] FAILED to bench pool-dead pin %s: %s", name, e)
+                continue
+            pins.remove(pin_ch)
+            ch_state = state.setdefault(name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+            # Not "permanent": the merchant is not fake, its A6 pool is empty
+            # or failing. The 2h quarantine re-check releases it to standby.
+            ch_state.update({
+                "quarantined": True,
+                "quarantined_since": datetime.now(timezone.utc).isoformat(),
+                "permanent": False,
+                "model": pool_key,
+            })
+            LOG.warning("[circuit] %s (ch %s) answered %d+ A6 pool errors in a row — benched; "
+                        "%d pin(s) still serve %s", name, pin_ch.get("id"), streak, len(pins), pool_key)
+            discord_alert(discord, f"cctest: {name} answered {streak}+ A6 pool errors in a row "
+                                   f"(smart-routing pool empty/failing) — benched; "
+                                   f"{', '.join(p.get('name') or '' for p in pins)} still serving {pool_key}")
+            try:
+                fresh = gateway.list_channels()
+                entry = find_seller_entry(rt["sellers"], fresh, name)
+                if entry:
+                    promote_next_standby(gateway, rt["cctest"], pin_ch, entry[0], entry[1], pool_key,
+                                         True, discord, state, fresh, rt.get("seller_registry"))
+            except Exception as e:
+                LOG.error("[circuit] refill after benching %s failed: %s", name, e)
+            save_state(state)
 
 
 def circuit_breaker_loop(circuit_cfg, window_minutes, interval_minutes,
@@ -2742,8 +2934,8 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     # C2 (checklist 2026-10-26): min-active target per model (default 2).
     # Manually-enabled extras beyond the target create a lottery the owner
     # explicitly retired — extras are disabled back to standby with an alert.
-    # When below target, promote_next_standby refills to the target.
-    min_active = max(1, int(os.environ.get("MIN_ACTIVE_PINS", "2")))
+    # When below target, refill_active_pins (end of cycle) tops the pool up.
+    # The target is per model pool (min_active_for, MIN_ACTIVE_PINS_BY_MODEL).
     active_pins = {}  # {pool_key: [ch1, ch2, ...]}
     for ch in channels:
         if not (is_pinned_channel(ch.get("name") or "") and int(ch.get("status") or 0) == CHANNEL_ENABLED):
@@ -2759,14 +2951,16 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 active_pins[pool_key].append(ch)
     extra_actives = []
     for pool_key, pins in active_pins.items():
-        if len(pins) > min_active:
-            # Keep the first min_active, disable the rest.
-            for extra in pins[min_active:]:
+        target = min_active_for(pool_key)
+        if len(pins) > target:
+            # Keep the first `target`, disable the rest.
+            for extra in pins[target:]:
                 extra_actives.append((pool_key, extra))
-    if extra_actives and enforce and _MUTATION_LOCK.acquire(blocking=False):
+    if extra_actives and enforce and _cycle_lock_acquire():
       try:
         for pool_key, extra in extra_actives:
             extra_name = extra.get("name")
+            min_active = min_active_for(pool_key)
             keepers = ", ".join(ch.get("name") or "" for ch in active_pins[pool_key][:min_active])
             LOG.warning("[dedup] %s has %d active pins (target %d) — disabling extra %s (keeping %s)",
                         pool_key, len(active_pins[pool_key]), min_active, extra_name, keepers)
@@ -2803,7 +2997,9 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     for name, base_url, seller_key in sellers:
         allowed = seller_model_filter.get(name)
         for channel in expand_seller_to_channels(channels, name, base_url, seller_key):
-            if _MUTATION_LOCK.acquire(blocking=False):
+            # _cycle_lock_acquire yields to a waiting fast tick first (it gets
+            # the lock between two channels instead of skipping its turn).
+            if _cycle_lock_acquire():
                 try:
                     process_channel(
                         gateway, cctest, channel, base_url, seller_key, model_prefixes,
@@ -2813,10 +3009,10 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
                 finally:
                     _MUTATION_LOCK.release()
             else:
-                # Another rotation is in flight; this channel's turn is
+                # An operator action holds the lock; this channel's turn is
                 # skipped and the next cycle re-checks it. Failing open
-                # (not blocking) keeps the breaker and the operator
-                # responsive — the same trade-off the sick rotation makes.
+                # (not blocking) keeps the operator responsive — the same
+                # trade-off the sick rotation makes.
                 LOG.info("[cycle] mutation lock busy — skipping check of %s this cycle",
                          channel.get("name"))
             save_state(state)
@@ -2830,13 +3026,27 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     # off). A busy cycle skips the rotation this round; the next cycle's
     # sick check catches it.
     if enforce:
-        if not _MUTATION_LOCK.acquire(blocking=False):
+        if not _cycle_lock_acquire():
             LOG.info("[sick] another rotation is in flight — skipping sick checks this cycle")
         else:
             try:
                 _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry, latency_cfg=latency_cfg)
             finally:
                 _MUTATION_LOCK.release()
+        # Refill (2026-10-27): promote_next_standby only ran after a failure,
+        # so nothing ever topped a pool up to its target — every model sat on
+        # one active pin and lost all A6 coverage whenever that merchant
+        # failed (fable-5, 14:01). Runs after the checks and the sick rotation
+        # so it sees the cycle's final state.
+        if _cycle_lock_acquire():
+            try:
+                refill_active_pins(gateway, cctest, state, discord, enforce)
+            except Exception:
+                LOG.exception("[refill] refill failed")
+            finally:
+                _MUTATION_LOCK.release()
+        else:
+            LOG.info("[refill] mutation lock busy — refill deferred to the next cycle")
     # Freshness marker for the status server: an old last_cycle_at (vs
     # cycle_minutes) visibly signals a broken cycle on the admin page. Written
     # HERE, at the true end of the hourly cycle, and NOT in
@@ -2849,6 +3059,33 @@ def run_cycle(gateway, cctest, sellers, model_prefixes, usage_window_hours,
     save_state(state)
 
 
+def _pin_enabled_at(channel):
+    """When the gateway last changed this channel's status, as int epoch
+    seconds (other_info.status_time, stamped by model.UpdateChannelStatus on
+    every enable/disable, whoever made it). For an enabled pin that is the
+    moment it was enabled. None when absent or unparseable."""
+    raw = channel.get("other_info")
+    if not raw:
+        return None
+    try:
+        info = json.loads(raw) if isinstance(raw, str) else raw
+        value = info.get("status_time") if isinstance(info, dict) else None
+        return int(value) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _grace_start(pin_ch, state):
+    """Start of an active pin's post-promotion grace: the later of the
+    monitor's own promotion (promoted_at) and the gateway's last status change.
+    A pin enabled by hand or through the API has no promoted_at (ch9,
+    2026-10-27 17:29: enabled ~17:05, then benched on 20 errors from its 12:54
+    stint, still inside the 6h sick window). None when neither is known."""
+    starts = [t for t in ((state.get(pin_ch.get("name")) or {}).get("promoted_at"),
+                          _pin_enabled_at(pin_ch)) if t]
+    return max(starts) if starts else None
+
+
 def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, enforce, sick_window_minutes, seller_registry=None, latency_cfg=None):
     """Rotate sick active pins. active_pins is now {model: [ch1, ch2, ...]} (C2,
     checklist 2026-10-26), supporting multiple active pins per model."""
@@ -2859,15 +3096,14 @@ def _run_sick_rotation(gateway, cctest, sellers, active_pins, state, discord, en
             pin_name = pin.get("name")
             # Post-promotion grace (owner refinement 2026-10-27): a newly promoted
             # pin is scored only on traffic since its promotion, not on inherited
-            # errors from the previous active pin. Grace window matches the sick
-            # window (typically 15 minutes).
+            # errors from the previous active pin. The grace lasts one sick
+            # window and also starts at a manual enable (_grace_start).
             grace_since = None
-            pin_state = state.get(pin_name) or {}
-            promoted_at = pin_state.get("promoted_at")
-            if promoted_at and time.time() - promoted_at < sick_window_minutes * 60:
-                grace_since = promoted_at
-                LOG.info("[sick] %s in post-promotion grace (promoted %.1fm ago) — scoring since promotion",
-                         pin_name, (time.time() - promoted_at) / 60)
+            started = _grace_start(pin, state)
+            if started and time.time() - started < sick_window_minutes * 60:
+                grace_since = started
+                LOG.info("[sick] %s in post-promotion grace (enabled %.1fm ago) — scoring since then",
+                         pin_name, (time.time() - started) / 60)
             sick = pin_is_sick(gateway, int(pin["id"]), sick_window_minutes, latency_cfg=latency_cfg, since_ts=grace_since)
             if sick is not True:
                 continue
@@ -2999,6 +3235,171 @@ def _standby_score(gateway, channel_id, window_minutes, state, channel_name):
     return (success_rate, median_frt, total)
 
 
+def _rank_standbys(gateway, model, candidates, state):
+    """Order standby candidates for promotion, best first. Returns (ranked
+    candidates, A6 health by merchant id). On a ranking failure the input
+    order is kept and the health map is empty (fail-open, never worse than
+    first-fresh)."""
+    # Prefer A6-healthy candidates (2026-10-23 sonnet-5 outage: the
+    # first fresh standby was merchant 1204, delisted from the A6
+    # marketplace and dead — 503s for the whole model). A marketplace
+    # check is one cheap public GET; a delisted/unhealthy merchant
+    # sorts last and an unavailable one is skipped when any healthy
+    # candidate exists. Health data unavailable (A6 fetch failed) →
+    # fall back to first-fresh (fail-open, never worse than before).
+    # C1 (checklist 2026-10-26): rank by OUR success rate + FRT first, then
+    # A6 marketplace health as a tiebreak. Our metrics are primary evidence
+    # (real customer traffic); A6 health is still consulted (delisted pins
+    # sort last), but no longer the only ranking factor.
+    our_scores = {}  # {channel_name: (success_rate, median_frt, samples) | None}
+    window_h = int(os.environ.get("USAGE_WINDOW_HOURS", "7"))
+    for ch in candidates:
+        ch_id = int(ch.get("id") or 0)
+        ch_name = ch.get("name") or ""
+        our_scores[ch_name] = _standby_score(gateway, ch_id, window_h * 60, state, ch_name)
+    try:
+        market = A6Market()
+        candidates_health = market.health_for(
+            model,
+            {c.get("name", "").rsplit("-", 1)[-1] for c in candidates},
+        )
+
+        def _rank(ch):
+            ch_name = ch.get("name") or ""
+            h = candidates_health.get(ch_name.rsplit("-", 1)[-1]) or {}
+            # Gate: a delisted merchant ALWAYS sorts last, whatever our
+            # history says (2026-10-27 6.1-sol flap: delisted #85 had
+            # traffic data, so it outranked six listed never-used
+            # standbys that had none).
+            listed = 0 if h.get("unlisted") else 1
+            # Primary: our own metrics (success rate desc, FRT asc).
+            our = our_scores.get(ch_name)
+            if our is not None:
+                success_rate, median_frt, samples = our
+                primary = (success_rate, -median_frt, samples)
+            else:
+                # No data: sort after those with data, but before delisted.
+                primary = (-1.0, 0, 0)
+            # Tiebreak: A6 marketplace health.
+            if h.get("unlisted"):
+                tiebreak = (0, 0, 0)
+            else:
+                tiebreak = (
+                    1 if h.get("healthy") else 0,
+                    h.get("success_rate") or 0,
+                    -(h.get("price_micros") or 10**9),
+                )
+            return (listed,) + primary + tiebreak
+        return sorted(candidates, key=_rank, reverse=True), candidates_health
+    except Exception as e:
+        LOG.warning("[pin] standby ranking (our metrics + A6 health) failed for %s (%s); "
+                    "first-fresh fallback", model, e)
+        return list(candidates), {}
+
+
+def refill_active_pins(gateway, cctest, state, discord, enforce=True):
+    """Top every pin pool up to its target (min_active_for) with standbys that
+    PASS a direct check against their OWN A6 key (2026-10-27).
+
+    promote_next_standby only ran after a failure, so nothing ever added a
+    second pin: every model sat on one active merchant and lost all A6
+    coverage the moment it failed (fable-5, 14:01). Only pools that still have
+    an active pin are refilled — a pool with none is a failover, owned by
+    promote_next_standby (which may fail open). A refill never enables an
+    inconclusive, quarantined, bad-marked (in cooldown) or delisted standby,
+    and spends at most REFILL_MAX_CHECKS (default 2) cctest checks per pool
+    per call. Needs the A6 management API for the keys (no-op without it).
+    Caller holds the mutation lock. Returns the names of the pins enabled."""
+    a6m = RUNTIME.get("a6m") if RUNTIME else None
+    if a6m is None or not enforce:
+        return []
+    try:
+        channels = gateway.list_channels()
+    except Exception as e:
+        LOG.warning("[refill] channel list failed (%s); refill skipped", e)
+        return []
+    max_checks = _watchdog_env_int("REFILL_MAX_CHECKS", 2, lo=0)
+    cooldown = _watchdog_env_int("STANDBY_COOLDOWN_HOURS", 3) * 3600
+    pools = {}  # {pool_key: {"active": [ch, ...], "standby": [ch, ...]}}
+    for ch in channels:
+        status = int(ch.get("status") or 0)
+        if not is_pinned_channel(ch.get("name") or "") or status not in (CHANNEL_ENABLED, CHANNEL_MANUALLY_DISABLED):
+            continue
+        keys = {sorted(model_pool_names(x.strip()))[0]
+                for x in (ch.get("models") or "").split(",") if x.strip()}
+        for key in keys:
+            slot = pools.setdefault(key, {"active": [], "standby": []})
+            slot["active" if status == CHANNEL_ENABLED else "standby"].append(ch)
+    added = []
+    now = time.time()
+    bad = state.setdefault("bad_standbys", {})
+    for pool_key, slot in sorted(pools.items()):
+        target = min_active_for(pool_key)
+        active = len(slot["active"])
+        if not slot["active"] or active >= target:
+            continue
+        marks = {}
+        for spelling in model_pool_names(pool_key):
+            if isinstance(bad.get(spelling), dict):
+                marks.update(bad[spelling])
+        candidates = [
+            ch for ch in slot["standby"]
+            if not (state.get(ch["name"]) or {}).get("quarantined")
+            and not (ch["name"] in marks and now - marks[ch["name"]] < cooldown)
+        ]
+        if not candidates:
+            LOG.info("[refill] %s has %d/%d active pin(s) and no eligible standby", pool_key, active, target)
+            continue
+        ranked, health = _rank_standbys(gateway, pool_key, candidates, state)
+        checks = 0
+        for ch in ranked:
+            if active >= target or checks >= max_checks:
+                break
+            name = ch["name"]
+            if (health.get(name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
+                # Delisted merchants 503. The pool is still served, so there
+                # is no reason to fail open onto one.
+                continue
+            key = _pin_reveal_key(a6m, name, pool_key)
+            if not key:
+                continue
+            # A6 registers the upstream spelling (gpt-6.1-sol), not our SKU.
+            check_model = parse_model_mapping(ch.get("model_mapping")).get(pool_key, pool_key)
+            verdict = do_check(cctest, ch.get("base_url") or "https://api.a6api.com", key, check_model)
+            checks += 1
+            st = state.setdefault(name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False})
+            record_verdict(st, pool_key, verdict)
+            LOG.info("[refill] verify %s (%s) direct -> %s", name, check_model, verdict)
+            if verdict in BAD_VERDICTS:
+                if isinstance(bad.get(pool_key), list):
+                    bad[pool_key] = {n: now for n in bad[pool_key]}
+                bad.setdefault(pool_key, {})[name] = time.time()
+                continue
+            if verdict not in PASS_VERDICTS:
+                continue  # inconclusive: never enabled while the pool is served
+            try:
+                gateway.set_status(int(ch["id"]), CHANNEL_ENABLED)
+                gateway.fix_abilities()
+            except Exception as e:
+                LOG.error("[refill] enabling %s FAILED: %s", name, e)
+                continue
+            st["promoted_at"] = time.time()
+            for spelling in model_pool_names(pool_key):
+                if isinstance(bad.get(spelling), dict):
+                    bad[spelling].pop(name, None)
+            active += 1
+            added.append(name)
+            LOG.warning("[refill] enabled verified standby %s for %s (%d/%d active pins)",
+                        name, pool_key, active, target)
+            discord_alert(discord, f"cctest: refill — enabled verified standby {name} for {pool_key} "
+                                   f"({active}/{target} active pins)")
+        if active < target:
+            LOG.info("[refill] %s still at %d/%d active pin(s) after %d check(s)", pool_key, active, target, checks)
+    if added:
+        save_state(state)
+    return added
+
+
 def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
                          model, enforce, discord, state, channels_snapshot,
                          seller_registry=None, preferred_name=None):
@@ -3024,7 +3425,7 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         LOG.warning("[pin] quarantined pin has no model; no standby search")
         return
     pool = model_pool_names(model)
-    min_active = max(1, int(os.environ.get("MIN_ACTIVE_PINS", "2")))
+    min_active = min_active_for(model)
     # C2: stop promoting once the model has min_active pins (idempotence).
     actives_for_model = [
         ch for ch in (channels_snapshot or [])
@@ -3123,64 +3524,11 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     else:
         if not candidates:
             return
-        # Prefer A6-healthy candidates (2026-10-23 sonnet-5 outage: the
-        # first fresh standby was merchant 1204, delisted from the A6
-        # marketplace and dead — 503s for the whole model). A marketplace
-        # check is one cheap public GET; a delisted/unhealthy merchant
-        # sorts last and an unavailable one is skipped when any healthy
-        # candidate exists. Health data unavailable (A6 fetch failed) →
-        # fall back to first-fresh (fail-open, never worse than before).
-        # C1 (checklist 2026-10-26): rank by OUR success rate + FRT first, then
-        # A6 marketplace health as a tiebreak. Our metrics are primary evidence
-        # (real customer traffic); A6 health is still consulted (delisted pins
-        # sort last), but no longer the only ranking factor.
-        our_scores = {}  # {channel_name: (success_rate, median_frt, samples) | None}
-        window_h = int(os.environ.get("USAGE_WINDOW_HOURS", "7"))
-        for ch in candidates:
-            ch_id = int(ch.get("id") or 0)
-            ch_name = ch.get("name") or ""
-            our_scores[ch_name] = _standby_score(gateway, ch_id, window_h * 60, state, ch_name)
-        try:
-            market = A6Market()
-            candidates_health = market.health_for(
-                model,
-                {c.get("name", "").rsplit("-", 1)[-1] for c in candidates},
-            )
-            def _rank(ch):
-                ch_name = ch.get("name") or ""
-                h = candidates_health.get(ch_name.rsplit("-", 1)[-1]) or {}
-                # Gate: a delisted merchant ALWAYS sorts last, whatever our
-                # history says (2026-10-27 6.1-sol flap: delisted #85 had
-                # traffic data, so it outranked six listed never-used
-                # standbys that had none).
-                listed = 0 if h.get("unlisted") else 1
-                # Primary: our own metrics (success rate desc, FRT asc).
-                our = our_scores.get(ch_name)
-                if our is not None:
-                    success_rate, median_frt, samples = our
-                    primary = (success_rate, -median_frt, samples)
-                else:
-                    # No data: sort after those with data, but before delisted.
-                    primary = (-1.0, 0, 0)
-                # Tiebreak: A6 marketplace health.
-                if h.get("unlisted"):
-                    tiebreak = (0, 0, 0)
-                else:
-                    tiebreak = (
-                        1 if h.get("healthy") else 0,
-                        h.get("success_rate") or 0,
-                        -(h.get("price_micros") or 10**9),
-                    )
-                return (listed,) + primary + tiebreak
-            candidates = sorted(candidates, key=_rank, reverse=True)
-            top = candidates[0]
-            top_name = top.get("name") or ""
-            if (candidates_health.get(top_name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
-                LOG.warning("[pin] only delisted standby candidates for %s — "
-                            "promoting %s anyway (fail-open)", model, top_name)
-        except Exception as e:
-            LOG.warning("[pin] standby ranking (our metrics + A6 health) failed for %s (%s); "
-                        "first-fresh fallback", model, e)
+        candidates, candidates_health = _rank_standbys(gateway, model, candidates, state)
+        top_name = candidates[0].get("name") or ""
+        if (candidates_health.get(top_name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
+            LOG.warning("[pin] only delisted standby candidates for %s — "
+                        "promoting %s anyway (fail-open)", model, top_name)
         standby = candidates[0]
     standby_name = standby["name"]
     if not enforce:
@@ -3194,11 +3542,27 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
     # path (fail-open, better than leaving the model dark).
     pre_verdict = None
     pre_checked = False
+    # PASS-only while the model is still served (2026-10-27). The fail-open
+    # enable-then-verify fallback below exists for the 2026-10-24 deadlock:
+    # a model with NO serving pin. When another pin still serves the model,
+    # enabling an unverified merchant only adds risk (the gateway-routed
+    # verify after the enable lands on whichever pin the router picks, so it
+    # does not even test the new one) — refuse, and let the next cycle's
+    # refill try the next standby.
+    still_served = bool(actives_for_model)
     pin_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, standby_name, model)
+    if not pin_key and still_served:
+        LOG.warning("[pin] %s has no revealable A6 key — not enabled while %s is still served "
+                    "by %d pin(s)", standby_name, model, len(actives_for_model))
+        return
     if pin_key:
         pin_base = standby.get("base_url") or "https://api.a6api.com"
-        pre_verdict = do_check(cctest, pin_base, pin_key, model)
-        LOG.info("[pin] pre-promotion verify %s (%s) direct -> %s", standby_name, model, pre_verdict)
+        # A6 registers the UPSTREAM spelling (gpt-6.1-sol); asking for our SKU
+        # is a 403 model_not_allowed, i.e. an inconclusive check (the same
+        # mapping the quarantine re-check uses, audit M5).
+        check_model = parse_model_mapping(standby.get("model_mapping")).get(model, model)
+        pre_verdict = do_check(cctest, pin_base, pin_key, check_model)
+        LOG.info("[pin] pre-promotion verify %s (%s) direct -> %s", standby_name, check_model, pre_verdict)
         st_state = state.setdefault(
             standby_name, {"rotation": [], "idx": 0, "fails": 0, "quarantined": False}
         )
@@ -3212,6 +3576,10 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
             return
         if pre_verdict in PASS_VERDICTS:
             pre_checked = True
+        elif still_served:
+            LOG.warning("[pin] %s pre-promotion verify inconclusive for %s — not enabled while "
+                        "the model is still served", standby_name, model)
+            return
         else:
             # INCONCLUSIVE (cctest unreachable, or the key lacks the model
             # permission — HTTP 403 model_not_allowed). Do NOT refuse: a
@@ -3577,18 +3945,34 @@ def process_channel(gateway, cctest, channel, base_url, seller_key, model_prefix
     # gpt-6.1-sol; sending our SKU gpt-6-1-sol gets model_not_allowed).
     mapping = parse_model_mapping(channel.get("model_mapping"))
     upstream_candidate = mapping.get(candidate, candidate)
-    check_name = candidate if is_gateway_routed(base_url) else upstream_candidate
-    verdict = do_check(cctest, base_url, seller_key, check_name)
-    LOG.info("[%s] check %s (upstream %s) -> %s", name, check_name, upstream_candidate, verdict)
+    # Active pins are checked with their OWN A6 key (2026-10-27). A
+    # gateway-routed check tests whichever channel the router picks: for
+    # Kiro-backed models that is kiro-pool, so their A6 pins went 13-35h
+    # without a verdict of their own, and with two active pins it lands on
+    # a random one. A pin whose key cannot be revealed (legacy plain-named
+    # pin, reveal rate limit) keeps the gateway-routed check below.
+    direct_key = None
+    if is_pinned_channel(name):
+        direct_key = _pin_reveal_key(RUNTIME.get("a6m") if RUNTIME else None, name, candidate)
+    if direct_key:
+        check_name = upstream_candidate  # A6 registers the upstream spelling
+        verdict = do_check(cctest, channel.get("base_url") or "https://api.a6api.com",
+                           direct_key, check_name)
+        LOG.info("[%s] check %s direct (own key) -> %s", name, check_name, verdict)
+    else:
+        check_name = candidate if is_gateway_routed(base_url) else upstream_candidate
+        verdict = do_check(cctest, base_url, seller_key, check_name)
+        LOG.info("[%s] check %s (upstream %s) -> %s", name, check_name, upstream_candidate, verdict)
 
     # Gateway-routed attribution: a check labeled for this channel may
     # have been served by a DIFFERENT channel (the gateway routes by its
     # own priorities). Look up which channel actually served the model in
     # the last few minutes and attribute the verdict there. Without this,
     # failover actions would be taken against channels that never served
-    # the checked request (audit 2026-10-13 defect #1).
+    # the checked request (audit 2026-10-13 defect #1). A direct check
+    # describes this channel by construction — no attribution hop.
     actual_channel = None
-    if is_gateway_routed(base_url):
+    if is_gateway_routed(base_url) and not direct_key:
         try:
             actual_channel = gateway.last_channel_for_model(check_name, window_minutes=15)
         except Exception as e:
