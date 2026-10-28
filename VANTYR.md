@@ -6069,4 +6069,40 @@ now run with `single_pin_target()`.
   attr_match), 0 attribution hops, 0 lock skips, 0 tracebacks, no refill or
   bench needed (every pool at 2/2). Breaker ticks 23:25 and 23:30 ran on time;
   ch9 scored in grace ("enabled 233.3m ago"). Channel states unchanged.
-- The gateway retry fix 14c98d6ab is NOT deployed (live gateway still vt-27c).
+- The gateway retry fix 14c98d6ab was deployed separately on 2026-10-28; see
+  the 2026-10-28a entry.
+
+## 2026-10-28a — gateway retry fix 14c98d6ab deployed (LIVE)
+
+What it does is in the 14c98d6ab commit message: on a 502/503, stop the retry
+(reason `no_untried_channel`) when every enabled candidate for the group and
+model has already been tried, instead of sending the request back to a channel
+that just failed. `RELAY_SKIP_SAME_CHANNEL_RETRY=false` turns it off (default
+true, not set in compose or .env).
+
+**Pre-flight.** Running gateway `vt-27c-20261027-132738`; `feat/payment-rails`
+had not moved since c667b7b4b, and the code diff from the vt-27c build source
+(5e20fdc8f) to 14c98d6ab is exactly the fix (6 files), so the build drops
+nothing that was live. Other sessions were working on the monitor
+(`fix/pin-pool-gate`) and DB prices, not the gateway image. Recreate changes no
+gateway env var (33 keys, none differ).
+
+**Build (01:32-01:37 UTC).** `pack-build-context.sh` on 14c98d6ab (2789 files,
+manifest md5 f05b3c41519c24ade56ffe1f7e4e15f7, tarball md5
+bb1637946d832d4a00a047a633032167) + `bash build-gateway.sh` under nohup (the
+server copy has no execute bit). Image `vantyr/new-api:vt-27d-20261028-0132`,
+sha256:d276eabb6839. BuildCommit stamp ok; features ping_event_mode 1,
+cache_ttl_inject 2, mediaItemCacheControl 1, chat completions trace 1; also
+no_untried_channel, RELAY_SKIP_SAME_CHANNEL_RETRY, HasUntriedChannel,
+affinity_fallback_tier, IsChannelInTopPriorityTier, client_content_sent,
+GetRandomSatisfiedChannelAvoiding all present (no_untried_channel = 0 in vt-27c,
+as a control). Load peaked ~6.4, no 503 overload during the build.
+
+**Swap (01:39:53 UTC).** compose backup
+`/opt/vantyr/backups/compose-pre-27d-20261028-013952.yaml`; `up -d --no-deps
+gateway`; healthy after ~35s, started 01:40:03.9, running image = the verified
+build. Cost: ~10s of `connection refused` at Caddy (8 × 502, 01:39:55-01:40:06)
+plus one stream cut (01:40:03 unexpected EOF), all from user 1 (claude-cli);
+that user's requests succeed again from 01:40:24.
+Rollback: point compose at `vantyr/new-api:vt-27c-20261027-132738`
+(78a2d3482189) and `docker compose up -d --no-deps gateway`.
