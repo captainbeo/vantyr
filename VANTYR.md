@@ -6006,3 +6006,183 @@ both.
   not succeeded since 2026-10-26 16:50, so sonnet-5 has no working backup.
 - First minutes after the swap: claude-opus-5-5 4 Kiro / 0 A6, haiku 1/0, no
   errors (24h before: opus-5-5 2604 Kiro / 556 A6).
+
+## 2026-10-28 — Discord ticket bot: archive on close instead of delete
+
+**Owner request:** closed customer tickets were unrecoverable. Users must
+not see closed tickets; staff must.
+
+**Root cause:** the `ConfirmCloseView` handler sent a notice and then
+`channel.delete()`, destroying the channel and its whole message history.
+
+**Change** (`deploy/vantyr/discord-ticket-bot/bot.py`, deployed 2026-10-28):
+closing now archives instead of deleting.
+- `close_ticket()` moves the channel to a staff-only **Closed Tickets**
+  category (`DISCORD_CLOSED_CATEGORY_ID` env override, else found by name,
+  else auto-created with denies for `@everyone` and view/send for the
+  Moderator role + admin), renames `ticket-x` → `closed-x` (idempotent on a
+  re-close), and sets an explicit per-user overwrite denying
+  `view_channel`/`send_messages`/`read_message_history` for the ticket owner.
+- The owner deny is written through `channel.edit(overwrites=...)` with
+  `discord.Object(id=..., type=discord.Member)`, not `set_permissions()`:
+  discord.py 2.7.1 `set_permissions()` raises `ValueError` for any target
+  that is not a cached Member/Role, and the bot runs without the members
+  intent, so real ticket owners are almost never cached.
+- `sync_permissions=False` is required: syncing to the archive category would
+  re-grant `@everyone`/Moderator and could drop the per-user deny ordering.
+- The duplicate-ticket check now only scans the Support category, so an
+  archived ticket no longer blocks a user from opening a new one.
+- `ConfirmCloseView.confirm` re-checks permissions server-side (the confirm
+  view is a persistent, timeout-less view, so a non-owner could otherwise
+  press it).
+- Partial failures (move or permission revoke) are reported in the closing
+  embed instead of raising; the channel is never deleted.
+
+**Deploy (owner-approved, 2026-10-28).** bot.py uploaded to
+`/opt/vantyr/discord-ticket-bot/` (sha256 2e09bdf0…f992, matches local),
+image `vantyr/discord-ticket-bot:archive-close-20261028b` (3819487e97b2,
+also tagged `latest`), container recreated with the live flags preserved
+(`--restart unless-stopped`, log rotation 10m×3, network `vantyr_vantyr`,
+`/opt/vantyr/.discord-bot-token`→`/run/secrets/token:ro`,
+`/opt/vantyr/.discord-bot-db`→`/run/secrets/db:ro`). Logs clean: logged in,
+pricing synced (10 models, 1 plan), 0 restarts.
+- First image `archive-close-20261028` (1901535fff40) shipped the
+  `set_permissions()` version; the server-side verifier caught the
+  `ValueError` before any real ticket was closed with it. It left one test
+  channel behind (moved to the archive, owner deny not applied), deleted by
+  the second run.
+- Verification: a one-off container on the same image created a ticket
+  channel in Support for an uncached owner, ran `close_ticket()`, and
+  checked the result: renamed `closed-verify-archive`, in Closed Tickets,
+  gone from Support, owner `view_channel`/`read_message_history` denied,
+  Moderator view kept, message history intact, re-close leaves the name
+  unchanged. Test channel deleted afterwards.
+- Closed Tickets category id `1564798082061836338` (auto-created): `@everyone`
+  view denied, Moderator role + bot + admin allowed.
+- Rollback: server backups `bot.py.bak-20261027-234658` (original
+  delete-on-close) and `bot.py.bak-pre-fix-20261028-003436` in
+  `/opt/vantyr/discord-ticket-bot/`; rebuild + recreate with the same flags.
+- Not yet tested: a real customer clicking Close, and that customer then
+  opening a fresh ticket (needs a non-staff Discord account).
+
+## 2026-10-28 — 6.1 SOL pool trimmed to the owner's keep list, 6440 added (LIVE)
+
+Owner decision: the gpt-6-1-sol pool keeps 5110, 5132, 1416 and 5942, adds
+6440, and retires the rest. This is the first model in the per-model merchant
+review that must finish before the 2026-10-28 price sheet is applied; no prices
+have changed yet.
+
+**Retired 02:48 UTC.** Each A6 key was deleted first, then its gateway channel,
+so the 5-minute key sync cannot recreate the pin.
+
+| Merchant | A6 key | Channel | Reason |
+|---|---|---|---|
+| 5950 | 137438 | 34 | not on the keep list (was healthy) |
+| 4820 | 137446 | 52 | output $0.288/M against our $0.20 sell: a loss whenever it served |
+| 5312 | 145899 | 87 | 503 on every request with our key |
+| 3016 | 145897 | 88 | 503 on every request; permanently quarantined |
+| 2757 | 145904 | 90 | never served our traffic; dead on astra too |
+
+The channel delete ran as one transaction guarded by exact name and status 2
+(5 channel rows, then their 20 ability rows, the same order as
+`Channel.Delete()`). Backups: `/opt/vantyr/backups/pre-sol61-retire5-20261028T024839Z.sql`
+and `cctest-state-pre-sol61-retire5-20261028T024839Z.json`. No pin was
+recreated by the following syncs. The monitor's `state.json` still has entries
+for the five names; they are harmless and were left alone because the monitor
+writes that file while it runs.
+
+**6440 added.** Owner-created A6 key 157586. Checked on its own key before the
+sync picked it up: 200 in 3.1s from real `gpt-6.1-sol`; cctest `attr_match`;
+A6's log billed merchant 6440 at its listed $0.0209/M input (listing 37443),
+not at a second, pricier listing. The key was first named `GPT 6.1 SOL | 6440`.
+`parse_a6_key_name` only accepts the SKU-map spelling (`6.1 SOL | <merchant>`),
+so the sync logged it as unknown until the owner renamed it. It was created as
+standby `a6pin-6-1-sol-6440` (ch96) at 03:32:49 UTC.
+
+**Spares re-checked 03:01 UTC** on the upstream spelling `gpt-6.1-sol`: 1416
+and 5942 both returned `attr_match` (both were `attr_swapped` on 10-27). The
+monitor runs a fresh check before any promotion and acts on that result, not on
+the stored verdict, so both are usable spares. Their verdicts change from day
+to day, and 1416's own listing says its pool is degraded by default.
+
+Pool now: 5110 (ch59) and 5132 (ch54) active; 1416 (ch53), 5942 (ch60) and
+6440 (ch96) standby.
+
+Naming rule for new A6 keys: `<MODEL> | <merchant>` using the SKU-map spelling
+exactly (`6.1 SOL`, `6 SOL`, `ASTRA 6`, `FABLE 5.1`, ...). The sync silently
+ignores any other prefix.
+
+## 2026-10-28 — gpt-6-sol pool: 6379 retired, 6602 added (LIVE)
+
+Second model in the per-model merchant review. No prices changed. On the final
+sheet every gpt-6-sol merchant in the pool earns 3.0-3.1x input, 2.4-2.5x output
+and 2.0-2.1x cache read, so the review was about reliability only (customer
+revenue on this model is ~$0.05/week).
+
+**Retired 03:54 UTC: merchant 6379** (A6 key 140598, channel 69). Delisted on
+A6, 0 successes and 101 errors (503 "no active candidate") in 7 days,
+permanently quarantined by the monitor. A6 key deleted first, then the channel
+and its 2 ability rows in one transaction guarded by exact name and status 2.
+Backups: `/opt/vantyr/backups/pre-sol6-retire6379-20261028T035349Z.sql` and
+`cctest-state-pre-sol6-retire6379-20261028T035349Z.json`.
+
+**6602 added** (owner-created A6 key 157715, synced as standby
+`a6pin-6-sol-6602`, ch97, 03:53:08 UTC). The only A6 authenticity-guaranteed
+gpt-6-sol listing priced inside our margin ($0.00576 / $0.0288 per 1M, 5.2x /
+4.2x on the final sheet); same supplier (1216) as 6.1 SOL's 6440. Checked on
+its own key: 200 from real `gpt-6-sol` (A6 use_time 1s); cctest `attr_match`;
+A6's log billed merchant 6602 at listing 40308's $0.00576/M input. Weaker spot:
+one of its last 10 A6 sample windows was 80%, and the same merchant lists 6.1
+SOL at ~62%.
+
+Pool now: 5110 (ch70) and 1416 (ch71) active; 5703 (ch68), 4973 (ch73), 4293
+(ch72) and 6602 (ch97) standby. Owner kept 4973; 4293 (listing says "degraded
+by default") is pending an owner call.
+
+## 2026-10-28 — gpt-6-astra pool: 5132, 5940, 5961 retired (LIVE)
+
+Third model in the per-model merchant review. No prices changed; every astra
+merchant clears 2x on the final sheet ($0.20 / $0.95), so this was about
+authenticity and reliability. The owner asked for one more check on 5132 first
+and whether cctest itself could be wrong.
+
+**Is cctest wrong?** No, but its result is only as good as which merchant
+answered. Two findings:
+- 5132's verdicts were 5132's own: A6's log for key `ASTRA 6 | 5132` shows every
+  request in the last 40h served by merchant 5132 with one attempt, including
+  the samples behind the 10-27/10-28 `attr_swapped` verdicts. Two fresh checks
+  at 04:55 UTC: `attr_swapped` (fingerprint gpt-6.1-sol 73% / astra 27%), then
+  `attr_match` (astra 59% / gpt-6.1-sol 41%). Active pin 5703 in the same run:
+  astra 100%. 5132 sits between astra and gpt-6.1-sol, which is what a merchant
+  mixing in a cheaper model looks like; a genuine astra fingerprints at ~100%.
+- **A6 keys fall back silently.** Every pin key carries
+  `routing_allow_fallback: true`, so when the pinned merchant fails A6 serves the
+  request from another merchant and logs it under our key. In the last 48h 211
+  of 5,201 requests on our keys came from a merchant other than the key's name
+  (A6 log `other.actual_channel_id`). `ASTRA 6 | 5940` was answered by 4764,
+  5151 and 5132 during the 04:41-04:47 checks, so 5940's "usable" probes and
+  verdicts partly described other merchants. `FABLE 5.1 | 6345` was served by
+  merchant 5881 on all 197 requests (0 by 6345); that pin was promoted to active
+  at 04:21 by the refill. To be handled in the fable-5-1 review.
+
+**Retired ~05:07 UTC** (A6 key first, then the channel; the astra keys only —
+`6.1 SOL | 5132` stays):
+
+| Merchant | A6 key | Channel | Reason |
+|---|---|---|---|
+| 5132 | 137434 | 61 | swapped x3 then swapped/match 59% on the final check; route paused by A6 after a price raise (21 customer 402s) |
+| 5940 | 145942 | 92 | A6 listing 84% with a 10% window; its key was being answered by other merchants |
+| 5961 | 137596 | 58 | never a stable pass on our key (match then swapped two minutes apart, 04:40/04:41) |
+
+One transaction, guarded by exact id + name + status 2: 3 channel rows and 6
+ability rows. Backups: `/opt/vantyr/backups/pre-astra-retire2-20261028T050401Z.sql`
+and `cctest-state-pre-astra-retire2-20261028T050401Z.json` (taken before the
+SQL was widened from two merchants to three; it covers all three).
+
+5151 has had no astra key since the 10-27 cleanup (503 on every direct probe);
+it was only seen as A6's fallback for the 5940 key. It can only be re-checked
+with a new owner-created `ASTRA 6 | 5151` key.
+
+Pool now: 5703 (ch32) and 5942 (ch56) active, 4848 (ch57) standby. The live
+monitor (eecc69b28) targets 3 active pins for A6-only models; astra stays at
+2/3 until a standby passes (4848 returned `attr_uncertain` at 04:25).
