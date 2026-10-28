@@ -1,10 +1,14 @@
 # Vantyr Discord bot: private support tickets + live pricing channel.
 # Ticket channels live under the Support category, created via a button panel
 # in #support; staff get Claim/Close controls and the admin is pinged per
-# ticket. The pricing task polls the public /api/pricing + /api/status
-# endpoints (same data the admin UI edits) and a read-only DB view for plan
-# rows, then edits one pinned message in #pricing — so admin-side price
-# changes propagate automatically. Dedup state lives in channel topics.
+# ticket. Closing a ticket archives it: the channel moves to the Closed
+# Tickets category and the ticket owner loses access, so staff keep the full
+# history while users never see closed tickets. The pricing task polls the
+# public /api/pricing + /api/status endpoints (same data the admin UI edits)
+# and a read-only DB view for plan rows, then edits one pinned message in
+# #pricing — so admin-side price changes propagate automatically. Dedup state
+# lives in channel topics, scoped to the Support category only (closed tickets
+# therefore don't block opening a new one).
 import asyncio
 import datetime as dt
 import os
@@ -19,6 +23,8 @@ DB_DSN_FILE = os.environ.get("DISCORD_DB_DSN_FILE", "/run/secrets/db")
 
 GUILD_ID = 1557219502712688792
 TICKET_CATEGORY_ID = 1557522362071777331
+CLOSED_CATEGORY_ID = int(os.environ.get("DISCORD_CLOSED_CATEGORY_ID", "0") or 0)
+CLOSED_CATEGORY_NAME = "Closed Tickets"
 PANEL_CHANNEL_ID = 1557326340359987221
 PRICING_CHANNEL_ID = 1557532324113948762
 ADMIN_ID = 552967704017895438
@@ -53,6 +59,79 @@ def sanitize(name: str) -> str:
     return cleaned[:24] or "user"
 
 
+def parse_owner_id(topic: str | None) -> int | None:
+    if not topic or not topic.startswith(TICKET_TOPIC_PREFIX):
+        return None
+    try:
+        return int(topic[len(TICKET_TOPIC_PREFIX):].split()[0])
+    except (ValueError, IndexError):
+        return None
+
+
+async def get_closed_category(guild) -> discord.CategoryChannel:
+    """Find (or create) the staff-only archive category for closed tickets."""
+    if CLOSED_CATEGORY_ID:
+        category = guild.get_channel(CLOSED_CATEGORY_ID)
+        if isinstance(category, discord.CategoryChannel):
+            return category
+    for channel in guild.categories:
+        if channel.name == CLOSED_CATEGORY_NAME:
+            return channel
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+    }
+    mod_role = guild.get_role(MODERATOR_ROLE_ID)
+    if mod_role is not None:
+        overwrites[mod_role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True
+        )
+    admin = guild.get_member(ADMIN_ID) or discord.Object(id=ADMIN_ID)
+    overwrites[admin] = discord.PermissionOverwrite(
+        view_channel=True, send_messages=True, read_message_history=True
+    )
+    return await guild.create_category(
+        CLOSED_CATEGORY_NAME, overwrites=overwrites, reason="Archive for closed support tickets"
+    )
+
+
+async def close_ticket(channel, guild, actor, owner_id: int | None) -> str:
+    """Archive the ticket: move it out of Support, drop the user's access.
+
+    The channel and its full message history are kept for staff. Returns a
+    short note describing anything that could not be completed.
+    """
+    reason = f"Ticket closed by {actor}"
+    # set_permissions() rejects discord.Object targets, and without the members
+    # intent the owner is rarely cached, so the revoke goes through edit().
+    overwrites = {t: o for t, o in channel.overwrites.items() if t.id != owner_id}
+    if owner_id is not None:
+        owner = guild.get_member(owner_id) or discord.Object(id=owner_id, type=discord.Member)
+        overwrites[owner] = discord.PermissionOverwrite(
+            view_channel=False, send_messages=False, read_message_history=False
+        )
+    new_name = channel.name
+    if not new_name.startswith("closed-"):
+        new_name = f"closed-{new_name.removeprefix('ticket-')}"
+    try:
+        category = await get_closed_category(guild)
+        await channel.edit(
+            category=category,
+            name=new_name,
+            sync_permissions=False,
+            overwrites=overwrites,
+            reason=reason,
+        )
+        return ""
+    except discord.HTTPException as exc:
+        note = f"could not move channel to archive ({exc.status})"
+    try:
+        await channel.edit(overwrites=overwrites, reason=reason)
+    except discord.HTTPException as exc:
+        return f"{note}; could not revoke user access ({exc.status})"
+    return note
+
+
 class TicketControls(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -72,18 +151,12 @@ class TicketControls(discord.ui.View):
 
     @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id=CLOSE_ID, emoji="🔒")
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        topic = interaction.channel.topic or ""
-        owner_id = None
-        if topic.startswith(TICKET_TOPIC_PREFIX):
-            try:
-                owner_id = int(topic[len(TICKET_TOPIC_PREFIX):].split()[0])
-            except (ValueError, IndexError):
-                pass
+        owner_id = parse_owner_id(interaction.channel.topic)
         if owner_id != interaction.user.id and not is_staff(interaction.user):
             await interaction.response.send_message("Only the ticket owner or staff can close this ticket.", ephemeral=True)
             return
         await interaction.response.send_message(
-            "Close this ticket and delete the channel?",
+            "Close this ticket? It will be archived for staff and you will lose access.",
             view=ConfirmCloseView(),
             ephemeral=True,
         )
@@ -93,19 +166,28 @@ class ConfirmCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Confirm close", style=discord.ButtonStyle.danger, custom_id=CLOSE_CONFIRM_ID, emoji="🗑️")
+    @discord.ui.button(label="Confirm close", style=discord.ButtonStyle.danger, custom_id=CLOSE_CONFIRM_ID, emoji="🗂️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
+        owner_id = parse_owner_id(channel.topic)
+        if owner_id != interaction.user.id and not is_staff(interaction.user):
+            await interaction.response.send_message("Only the ticket owner or staff can close this ticket.", ephemeral=True)
+            return
         await interaction.response.defer()
+        problems = await close_ticket(channel, interaction.guild, interaction.user, owner_id)
+        embed = discord.Embed(
+            title="Ticket closed",
+            description=(
+                f"Closed by {interaction.user.mention}. This channel is archived for staff only; "
+                "the ticket owner can no longer see it."
+            ),
+            color=discord.Color.red(),
+        )
+        if problems:
+            embed.add_field(name="Note", value=problems, inline=False)
         try:
-            await channel.send(embed=discord.Embed(
-                title="Ticket closed",
-                description=f"Closed by {interaction.user.mention}. This channel will be deleted in 5 seconds.",
-                color=discord.Color.red(),
-            ))
-            await asyncio.sleep(5)
-            await channel.delete(reason=f"Ticket closed by {interaction.user}")
-        except discord.NotFound:
+            await channel.send(embed=embed)
+        except discord.HTTPException:
             pass
 
 
@@ -123,14 +205,9 @@ class PanelView(discord.ui.View):
             await interaction.followup.send("Support category not found. Please tell a staff member.", ephemeral=True)
             return
         for channel in category.text_channels:
-            topic = channel.topic or ""
-            if not topic.startswith(TICKET_TOPIC_PREFIX):
-                continue
-            try:
-                existing_user = int(topic[len(TICKET_TOPIC_PREFIX):].split()[0])
-            except (ValueError, IndexError):
-                continue
-            if existing_user == user.id:
+            # Only open tickets live in the Support category; closed ones are
+            # archived elsewhere so they never block a new ticket.
+            if parse_owner_id(channel.topic) == user.id:
                 await interaction.followup.send(f"You already have an open ticket: {channel.mention}", ephemeral=True)
                 return
         overwrites = {
