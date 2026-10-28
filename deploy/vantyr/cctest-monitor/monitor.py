@@ -316,6 +316,52 @@ class Gateway:
             raise RuntimeError(f"status flip to {status} failed: {http_status} {payload}")
         return bool(payload.get("data"))
 
+    def test_channel(self, channel_id, model, timeout=90.0):
+        """Live availability probe through New API's own channel test
+        (GET /api/channel/test/:id): one minimal streaming completion
+        (max_tokens 16) over the channel's real key, base URL and model
+        mapping. Works on DISABLED channels and never changes their status —
+        TestChannel has none of the scheduled health check's auto-enable /
+        auto-disable side effects (verified live 2026-10-28 on ch54/58/75/
+        84/90). Returns (ok, latency_ms, detail); latency_ms is None when
+        the test failed. Never raises."""
+        query = urllib.parse.urlencode({"model": model, "stream": "true"})
+        payload, status = http_json(
+            "GET", f"{self.base}/api/channel/test/{int(channel_id)}?{query}",
+            self.token, timeout=timeout,
+        )
+        if status != 200:
+            return False, None, f"http {status}"
+        if not payload.get("success"):
+            code = payload.get("error_code") or "failed"
+            return False, None, f"{code}: {str(payload.get('message') or '')[:100]}"
+        try:
+            ms = int(float(payload.get("time") or 0) * 1000)
+        except (TypeError, ValueError):
+            ms = None
+        return True, ms, "ok"
+
+    def sell_prices(self):
+        """{model_name: (input $/1M, output $/1M)} — what we charge, from the
+        public pricing API. Ratio-priced models only (quota_type 0): New API
+        bills model_ratio * 2 dollars per 1M input tokens, output at
+        completion_ratio times that, scaled by the default group ratio.
+        Per-request-priced models are omitted (no per-token margin)."""
+        payload, status = self._request("GET", "/api/pricing")
+        if status != 200 or not payload.get("success"):
+            raise RuntimeError(f"pricing fetch failed: {status}")
+        group = float((payload.get("group_ratio") or {}).get("default") or 1)
+        out = {}
+        for item in payload.get("data") or []:
+            if item.get("quota_type") not in (0, None):
+                continue
+            ratio = float(item.get("model_ratio") or 0)
+            if ratio <= 0:
+                continue
+            per_in = ratio * 2 * group
+            out[item.get("model_name")] = (per_in, per_in * float(item.get("completion_ratio") or 1))
+        return out
+
     def update_channel_models(self, channel_id, models):
         """Edit only the channel's models list via PUT /api/channel/.
         Safety: the request body contains only id + models. controller/
@@ -842,6 +888,7 @@ class A6Market:
                     "available": avail == 1,
                     "unlisted": False,
                     "price_micros": item.get("input_price_micros"),
+                    "output_price_micros": item.get("output_price_micros"),
                     "supplier": item.get("supplier_name"),
                 }
         return out
@@ -1616,7 +1663,9 @@ def park(reason):
 RUNTIME = None
 
 # Top-level state keys that are not per-channel state entries.
-RESERVED_STATE_KEYS = ("bad_standbys", "_meta", "_sync", "_wallet")
+RESERVED_STATE_KEYS = ("bad_standbys", "_meta", "_sync", "_wallet",
+                       "_standby_health", "_standby_alerts", "_refill",
+                       "_standby_sweep")
 
 
 def read_display_config():
@@ -2438,6 +2487,17 @@ def sync_loop(a6m, interval_minutes):
                 save_state(RUNTIME["state"])
         except Exception:
             LOG.exception("[wallet] wallet check tick failed")
+        # Standby health sweep (2026-10-28) in its own try, on its own pace:
+        # every STANDBY_SWEEP_HOURS (default 3; 0 disables). One tiny live
+        # probe per standby, read-only on channel status.
+        try:
+            sweep_every = _watchdog_env_int("STANDBY_SWEEP_HOURS", 3, lo=0) * 3600
+            if RUNTIME is not None and RUNTIME.get("enforce") and sweep_every:
+                last = (RUNTIME["state"].get("_standby_sweep") or {}).get("ts") or 0
+                if time.time() - last >= sweep_every:
+                    sweep_standby_health(RUNTIME["gateway"], RUNTIME["state"], RUNTIME["discord"])
+        except Exception:
+            LOG.exception("[standby] health sweep tick failed")
         time.sleep(interval_minutes * 60)
 
 
@@ -2743,6 +2803,14 @@ def circuit_breaker_tick(circuit_cfg, window_minutes):
             rt["discord"], True, window_minutes, rt.get("seller_registry"),
             latency_cfg=circuit_cfg,
         )
+        # Fast refill (2026-10-28): a pool that drops below its target is
+        # topped up within one 5-minute tick, not at the next hourly cycle.
+        # Pacing per pool is REFILL_RETRY_MINUTES (inside the refill), so a
+        # pool with no passing standby does not burn cctest checks every tick.
+        try:
+            refill_active_pins(rt["gateway"], rt["cctest"], rt["state"], rt["discord"], True)
+        except Exception:
+            LOG.exception("[refill] fast refill failed")
         save_state(rt["state"])
         return sum(len(pins) for pins in active_pins.values())
     except Exception:
@@ -3297,6 +3365,87 @@ def _rank_standbys(gateway, model, candidates, state):
         return list(candidates), {}
 
 
+def _gate_cfg():
+    """Entry-gate thresholds (owner rules 2026-10-28): a standby only goes
+    active when its A6 price leaves at least PIN_MIN_MARGIN (1.5x) on BOTH
+    input and output, and a live probe through its own channel answers
+    within PIN_MAX_PROBE_MS (8s). PIN_ENTRY_PROBE=false skips the probe."""
+    try:
+        margin = float(os.environ.get("PIN_MIN_MARGIN", "1.5"))
+    except ValueError:
+        margin = 1.5
+    return {
+        "min_margin": margin if margin > 0 else 1.5,
+        "max_probe_ms": _watchdog_env_int("PIN_MAX_PROBE_MS", 8000),
+        "probe": os.environ.get("PIN_ENTRY_PROBE", "true").lower() in ("1", "true", "yes"),
+        "retry_seconds": _watchdog_env_int("REFILL_RETRY_MINUTES", 30, lo=0) * 60,
+    }
+
+
+def _sell_prices(gateway):
+    """Our sell prices, or {} when unavailable (the margin check then
+    fails open — a pricing-API hiccup must not stop a pool from refilling)."""
+    fetch = getattr(gateway, "sell_prices", None)
+    if fetch is None:
+        return {}
+    try:
+        return fetch() or {}
+    except Exception as e:
+        LOG.warning("[gate] sell-price fetch failed (%s); margin check skipped", e)
+        return {}
+
+
+def _margin_check(pool_key, merchant_health, sell, min_margin):
+    """(ok, reason). Our sell price over the merchant's A6 listing price, on
+    input and output separately. Missing data on either side passes (logged
+    by the caller); the price gate only blocks on known-bad margins."""
+    ours = next((sell[s] for s in sorted(model_pool_names(pool_key)) if s in sell), None)
+    a6_in = (merchant_health or {}).get("price_micros")
+    a6_out = (merchant_health or {}).get("output_price_micros")
+    if not ours or not a6_in:
+        return True, "margin unknown"
+    in_x = ours[0] / (a6_in / 1e6)
+    out_x = ours[1] / (a6_out / 1e6) if a6_out else None
+    worst = min(x for x in (in_x, out_x) if x is not None)
+    detail = f"margin in {in_x:.2f}x" + (f" / out {out_x:.2f}x" if out_x is not None else "")
+    if worst < min_margin:
+        return False, f"{detail} < {min_margin:.2f}x floor"
+    return True, detail
+
+
+def _entry_gate(gateway, ch, pool_key, merchant_health, sell, cfg, state):
+    """Cheap pre-checks before a standby may spend a cctest check or go
+    active: price margin, then one live probe through the channel itself
+    (catches A6 "no active candidate" 503s, 403 model_not_allowed keys and
+    slow merchants — none of which cctest reports as a fail). Records the
+    probe in state["_standby_health"]. Returns (ok, reason)."""
+    name = ch.get("name") or ""
+    ok, reason = _margin_check(pool_key, merchant_health, sell, cfg["min_margin"])
+    if not ok:
+        return False, reason
+    if not cfg["probe"] or not hasattr(gateway, "test_channel"):
+        return True, reason
+    alive, ms, detail = gateway.test_channel(int(ch["id"]), pool_key)
+    state.setdefault("_standby_health", {})[name] = {
+        "ok": bool(alive), "ms": ms, "detail": detail, "at": time.time(),
+    }
+    if not alive:
+        return False, f"live probe failed ({detail})"
+    if ms is not None and ms > cfg["max_probe_ms"]:
+        return False, f"live probe slow ({ms}ms > {cfg['max_probe_ms']}ms)"
+    return True, f"{reason}, probe {ms}ms"
+
+
+def _alert_once(state, discord, key, active, text):
+    """Deduplicated pool alert: fires when `active` turns True, re-arms when
+    it turns False again."""
+    alerts = state.setdefault("_standby_alerts", {})
+    if active and not alerts.get(key):
+        discord_alert(discord, text)
+        LOG.warning("[pool] %s", text)
+    alerts[key] = bool(active)
+
+
 def refill_active_pins(gateway, cctest, state, discord, enforce=True):
     """Top every pin pool up to its target (min_active_for) with standbys that
     PASS a direct check against their OWN A6 key (2026-10-27).
@@ -3333,10 +3482,13 @@ def refill_active_pins(gateway, cctest, state, discord, enforce=True):
     added = []
     now = time.time()
     bad = state.setdefault("bad_standbys", {})
+    gate = _gate_cfg()
+    sell = None  # fetched lazily, once, only when some pool needs a refill
     for pool_key, slot in sorted(pools.items()):
         target = min_active_for(pool_key)
         active = len(slot["active"])
         if not slot["active"] or active >= target:
+            state.setdefault("_refill", {}).pop(pool_key, None)
             continue
         marks = {}
         for spelling in model_pool_names(pool_key):
@@ -3350,15 +3502,34 @@ def refill_active_pins(gateway, cctest, state, discord, enforce=True):
         if not candidates:
             LOG.info("[refill] %s has %d/%d active pin(s) and no eligible standby", pool_key, active, target)
             continue
+        # Retry pacing (2026-10-28): the 5-minute breaker tick also calls the
+        # refill, so a pool that just came up short waits REFILL_RETRY_MINUTES
+        # before spending cctest checks on it again.
+        last_try = (state.setdefault("_refill", {}).get(pool_key) or {}).get("at") or 0
+        if gate["retry_seconds"] and now - last_try < gate["retry_seconds"]:
+            continue
+        if sell is None:
+            sell = _sell_prices(gateway)
         ranked, health = _rank_standbys(gateway, pool_key, candidates, state)
         checks = 0
+        gated = []
         for ch in ranked:
             if active >= target or checks >= max_checks:
                 break
             name = ch["name"]
-            if (health.get(name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
+            merchant_health = health.get(name.rsplit("-", 1)[-1]) or {}
+            if merchant_health.get("unlisted"):
                 # Delisted merchants 503. The pool is still served, so there
                 # is no reason to fail open onto one.
+                continue
+            # Entry gate (owner rules 2026-10-28): margin floor + live probe
+            # BEFORE the cctest check, so dead, slow or loss-making standbys
+            # never spend the check budget (dead ones only ever return an
+            # inconclusive verdict, which used to burn both refill checks).
+            passed, reason = _entry_gate(gateway, ch, pool_key, merchant_health, sell, gate, state)
+            if not passed:
+                gated.append(f"{name}: {reason}")
+                LOG.info("[refill] %s blocked by entry gate — %s", name, reason)
                 continue
             key = _pin_reveal_key(a6m, name, pool_key)
             if not key:
@@ -3395,9 +3566,71 @@ def refill_active_pins(gateway, cctest, state, discord, enforce=True):
                                    f"({active}/{target} active pins)")
         if active < target:
             LOG.info("[refill] %s still at %d/%d active pin(s) after %d check(s)", pool_key, active, target, checks)
+            state.setdefault("_refill", {})[pool_key] = {
+                "at": now, "active": active, "target": target, "gated": gated[:10],
+            }
+        else:
+            state.setdefault("_refill", {}).pop(pool_key, None)
     if added:
         save_state(state)
     return added
+
+
+def sweep_standby_health(gateway, state, discord):
+    """Standby health sweep (owner ask 2026-10-28): one live probe per
+    standby through its own channel (Gateway.test_channel — works on
+    disabled channels, never flips status), so a dead spare is known BEFORE
+    it is needed. Then alert, once per condition, when a pool is below its
+    active target or has no standby that is both alive and inside the
+    margin floor. Read-only on channel status, so it needs no mutation lock
+    (it runs on the sync loop, every STANDBY_SWEEP_HOURS)."""
+    gate = _gate_cfg()
+    try:
+        channels = gateway.list_channels()
+    except Exception as e:
+        LOG.warning("[standby] channel list failed (%s); sweep skipped", e)
+        return {}
+    pools = {}
+    for ch in channels:
+        status = int(ch.get("status") or 0)
+        if not is_pinned_channel(ch.get("name") or "") or status not in (CHANNEL_ENABLED, CHANNEL_MANUALLY_DISABLED):
+            continue
+        keys = {sorted(model_pool_names(x.strip()))[0]
+                for x in (ch.get("models") or "").split(",") if x.strip()}
+        for key in keys:
+            slot = pools.setdefault(key, {"active": [], "standby": []})
+            slot["active" if status == CHANNEL_ENABLED else "standby"].append(ch)
+    sell = _sell_prices(gateway)
+    market = A6Market()
+    summary = {}
+    for pool_key, slot in sorted(pools.items()):
+        health = market.health_for(pool_key, {(c.get("name") or "").rsplit("-", 1)[-1] for c in slot["standby"]})
+        usable = []
+        for ch in slot["standby"]:
+            name = ch.get("name") or ""
+            if (state.get(name) or {}).get("permanent"):
+                continue  # confirmed fake / benched for good — not a spare
+            mh = health.get(name.rsplit("-", 1)[-1]) or {}
+            if mh.get("unlisted"):
+                state.setdefault("_standby_health", {})[name] = {
+                    "ok": False, "ms": None, "detail": "delisted on A6", "at": time.time()}
+                continue
+            ok, reason = _entry_gate(gateway, ch, pool_key, mh, sell, gate, state)
+            LOG.info("[standby] %s (%s): %s", name, pool_key, "usable — " + reason if ok else "NOT usable — " + reason)
+            if ok:
+                usable.append(name)
+        target = min_active_for(pool_key)
+        summary[pool_key] = {"active": len(slot["active"]), "target": target, "usable_standbys": usable}
+        _alert_once(state, discord, f"short:{pool_key}", len(slot["active"]) < target,
+                    f"cctest: {pool_key} has {len(slot['active'])}/{target} active A6 pins")
+        _alert_once(state, discord, f"nospare:{pool_key}", not usable,
+                    f"cctest: {pool_key} has NO usable standby (alive, under "
+                    f"{gate['max_probe_ms'] // 1000}s, >= {gate['min_margin']:.1f}x margin) — "
+                    f"add a merchant key on A6")
+    state["_standby_sweep"] = {"at": datetime.now(timezone.utc).isoformat(),
+                               "ts": time.time(), "pools": summary}
+    save_state(state)
+    return summary
 
 
 def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
@@ -3525,11 +3758,33 @@ def promote_next_standby(gateway, cctest, failed_channel, base_url, seller_key,
         if not candidates:
             return
         candidates, candidates_health = _rank_standbys(gateway, model, candidates, state)
-        top_name = candidates[0].get("name") or ""
-        if (candidates_health.get(top_name.rsplit("-", 1)[-1]) or {}).get("unlisted"):
-            LOG.warning("[pin] only delisted standby candidates for %s — "
-                        "promoting %s anyway (fail-open)", model, top_name)
-        standby = candidates[0]
+        # Entry gate (owner rules 2026-10-28): the first ranked standby that
+        # is listed, inside the margin floor and answers a live probe in
+        # time. While another pin still serves the model, a failing gate
+        # means no promotion now (the next refill retries). With NOTHING
+        # serving, fail open onto the top-ranked candidate as before — a
+        # dark model is worse than an unproven merchant.
+        gate = _gate_cfg()
+        sell = _sell_prices(gateway)
+        gated_pick = None
+        for cand in candidates:
+            cand_health = candidates_health.get((cand.get("name") or "").rsplit("-", 1)[-1]) or {}
+            if cand_health.get("unlisted"):
+                continue
+            passed, reason = _entry_gate(gateway, cand, model, cand_health, sell, gate, state)
+            if passed:
+                gated_pick = cand
+                break
+            LOG.info("[pin] %s blocked by entry gate for %s — %s", cand.get("name"), model, reason)
+        if gated_pick is None and actives_for_model:
+            LOG.warning("[pin] no standby for %s passes the entry gate while %d pin(s) still "
+                        "serve it — no promotion, refill retries", model, len(actives_for_model))
+            return
+        if gated_pick is None:
+            gated_pick = candidates[0]
+            LOG.warning("[pin] no standby for %s passes the entry gate and nothing serves the "
+                        "model — promoting %s anyway (fail-open)", model, gated_pick.get("name"))
+        standby = gated_pick
     standby_name = standby["name"]
     if not enforce:
         LOG.warning("[pin] OBSERVE-ONLY: would promote standby %s for %s", standby_name, model)

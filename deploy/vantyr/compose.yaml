@@ -147,9 +147,22 @@ services:
       # MIN_ACTIVE_PINS active pins with own-key-verified standbys; per-model
       # overrides as "claude-fable-5-1:3,gpt-6-astra:3". REFILL_MAX_CHECKS
       # caps cctest checks per pool per cycle.
+      # Owner rule 2026-10-28: models Kiro also serves keep 2 A6 pins (A6 is
+      # their backup tier); A6-only models keep 3.
       - MIN_ACTIVE_PINS=${CCTEST_MIN_ACTIVE_PINS:-2}
-      - MIN_ACTIVE_PINS_BY_MODEL=${CCTEST_MIN_ACTIVE_PINS_BY_MODEL:-}
+      - MIN_ACTIVE_PINS_BY_MODEL=${CCTEST_MIN_ACTIVE_PINS_BY_MODEL:-claude-fable-5:3,claude-fable-5-1:3,gpt-6-astra:3,gpt-6-sol:3,gpt-6-1-sol:3}
       - REFILL_MAX_CHECKS=${CCTEST_REFILL_MAX_CHECKS:-2}
+      # Entry gate + standby sweep (2026-10-28). A standby only goes active
+      # with >= PIN_MIN_MARGIN on input AND output vs its A6 price and a live
+      # probe answering within PIN_MAX_PROBE_MS, then a cctest PASS. Every
+      # STANDBY_SWEEP_HOURS each standby gets one tiny live probe; Discord
+      # alerts when a pool is short or has no usable spare. A short pool is
+      # retried by the 5-minute breaker every REFILL_RETRY_MINUTES.
+      - PIN_MIN_MARGIN=${CCTEST_PIN_MIN_MARGIN:-1.5}
+      - PIN_MAX_PROBE_MS=${CCTEST_PIN_MAX_PROBE_MS:-8000}
+      - PIN_ENTRY_PROBE=${CCTEST_PIN_ENTRY_PROBE:-true}
+      - STANDBY_SWEEP_HOURS=${CCTEST_STANDBY_SWEEP_HOURS:-3}
+      - REFILL_RETRY_MINUTES=${CCTEST_REFILL_RETRY_MINUTES:-30}
       # Fast bench after N A6 pool errors in a row (0 disables), and how long
       # the 5-minute breaker / primary sweep wait for the cycle's lock.
       - CIRCUIT_POOL_ERROR_STREAK=${CCTEST_CIRCUIT_POOL_ERROR_STREAK:-3}
