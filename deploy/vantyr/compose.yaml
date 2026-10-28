@@ -17,7 +17,7 @@ services:
     # were already in HEAD. Build only with deploy/vantyr/scripts/
     # build-gateway.sh (verified tarball of a pinned SHA), then point `image:`
     # at the new tag. `docker compose build gateway` is now a silent no-op.
-    image: vantyr/new-api:vt-27c-20261027-132738
+    image: vantyr/new-api:vt-27d-20261028-0132
     container_name: vantyr-gateway
     restart: unless-stopped
     command: --log-dir /app/logs
