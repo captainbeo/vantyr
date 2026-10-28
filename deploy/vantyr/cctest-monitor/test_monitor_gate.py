@@ -217,14 +217,14 @@ def test_margin_matches_alias_spelling():
 
 
 def test_gate_cfg_defaults_and_bad_values():
-    with env(PIN_MIN_MARGIN="", PIN_MAX_PROBE_MS="8000", PIN_ENTRY_PROBE="true", REFILL_RETRY_MINUTES="30"):
+    with env(PIN_MIN_MARGIN="", PIN_MAX_PROBE_MS="15000", PIN_ENTRY_PROBE="true", REFILL_RETRY_MINUTES="30"):
         os.environ.pop("PIN_MIN_MARGIN")
         cfg = m._gate_cfg()
-        assert cfg["min_margin"] == 1.5 and cfg["max_probe_ms"] == 8000 and cfg["probe"]
+        assert cfg["min_margin"] == 1.5 and cfg["max_probe_ms"] == 15000 and cfg["probe"]
         assert cfg["retry_seconds"] == 1800
     with env(PIN_MIN_MARGIN="junk", PIN_MAX_PROBE_MS="x"):
         cfg = m._gate_cfg()
-        assert cfg["min_margin"] == 1.5 and cfg["max_probe_ms"] == 8000
+        assert cfg["min_margin"] == 1.5 and cfg["max_probe_ms"] == 15000
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ def test_refill_skips_a_dead_standby_without_spending_a_check():
 def test_refill_skips_a_slow_standby():
     chs = pool("5052")
     mid = ids(chs)
-    gw, cc, added, _, _ = _refill(chs, probes={mid["5052"]: (True, 9200, "ok")})
+    gw, cc, added, _, _ = _refill(chs, probes={mid["5052"]: (True, 16200, "ok")})
     assert gw.writes == [] and cc.calls == [], (gw.writes, cc.calls)
 
 
@@ -327,13 +327,30 @@ def test_refill_clears_pacing_once_full():
     assert added and F51 not in state["_refill"], state
 
 
-def test_refill_sell_price_failure_fails_open():
+def test_refill_blocks_while_served_when_sell_price_fetch_fails():
+    """A pool that is still served never takes a merchant whose margin we
+    cannot see: a failed pricing fetch blocks the refill (retried later)."""
     chs = pool("6345")
+    gw = GW(chs)
+    gw.sell_prices = lambda: (_ for _ in ()).throw(RuntimeError("pricing down"))
+    state = {}
+    with env(REFILL_RETRY_MINUTES="0", MIN_ACTIVE_PINS="2"), market(), runtime(a6m=A6M("FABLE 5.1 | 6345")):
+        m.refill_active_pins(gw, CC(), state, None, True)
+    assert gw.writes == [], gw.writes
+    assert any("sell-price" in g for g in state["_refill"][F51]["gated"]), state["_refill"]
+
+
+def test_failover_skips_margin_when_sell_price_fetch_fails():
+    """With nothing serving the model, a pricing outage must not keep it dark."""
+    chs = pool("6345", active=())
+    chs.insert(0, pin(39, "a6pin-fable-5-1-1111", F51, 2))
     mid = ids(chs)
     gw = GW(chs)
     gw.sell_prices = lambda: (_ for _ in ()).throw(RuntimeError("pricing down"))
-    with env(REFILL_RETRY_MINUTES="0", MIN_ACTIVE_PINS="2"), market(), runtime(a6m=A6M("FABLE 5.1 | 6345")):
-        m.refill_active_pins(gw, CC(), {}, None, True)
+    names = [f"FABLE 5.1 | {ch['name'].rsplit('-', 1)[-1]}" for ch in chs]
+    with env(MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL=""), market(), runtime(a6m=A6M(*names)):
+        m.promote_next_standby(gw, CC(), chs[0], "https://vantyr.xyz", "sk-RELAY", F51,
+                               True, None, {}, gw.list_channels())
     assert (mid["6345"], 1) in gw.writes, gw.writes
 
 
@@ -366,13 +383,29 @@ def test_promote_refuses_when_no_standby_passes_and_model_is_served():
     assert gw.writes == [], gw.writes
 
 
-def test_promote_fails_open_when_nothing_serves_the_model():
-    chs = pool("2000", active=())
+def test_promote_fails_open_onto_an_answering_merchant_when_nothing_serves():
+    """Nothing serves the model and no standby passes the gate: fail open onto
+    a merchant that still ANSWERS (slow here), never onto one whose live probe
+    just failed."""
+    chs = pool("2000", "5052", active=())
     chs.insert(0, pin(39, "a6pin-fable-5-1-1111", F51, 2))  # the failed pin, already off
     mid = ids(chs)
-    gw, _, _ = _promote(chs, probes={mid["2000"]: (False, None, "503")},
+    gw, _, _ = _promote(chs, probes={mid["2000"]: (False, None, "503"),
+                                     mid["5052"]: (True, 21000, "ok")},
                         cc=CC(default=None), failed=chs[0])
-    assert (mid["2000"], 1) in gw.writes, gw.writes
+    assert (mid["5052"], 1) in gw.writes and (mid["2000"], 1) not in gw.writes, gw.writes
+
+
+def test_promote_never_fails_open_onto_a_dead_merchant():
+    """Simulation 2026-10-28: failing open onto a standby that just failed its
+    live probe bounced the model between dead pins every breaker tick."""
+    chs = pool("2000", active=())
+    chs.insert(0, pin(39, "a6pin-fable-5-1-1111", F51, 2))
+    mid = ids(chs)
+    gw, _, alerts = _promote(chs, probes={mid["2000"]: (False, None, "503")},
+                             cc=CC(default=None), failed=chs[0])
+    assert (mid["2000"], 1) not in gw.writes, gw.writes
+    assert any("no standby that answers" in a for a in alerts), alerts
 
 
 # ---------------------------------------------------------------------------
@@ -431,8 +464,242 @@ def test_sweep_skips_permanent_and_delisted_standbys():
     assert summary[F51]["usable_standbys"] == ["a6pin-fable-5-1-6345"]
 
 
+def test_sweep_stops_at_its_budget_and_resumes_next_time():
+    """Review 2026-10-28: a sweep is bounded by STANDBY_SWEEP_BUDGET_SECONDS,
+    an unfinished pool keeps its alert state, and the next sweep resumes there."""
+    chs = pool("4038", "6345", active=("3825", "5630"))
+    clock = {"t": 1_000_000.0}
+    gw = GW(chs, probes={})
+    real_probe = gw.test_channel
+
+    def slow_probe(cid, model, timeout=90.0):
+        clock["t"] += 40  # every probe burns 40s of the 30s budget
+        return real_probe(cid, model, timeout)
+
+    gw.test_channel = slow_probe
+    state = {}
+    saved_time = m.time
+    m.time = type("T", (), {"time": staticmethod(lambda: clock["t"]),
+                            "sleep": staticmethod(lambda s: None)})
+    try:
+        with env(MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL="",
+                 STANDBY_SWEEP_BUDGET_SECONDS="30"), market() as alerts:
+            summary = m.sweep_standby_health(gw, state, "hook")
+    finally:
+        m.time = saved_time
+    assert len(gw.probed) == 1, gw.probed          # stopped after the budget ran out
+    assert summary[F51]["complete"] is False, summary
+    assert not any("NO usable standby" in a for a in alerts), alerts  # no alert on partial data
+    assert state["_standby_sweep"]["next"] == 0     # resumes in the same pool
+
+
+def test_breaker_tick_no_longer_refills():
+    """Review 2026-10-28: the refill left circuit_breaker_tick (it held the
+    mutation lock through probes and cctest checks ahead of the Kiro sweep)."""
+    chs = pool("6345", active=("3825",))
+    gw = GW(chs)
+    calls = []
+    orig = m.refill_active_pins
+    m.refill_active_pins = lambda *a, **kw: calls.append(1) or []
+    try:
+        with env(MIN_ACTIVE_PINS="2", FAST_TICK_LOCK_WAIT_SECONDS="0"), market(), \
+                runtime(gateway=gw, cctest=CC(), sellers=[("a6pin", "https://vantyr.xyz", "sk-R")],
+                        enforce=True, discord=None, state={}, a6m=A6M("FABLE 5.1 | 6345")):
+            m.circuit_breaker_tick({"enabled": True, "min_samples": 15, "client_gone_ratio": 0.5,
+                                    "frt_ms_threshold": 10**12, "hang_threshold": 10**9,
+                                    "error_ratio_threshold": 0.1, "min_errors": 10}, 15)
+    finally:
+        m.refill_active_pins = orig
+    assert calls == [], calls
+
+
+def test_unlocked_refill_revalidates_before_enabling():
+    """locked=False: the probe and cctest run without the lock; if the pool
+    filled up meanwhile, the enable is skipped."""
+    chs = pool("6345", active=("3825",))
+    mid = ids(chs)
+    gw = GW(chs)
+
+    class FillingCC(CC):
+        def check(self, base_url, key, model):
+            # Another actor enables a second pin while our check runs.
+            gw.channels.append(pin(99, "a6pin-fable-5-1-9999", F51, 1))
+            return super().check(base_url, key, model)
+
+    with env(REFILL_RETRY_MINUTES="0", MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL="",
+             FAST_TICK_LOCK_WAIT_SECONDS="0"), market(), \
+            runtime(a6m=A6M("FABLE 5.1 | 6345")):
+        added = m.refill_active_pins(gw, FillingCC(), {}, None, True, locked=False)
+    assert added == [] and (mid["6345"], 1) not in gw.writes, (added, gw.writes)
+    # Lock released afterwards (a fast tick can take it).
+    assert m._MUTATION_LOCK.acquire(blocking=False)
+    m._MUTATION_LOCK.release()
+
+
+def test_unlocked_refill_enables_when_still_needed():
+    chs = pool("6345", active=("3825",))
+    mid = ids(chs)
+    gw = GW(chs)
+    with env(REFILL_RETRY_MINUTES="0", MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL="",
+             FAST_TICK_LOCK_WAIT_SECONDS="0"), market(), \
+            runtime(a6m=A6M("FABLE 5.1 | 6345")):
+        added = m.refill_active_pins(gw, CC(), {}, None, True, locked=False)
+    assert added == ["a6pin-fable-5-1-6345"] and (mid["6345"], 1) in gw.writes, (added, gw.writes)
+
+
+def test_cycle_refill_runs_without_the_lock():
+    """Review 2026-10-28 (A): the hourly cycle's refill used to be one locked
+    step across every pool; it now runs locked=False and the lock is free."""
+    chs = pool("6345", active=())
+    gw = GW(chs)
+    seen = []
+    orig = m.refill_active_pins
+
+    def spy(*a, **kw):
+        free = m._MUTATION_LOCK.acquire(blocking=False)
+        if free:
+            m._MUTATION_LOCK.release()
+        seen.append((kw.get("locked", True), free))
+        return []
+
+    m.refill_active_pins = spy
+    try:
+        with env(MIN_ACTIVE_PINS="2", CYCLE_LOCK_WAIT_SECONDS="0"), market(), \
+                runtime(a6m=A6M("FABLE 5.1 | 6345")):
+            m.run_cycle(gw, CC(), [("a6pin", "https://vantyr.xyz", "sk-R")], ("claude",), 168,
+                        lambda n: 2, 3, True, None, {}, None, None, 60, latency_cfg=None)
+    finally:
+        m.refill_active_pins = orig
+    assert seen == [(False, True)], seen
+
+
+def _dark(chs, cc, state, **envs):
+    gw = GW(chs)
+    defaults = {"MIN_ACTIVE_PINS": "2", "MIN_ACTIVE_PINS_BY_MODEL": "", "REFILL_RETRY_MINUTES": "0",
+                "DARK_POOL_RETRY_MINUTES": "10", "FAST_TICK_LOCK_WAIT_SECONDS": "0"}
+    defaults.update(envs)
+    names = [f"FABLE 5.1 | {ch['name'].rsplit('-', 1)[-1]}" for ch in chs]
+    with env(**defaults), market(), \
+            runtime(a6m=A6M(*names), sellers=[("a6pin", "https://vantyr.xyz", "sk-R")],
+                    seller_registry={}):
+        m.refill_active_pins(gw, cc, state, None, True, locked=False)
+    return gw
+
+
+class LockSpyCC(CC):
+    """Records whether the mutation lock was free while each check ran."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.lock_free = []
+
+    def check(self, base_url, key, model):
+        free = m._MUTATION_LOCK.acquire(blocking=False)
+        if free:
+            m._MUTATION_LOCK.release()
+        self.lock_free.append(free)
+        return super().check(base_url, key, model)
+
+
+def test_dark_recovery_checks_without_the_lock_and_enables():
+    """Review 2026-10-28 (B): the dark-pool recovery's probes and cctest
+    check run unlocked; only the enable takes the lock."""
+    chs = pool("6345", active=())
+    mid = ids(chs)
+    cc = LockSpyCC()
+    gw = _dark(chs, cc, {})
+    assert (mid["6345"], 1) in gw.writes, gw.writes
+    assert cc.lock_free == [True], cc.lock_free
+    assert m._MUTATION_LOCK.acquire(blocking=False)
+    m._MUTATION_LOCK.release()
+
+
+def test_dark_recovery_is_paced():
+    """B: a dark pool is retried every DARK_POOL_RETRY_MINUTES, not on every
+    fast-refill tick (each try probes every candidate)."""
+    chs = pool("6345", active=())
+    mid = ids(chs)
+    state = {}
+    dead = {mid["6345"]: (False, None, "503")}
+    gw = GW(chs, dead)
+    names = ["FABLE 5.1 | 6345"]
+    with env(MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL="", DARK_POOL_RETRY_MINUTES="10",
+             FAST_TICK_LOCK_WAIT_SECONDS="0"), market(), \
+            runtime(a6m=A6M(*names), sellers=[("a6pin", "https://vantyr.xyz", "sk-R")],
+                    seller_registry={}):
+        m.refill_active_pins(gw, CC(), state, None, True, locked=False)
+        first = len(gw.probed)
+        m.refill_active_pins(gw, CC(), state, None, True, locked=False)  # within 10 min
+        assert len(gw.probed) == first, (first, gw.probed)
+        state["_dark_retry"]["claude-fable-5-1"]["at"] -= 601
+        m.refill_active_pins(gw, CC(), state, None, True, locked=False)
+    assert first >= 1 and len(gw.probed) > first, gw.probed
+
+
+def test_concurrent_refill_is_skipped():
+    """Review 2026-10-28: a refill already running (hourly cycle vs
+    fast_refill_loop) makes the second one a no-op — no double probe/cctest."""
+    chs = pool("6345", active=("3825",))
+    gw = GW(chs)
+    cc = CC()
+    assert m._REFILL_LOCK.acquire(blocking=False)
+    try:
+        with env(REFILL_RETRY_MINUTES="0", MIN_ACTIVE_PINS="2", MIN_ACTIVE_PINS_BY_MODEL="",
+                 FAST_TICK_LOCK_WAIT_SECONDS="0"), market(), \
+                runtime(a6m=A6M("FABLE 5.1 | 6345")):
+            added = m.refill_active_pins(gw, cc, {}, None, True, locked=False)
+    finally:
+        m._REFILL_LOCK.release()
+    assert added == [] and gw.writes == [] and gw.probed == [] and cc.calls == [], \
+        (added, gw.writes, gw.probed, cc.calls)
+
+
+def test_save_state_survives_a_concurrent_mutation():
+    """Review 2026-10-28: a dump overlapping a setdefault retried, not raised."""
+    calls = {"n": 0}
+    orig = m.json.dumps
+
+    def flaky(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("dictionary changed size during iteration")
+        return orig(*a, **kw)
+
+    m.json.dumps = flaky
+    try:
+        m.save_state({"a": 1})
+    finally:
+        m.json.dumps = orig
+    with open(m.STATE_PATH) as f:
+        assert '"a": 1' in f.read()
+    os.remove(m.STATE_PATH)
+
+
+def test_hourly_error_rule_needs_five_hard_errors():
+    """Owner decision 2026-10-28: the hourly rule benched fable-5 4756 on 3
+    hard errors in 20 requests (15% vs 5%). LATENCY_MIN_ERRORS (default 5)
+    adds an absolute floor, like the breaker's CIRCUIT_MIN_ERRORS."""
+    cfg = {"enabled": True, "min_samples": 20, "frt_ms_threshold": 10**12,
+           "client_gone_ratio": 0.99, "hang_threshold": 10**9,
+           "error_ratio_threshold": 0.05, "min_errors": 5}
+
+    class ErrGW(GW):
+        def __init__(self, err, ok):
+            super().__init__([])
+            self._e, self._o = err, ok
+
+        def count_logs(self, log_type, channel_id, window_minutes, since_ts=None):
+            return self._e if log_type == 5 else self._o
+
+        def recent_error_logs(self, *a, **kw):
+            return [{"content": "status_code=502, upstream error"}] * self._e
+
+    assert m.pin_is_sick(ErrGW(3, 17), 9, 360, latency_cfg=cfg) is False  # the 4756 bench
+    assert m.pin_is_sick(ErrGW(5, 17), 9, 360, latency_cfg=cfg) is True
+
+
 def test_new_state_keys_are_reserved():
-    for key in ("_standby_health", "_standby_alerts", "_refill", "_standby_sweep"):
+    for key in ("_standby_health", "_standby_alerts", "_refill", "_standby_sweep", "_dark_retry"):
         assert key in m.RESERVED_STATE_KEYS, key
 
 

@@ -155,13 +155,13 @@ services:
       # Entry gate + standby sweep (2026-10-28). A standby only goes active
       # with >= PIN_MIN_MARGIN on input AND output vs its A6 price and a live
       # probe answering within PIN_MAX_PROBE_MS, then a cctest PASS. Every
-      # STANDBY_SWEEP_HOURS each standby gets one tiny live probe; Discord
+      # STANDBY_SWEEP_MINUTES each standby gets one tiny live probe; Discord
       # alerts when a pool is short or has no usable spare. A short pool is
       # retried by the 5-minute breaker every REFILL_RETRY_MINUTES.
       - PIN_MIN_MARGIN=${CCTEST_PIN_MIN_MARGIN:-1.5}
-      - PIN_MAX_PROBE_MS=${CCTEST_PIN_MAX_PROBE_MS:-8000}
+      - PIN_MAX_PROBE_MS=${CCTEST_PIN_MAX_PROBE_MS:-15000}
       - PIN_ENTRY_PROBE=${CCTEST_PIN_ENTRY_PROBE:-true}
-      - STANDBY_SWEEP_HOURS=${CCTEST_STANDBY_SWEEP_HOURS:-3}
+      - STANDBY_SWEEP_MINUTES=${CCTEST_STANDBY_SWEEP_MINUTES:-30}
       - REFILL_RETRY_MINUTES=${CCTEST_REFILL_RETRY_MINUTES:-30}
       # Fast bench after N A6 pool errors in a row (0 disables), and how long
       # the 5-minute breaker / primary sweep wait for the cycle's lock.
@@ -187,6 +187,8 @@ services:
       - LATENCY_CLIENT_GONE_RATIO=${CCTEST_LATENCY_CLIENT_GONE_RATIO:-0.20}
       - LATENCY_HANG_THRESHOLD=${CCTEST_LATENCY_HANG_THRESHOLD:-3}
       - LATENCY_ERROR_RATIO=${CCTEST_LATENCY_ERROR_RATIO:-0.05}
+      # Hourly error rule also needs this many hard errors (2026-10-28).
+      - LATENCY_MIN_ERRORS=${CCTEST_LATENCY_MIN_ERRORS:-5}
       # Primary-channel failover + severe-degradation circuit breaker
       # (2026-10-25). These were set directly on the server and never came
       # back to the repo; restored here so this file is the whole truth.
