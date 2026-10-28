@@ -207,6 +207,23 @@ import contextlib
 
 
 @contextlib.contextmanager
+def single_pin_target():
+    """MIN_ACTIVE_PINS=1 for tests written against the one-pin-per-model rule
+    (the default became 2 on 2026-10-26, and the cycle now refills pools up
+    to the target). Keeps those tests about the behavior they name — dedup,
+    lock skipping, release-never-enables — instead of the refill."""
+    saved = os.environ.get("MIN_ACTIVE_PINS")
+    os.environ["MIN_ACTIVE_PINS"] = "1"
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop("MIN_ACTIVE_PINS", None)
+        else:
+            os.environ["MIN_ACTIVE_PINS"] = saved
+
+
+@contextlib.contextmanager
 def hermetic_market(health=None):
     """Patch A6Market.health_for for deterministic promote ordering.
 
@@ -821,8 +838,9 @@ def test_quarantined_pin_rechecked_and_released():
 
     m.RUNTIME = {"a6m": FakeA6MWithKey()}
     try:
-        m.run_cycle(gw, PassCC(), [("a6pin", "https://api.a6api.com", "sk-pin")],
-                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        with single_pin_target():
+            m.run_cycle(gw, PassCC(), [("a6pin", "https://api.a6api.com", "sk-pin")],
+                        ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
         # The quarantined pin was re-checked directly and released (state cleared).
         assert state["a6pin-fable-5-4665"]["quarantined"] is False
         # The pin's own verdict history records the passing re-check.
@@ -1937,8 +1955,9 @@ def test_cycle_channel_processing_respects_mutation_lock():
 
     # Control: without the lock held, the cycle DOES dedup (proves the
     # scenario would write, so the assertion below is meaningful).
-    m.run_cycle(gw, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
-                ("claude", "gpt"), 168, threshold_for, 3, True, None, {})
+    with single_pin_target():
+        m.run_cycle(gw, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+                    ("claude", "gpt"), 168, threshold_for, 3, True, None, {})
     assert (21, 2) in gw.writes, gw.writes
 
     # Now hold the lock as a competing rotation would, and run again on a
@@ -1953,8 +1972,9 @@ def test_cycle_channel_processing_respects_mutation_lock():
 
     assert m._MUTATION_LOCK.acquire(blocking=False)
     try:
-        m.run_cycle(gw2, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
-                    ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
+        with single_pin_target():
+            m.run_cycle(gw2, PassCC(), [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+                        ("claude", "gpt"), 168, threshold_for, 3, True, None, state)
     finally:
         m._MUTATION_LOCK.release()
 
@@ -2309,11 +2329,12 @@ def test_cycle_dedupes_multiple_active_pins():
             return r["verdict"]
 
     state = {}
-    m.run_cycle(
-        gw, PassCC(),
-        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
-        ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
-    )
+    with single_pin_target():
+        m.run_cycle(
+            gw, PassCC(),
+            [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+            ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
+        )
     # The extra pin (1169) is disabled back to standby; the first stays active.
     assert (21, 2) in gw.writes, gw.writes
     assert (20, 2) not in gw.writes, gw.writes
@@ -2354,11 +2375,12 @@ def test_cycle_dedupes_alias_active_pins():
     ]
     gw = FakeGW(chs)
     state = {}
-    m.run_cycle(
-        gw, VerdictCC(),
-        [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
-        ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
-    )
+    with single_pin_target():
+        m.run_cycle(
+            gw, VerdictCC(),
+            [("a6pin", "https://vantyr.xyz", "sk-RELAY")],
+            ("claude", "gpt"), 168, threshold_for, 3, True, None, state,
+        )
     # One of them was disabled (the second-seen).
     assert (21, 2) in gw.writes, gw.writes
     assert (20, 2) not in gw.writes, gw.writes

@@ -42,6 +42,35 @@ func IsChannelInTopPriorityTier(group string, modelName string, channelID int, f
 	return true
 }
 
+// HasUntriedChannel (Vantyr fork, 2026-10-27) reports whether a retry for this
+// group and model still has an enabled candidate the request has not tried.
+// GetRandomSatisfiedChannelAvoiding hands back a tried channel only when this
+// is false. Anything it cannot answer (memory cache off, no known candidates)
+// reports true, so callers keep upstream retry behavior.
+func HasUntriedChannel(group string, modelName string, filters []dto.ChannelFilter, tried []int) bool {
+	if !common.MemoryCacheEnabled || group == "" || modelName == "" {
+		return true
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+
+	ids, _ := filterCandidateIDs(group2model2channels[group][modelName], modelName, filters)
+	if len(ids) == 0 {
+		normalized := ratio_setting.RoutingMatchModelName(modelName)
+		ids, _ = filterCandidateIDs(group2model2channels[group][normalized], modelName, filters)
+	}
+	if len(ids) == 0 {
+		return true
+	}
+	for _, id := range ids {
+		if !slices.Contains(tried, id) {
+			return true
+		}
+	}
+	return false
+}
+
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
 	if group == "" || modelName == "" || channelID <= 0 {
 		return false

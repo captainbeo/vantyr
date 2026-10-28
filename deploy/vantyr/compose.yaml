@@ -17,7 +17,7 @@ services:
     # were already in HEAD. Build only with deploy/vantyr/scripts/
     # build-gateway.sh (verified tarball of a pinned SHA), then point `image:`
     # at the new tag. `docker compose build gateway` is now a silent no-op.
-    image: vantyr/new-api:vt-27c-20261027-132738
+    image: vantyr/new-api:vt-27d-20261028-0132
     container_name: vantyr-gateway
     restart: unless-stopped
     command: --log-dir /app/logs
@@ -143,6 +143,30 @@ services:
       - A6_MANAGE_TOKEN=${CCTEST_A6_MANAGE_TOKEN:-}
       - A6_MANAGE_USER=${CCTEST_A6_MANAGE_USER:-}
       - SICK_WINDOW_MINUTES=${CCTEST_SICK_WINDOW_MINUTES:-60}
+      # Pin pool targets + refill (2026-10-27). Every pool is topped up to
+      # MIN_ACTIVE_PINS active pins with own-key-verified standbys; per-model
+      # overrides as "claude-fable-5-1:3,gpt-6-astra:3". REFILL_MAX_CHECKS
+      # caps cctest checks per pool per cycle.
+      # Owner rule 2026-10-28: models Kiro also serves keep 2 A6 pins (A6 is
+      # their backup tier); A6-only models keep 3.
+      - MIN_ACTIVE_PINS=${CCTEST_MIN_ACTIVE_PINS:-2}
+      - MIN_ACTIVE_PINS_BY_MODEL=${CCTEST_MIN_ACTIVE_PINS_BY_MODEL:-claude-fable-5:3,claude-fable-5-1:3,gpt-6-astra:3,gpt-6-sol:3,gpt-6-1-sol:3}
+      - REFILL_MAX_CHECKS=${CCTEST_REFILL_MAX_CHECKS:-2}
+      # Entry gate + standby sweep (2026-10-28). A standby only goes active
+      # with >= PIN_MIN_MARGIN on input AND output vs its A6 price and a live
+      # probe answering within PIN_MAX_PROBE_MS, then a cctest PASS. Every
+      # STANDBY_SWEEP_MINUTES each standby gets one tiny live probe; Discord
+      # alerts when a pool is short or has no usable spare. A short pool is
+      # retried by the 5-minute breaker every REFILL_RETRY_MINUTES.
+      - PIN_MIN_MARGIN=${CCTEST_PIN_MIN_MARGIN:-1.5}
+      - PIN_MAX_PROBE_MS=${CCTEST_PIN_MAX_PROBE_MS:-15000}
+      - PIN_ENTRY_PROBE=${CCTEST_PIN_ENTRY_PROBE:-true}
+      - STANDBY_SWEEP_MINUTES=${CCTEST_STANDBY_SWEEP_MINUTES:-30}
+      - REFILL_RETRY_MINUTES=${CCTEST_REFILL_RETRY_MINUTES:-30}
+      # Fast bench after N A6 pool errors in a row (0 disables), and how long
+      # the 5-minute breaker / primary sweep wait for the cycle's lock.
+      - CIRCUIT_POOL_ERROR_STREAK=${CCTEST_CIRCUIT_POOL_ERROR_STREAK:-3}
+      - FAST_TICK_LOCK_WAIT_SECONDS=${CCTEST_FAST_TICK_LOCK_WAIT_SECONDS:-360}
       # Gateway availability watchdog (2026-10-26). Pages Discord when the
       # gateway has been unreachable for DOWN_AFTER seconds, and again on
       # recovery. This is the only alert path that does not need the gateway,
@@ -163,6 +187,8 @@ services:
       - LATENCY_CLIENT_GONE_RATIO=${CCTEST_LATENCY_CLIENT_GONE_RATIO:-0.20}
       - LATENCY_HANG_THRESHOLD=${CCTEST_LATENCY_HANG_THRESHOLD:-3}
       - LATENCY_ERROR_RATIO=${CCTEST_LATENCY_ERROR_RATIO:-0.05}
+      # Hourly error rule also needs this many hard errors (2026-10-28).
+      - LATENCY_MIN_ERRORS=${CCTEST_LATENCY_MIN_ERRORS:-5}
       # Primary-channel failover + severe-degradation circuit breaker
       # (2026-10-25). These were set directly on the server and never came
       # back to the repo; restored here so this file is the whole truth.
