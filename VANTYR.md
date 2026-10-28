@@ -6006,3 +6006,103 @@ both.
   not succeeded since 2026-10-26 16:50, so sonnet-5 has no working backup.
 - First minutes after the swap: claude-opus-5-5 4 Kiro / 0 A6, haiku 1/0, no
   errors (24h before: opus-5-5 2604 Kiro / 556 A6).
+
+## 2026-10-27e — cctest-monitor pin-pool upgrade (LIVE)
+
+**Problems.**
+- Post-promotion grace sliced the success count but not the error rows, and
+  only started at a monitor promotion. fable-5's only pin (ch51) was benched
+  at 14:01 on errors from its previous stint; ch9 (enabled through the API at
+  ~17:05) was benched at 17:29 on 20 errors from 12:54, and the cycle then
+  promoted the delisted legacy pin ch8, which tested attr_swapped at 18:36.
+- The 5-minute breaker and the primary (Kiro) sweep took the mutation lock
+  non-blocking and skipped whenever the hourly cycle was mid-check: 29
+  `[primary] ... skipping this tick` lines on 2026-10-27, up to three in a row
+  (09:22-09:32). The 1-minute restore probe shares that lock.
+- Nothing topped a pool up to MIN_ACTIVE_PINS; promotion only ran after a
+  failure. A promotion with an inconclusive direct check fell back to
+  enable-then-verify even while another pin still served the model.
+- Gateway-routed checks tested whichever channel the router picked: for the
+  Kiro models that was kiro-pool, so their A6 pins went 13-35h without a
+  verdict of their own.
+
+**Fix (e063404c1, `fix/a6-pool-hardening`).**
+- Grace: error rows are sliced to the grace start, which is the later of
+  `promoted_at` and the gateway's `other_info.status_time` (any enable).
+- Lock: fast ticks wait up to FAST_TICK_LOCK_WAIT_SECONDS (360); the cycle
+  yields to a waiting fast tick between channels.
+- Fast bench: CIRCUIT_POOL_ERROR_STREAK (3) A6 pool errors since the last
+  success benches a pin on the next breaker tick, never the pool's last pin.
+- Refill: `refill_active_pins` at the end of each cycle enables standbys that
+  PASS an own-key check, at most REFILL_MAX_CHECKS (2) per pool per cycle;
+  skips quarantined, cooldown-marked and delisted standbys; pools with no
+  active pin stay with the failover path.
+- Promotion while the model is still served: PASS only (inconclusive or no
+  revealable key = not enabled). The fail-open path is kept for a pool with
+  no serving pin (2026-10-24 deadlock guard).
+- Active pins are checked with their own A6 key, using the upstream spelling
+  (gpt-6.1-sol); no gateway attribution hop for a direct check.
+- Per-model targets: MIN_ACTIVE_PINS_BY_MODEL ("claude-fable-5-1:3", any alias
+  spelling). Haiku A6 keys ("HAIKU 5.5 | <id>") map to `a6pin-haiku-5-5-<id>`.
+- The breaker keys active pins by model pool (a dual-spelling pin was scored
+  twice per tick).
+- Not built: margin guard (owner to pick the rule).
+Tests (python:3.12-slim): test_monitor_pool.py 28/28 (new),
+test_monitor_hardening.py 27/27, test_monitor.py 94/94. Three dedup tests had
+been failing on the deployed code since the 2026-10-26 default of 2 pins; they
+now run with `single_pin_target()`.
+
+**Deploy (2026-10-27 23:20 UTC).**
+- Pre-flight: previous cycle finished 23:18:38; compose + .env vs the live
+  container: 45 env keys, none differ (the new knobs are not in the server
+  compose yet and use the code defaults, which equal the repo compose
+  defaults); gateway and kiro-proxy healthy; disk 31%.
+- `/app/monitor.py` md5 ef2562ce4681307055bd2f52713f0112 (LF, = `git show
+  e063404c1:...`; the Windows working copy is CRLF). `docker compose -f
+  compose.yaml build cctest-monitor` + `up -d --no-deps cctest-monitor`; image
+  sha256:f1e99750dd76, started 23:20:40.
+- Rollback: image `vantyr/cctest-monitor:rollback-pre-e063404c1-20261027T232028Z`
+  (b425fa42ae5a), `cctest-monitor/monitor.py.bak-pre-e063404c1-20261027T232028Z`,
+  state `/opt/vantyr/backups/cctest-state-pre-e063404c1-20261027T232028Z.json`.
+- First cycle 23:20:41-23:27:41: 18 own-key direct checks (17 attr_match,
+  6.1-sol 5110 attr_upgraded), one gateway-routed check (kiro-pool sonnet-5,
+  attr_match), 0 attribution hops, 0 lock skips, 0 tracebacks, no refill or
+  bench needed (every pool at 2/2). Breaker ticks 23:25 and 23:30 ran on time;
+  ch9 scored in grace ("enabled 233.3m ago"). Channel states unchanged.
+- The gateway retry fix 14c98d6ab was deployed separately on 2026-10-28; see
+  the 2026-10-28a entry.
+
+## 2026-10-28a — gateway retry fix 14c98d6ab deployed (LIVE)
+
+What it does is in the 14c98d6ab commit message: on a 502/503, stop the retry
+(reason `no_untried_channel`) when every enabled candidate for the group and
+model has already been tried, instead of sending the request back to a channel
+that just failed. `RELAY_SKIP_SAME_CHANNEL_RETRY=false` turns it off (default
+true, not set in compose or .env).
+
+**Pre-flight.** Running gateway `vt-27c-20261027-132738`; `feat/payment-rails`
+had not moved since c667b7b4b, and the code diff from the vt-27c build source
+(5e20fdc8f) to 14c98d6ab is exactly the fix (6 files), so the build drops
+nothing that was live. Other sessions were working on the monitor
+(`fix/pin-pool-gate`) and DB prices, not the gateway image. Recreate changes no
+gateway env var (33 keys, none differ).
+
+**Build (01:32-01:37 UTC).** `pack-build-context.sh` on 14c98d6ab (2789 files,
+manifest md5 f05b3c41519c24ade56ffe1f7e4e15f7, tarball md5
+bb1637946d832d4a00a047a633032167) + `bash build-gateway.sh` under nohup (the
+server copy has no execute bit). Image `vantyr/new-api:vt-27d-20261028-0132`,
+sha256:d276eabb6839. BuildCommit stamp ok; features ping_event_mode 1,
+cache_ttl_inject 2, mediaItemCacheControl 1, chat completions trace 1; also
+no_untried_channel, RELAY_SKIP_SAME_CHANNEL_RETRY, HasUntriedChannel,
+affinity_fallback_tier, IsChannelInTopPriorityTier, client_content_sent,
+GetRandomSatisfiedChannelAvoiding all present (no_untried_channel = 0 in vt-27c,
+as a control). Load peaked ~6.4, no 503 overload during the build.
+
+**Swap (01:39:53 UTC).** compose backup
+`/opt/vantyr/backups/compose-pre-27d-20261028-013952.yaml`; `up -d --no-deps
+gateway`; healthy after ~35s, started 01:40:03.9, running image = the verified
+build. Cost: ~10s of `connection refused` at Caddy (8 × 502, 01:39:55-01:40:06)
+plus one stream cut (01:40:03 unexpected EOF), all from user 1 (claude-cli);
+that user's requests succeed again from 01:40:24.
+Rollback: point compose at `vantyr/new-api:vt-27c-20261027-132738`
+(78a2d3482189) and `docker compose up -d --no-deps gateway`.

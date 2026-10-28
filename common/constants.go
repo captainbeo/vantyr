@@ -195,6 +195,11 @@ var RelayIdleConnTimeout int // unit is second
 // ResponseHeaderTimeout only bounds the wait for the response headers; once the
 // headers arrive, streaming is unaffected.
 var RelayResponseHeaderTimeout int // unit is second
+
+// RelaySkipSameChannelRetry (Vantyr fork, 2026-10-27): stop a 502/503 retry
+// that could only repeat a channel the request already tried
+// (service.retryWouldRepeatChannel). Env RELAY_SKIP_SAME_CHANNEL_RETRY.
+var RelaySkipSameChannelRetry = true
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
 

@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -59,9 +60,48 @@ func DecideRelayRetry(c *gin.Context, err *types.NewAPIError, retryTimes int) Po
 		return PolicyDecision{Action: "stop", Reason: "system_retry_exclusion", Source: "system"}
 	}
 	if operation_setting.ShouldRetryByStatusCode(code) {
+		if retryWouldRepeatChannel(c, code) {
+			return PolicyDecision{Action: "stop", Reason: "no_untried_channel", Source: "system"}
+		}
 		return PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"}
 	}
 	return PolicyDecision{Action: "stop", Reason: "status_not_retryable", Source: "global"}
+}
+
+// noRepeatRetryStatusCodes are the statuses that mean the channel's upstream
+// could not serve the request at all (A6 502 "all candidates failed", 503 "no
+// active candidates").
+var noRepeatRetryStatusCodes = map[int]bool{http.StatusBadGateway: true, http.StatusServiceUnavailable: true}
+
+// retryWouldRepeatChannel (Vantyr fork, 2026-10-27) reports whether a retry of
+// this 502/503 could only go back to a channel the request already tried.
+// Seven days of logs: those same-channel retries rescued 75 of ~2,880 failed
+// requests while adding up to 6 minutes of waiting (astra 57>57>57), and the
+// two phantom-usage answers of 2026-10-27 came from them. Multi-key channels
+// (a retry moves to the next key), pinned requests, the auto group and
+// anything the channel cache cannot answer keep the upstream behavior.
+// RELAY_SKIP_SAME_CHANNEL_RETRY=false turns this off.
+func retryWouldRepeatChannel(c *gin.Context, code int) bool {
+	if c == nil || !common.RelaySkipSameChannelRetry || !noRepeatRetryStatusCodes[code] {
+		return false
+	}
+	if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
+		return false
+	}
+	constraints := GetChannelConstraints(c)
+	if _, pinned, _ := constraints.ResolvedPin(); pinned {
+		return false
+	}
+	group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if group == "" || group == "auto" {
+		return false
+	}
+	tried := triedChannelIDs(c)
+	if len(tried) == 0 {
+		return false
+	}
+	modelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+	return !model.HasUntriedChannel(group, modelName, constraints.Filters, tried)
 }
 
 func ShouldRetryRelayError(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
