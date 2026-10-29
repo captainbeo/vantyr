@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Trash2, Save } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -138,7 +138,6 @@ export function AnnouncementsSection({
   const updateOption = useUpdateOption()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isEnabled, setIsEnabled] = useState(enabled)
-  const [hasChanges, setHasChanges] = useState(false)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showDialog, setShowDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -226,57 +225,52 @@ export function AnnouncementsSection({
     setShowDeleteDialog(true)
   }
 
-  const confirmDelete = () => {
-    if (deleteTarget === 'single' && editingAnnouncement) {
-      setAnnouncements((prev) =>
-        prev.filter((item) => item.id !== editingAnnouncement.id)
-      )
-      setHasChanges(true)
-      toast.success(t('Announcement deleted. Click "Save Settings" to apply.'))
-    } else if (deleteTarget === 'batch') {
-      setAnnouncements((prev) =>
-        prev.filter((item) => !selectedIds.includes(item.id))
-      )
-      setSelectedIds([])
-      setHasChanges(true)
-      toast.success(
-        t('{{count}} announcements deleted. Click "Save Settings" to apply.', {
-          count: selectedIds.length,
-        })
-      )
+  // Every change is saved to the server immediately. A separate "Save
+  // Settings" step let admins add an announcement, see it in the table, and
+  // leave without it ever being published.
+  const persistAnnouncements = async (next: Announcement[]) => {
+    try {
+      await updateOption.mutateAsync({
+        key: 'console_setting.announcements',
+        value: JSON.stringify(next),
+      })
+    } catch (error) {
+      handleServerError(error, t('Failed to save announcements'))
+      return false
     }
+    setAnnouncements(next)
+    toast.success(t('Announcements saved successfully'))
+    return true
+  }
+
+  const confirmDelete = async () => {
+    let next: Announcement[]
+    if (deleteTarget === 'single' && editingAnnouncement) {
+      next = announcements.filter((item) => item.id !== editingAnnouncement.id)
+    } else if (deleteTarget === 'batch') {
+      next = announcements.filter((item) => !selectedIds.includes(item.id))
+    } else {
+      return
+    }
+    if (!(await persistAnnouncements(next))) return
+    if (deleteTarget === 'batch') setSelectedIds([])
     setShowDeleteDialog(false)
     setEditingAnnouncement(null)
   }
 
-  const handleSubmitForm = (values: AnnouncementFormValues) => {
-    if (editingAnnouncement) {
-      setAnnouncements((prev) =>
-        prev.map((item) =>
+  const handleSubmitForm = async (values: AnnouncementFormValues) => {
+    const next = editingAnnouncement
+      ? announcements.map((item) =>
           item.id === editingAnnouncement.id ? { ...item, ...values } : item
         )
-      )
-      toast.success(t('Announcement updated. Click "Save Settings" to apply.'))
-    } else {
-      const newId = Math.max(...announcements.map((item) => item.id), 0) + 1
-      setAnnouncements((prev) => [...prev, { id: newId, ...values }])
-      toast.success(t('Announcement added. Click "Save Settings" to apply.'))
-    }
-    setHasChanges(true)
-    setShowDialog(false)
-  }
-
-  const handleSaveAll = async () => {
-    try {
-      await updateOption.mutateAsync({
-        key: 'console_setting.announcements',
-        value: JSON.stringify(announcements),
-      })
-      setHasChanges(false)
-      toast.success(t('Announcements saved successfully'))
-    } catch (error) {
-      handleServerError(error, t('Failed to save announcements'))
-    }
+      : [
+          ...announcements,
+          {
+            id: Math.max(...announcements.map((item) => item.id), 0) + 1,
+            ...values,
+          },
+        ]
+    if (await persistAnnouncements(next)) setShowDialog(false)
   }
 
   const toggleSelectAll = (checked: boolean) => {
@@ -323,20 +317,11 @@ export function AnnouncementsSection({
               onClick={handleBatchDelete}
               size='sm'
               variant='destructive'
-              disabled={selectedIds.length === 0}
+              disabled={selectedIds.length === 0 || updateOption.isPending}
             >
               <Trash2 className='mr-2 h-4 w-4' />
               {t('Delete (')}
               {selectedIds.length})
-            </Button>
-            <Button
-              onClick={handleSaveAll}
-              size='sm'
-              variant='secondary'
-              disabled={!hasChanges || updateOption.isPending}
-            >
-              <Save className='mr-2 h-4 w-4' />
-              {updateOption.isPending ? t('Saving...') : t('Save Settings')}
             </Button>
           </div>
           <SettingsSwitchField
@@ -458,7 +443,11 @@ export function AnnouncementsSection({
             >
               {t('Cancel')}
             </Button>
-            <Button type='submit' form={ANNOUNCEMENT_FORM_ID}>
+            <Button
+              type='submit'
+              form={ANNOUNCEMENT_FORM_ID}
+              disabled={updateOption.isPending}
+            >
               {editingAnnouncement ? t('Update') : t('Add')}
             </Button>
           </>
@@ -602,7 +591,11 @@ export function AnnouncementsSection({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant='destructive' onClick={confirmDelete}>
+            <AlertDialogAction
+              variant='destructive'
+              onClick={confirmDelete}
+              disabled={updateOption.isPending}
+            >
               {t('Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
