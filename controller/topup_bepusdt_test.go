@@ -92,6 +92,7 @@ func TestCreateSecondaryNativeOrder(t *testing.T) {
 	assert.InDelta(t, 5.0, received["amount"], 0.0001)
 	assert.Equal(t, "https://vantyr.example.com/api/user/bepusdt/notify", received["notify_url"])
 	assert.Equal(t, "https://vantyr.example.com/usage-logs", received["redirect_url"])
+	assert.EqualValues(t, 1200, received["timeout"])
 
 	// Failure case: gateway rejects (status_code != 200) → error, no link.
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -267,6 +267,10 @@ func bepusdtSign(data map[string]any, token string) string {
 // 收银台只展示这些币种对应的网络供客户选择（一按钮多链）。
 var bepusdtNativeCurrencies = "USDT,USDC,GRAM"
 
+// bepusdtOrderTimeoutSeconds 订单有效期（秒），与 GM Pay 的 20 分钟一致。
+// BEpusdt 只接受 180–3600，超出范围会回退到其后台的 payment_timeout。
+const bepusdtOrderTimeoutSeconds int64 = 1200
+
 // bepusdtCreateOrderReq / bepusdtCreateOrderResp 是原生创建订单
 // 接口（POST /api/v1/order/create-order）的请求与响应结构。
 type bepusdtCreateOrderReq struct {
@@ -319,7 +323,7 @@ func createSecondaryNativeOrder(
 		"name":         name,
 		"fiat":         "USD",
 		"currencies":   bepusdtNativeCurrencies,
-		"timeout":      int64(900),
+		"timeout":      bepusdtOrderTimeoutSeconds,
 	}
 	reqBody := bepusdtCreateOrderReq{
 		OrderID:     tradeNo,
@@ -329,7 +333,7 @@ func createSecondaryNativeOrder(
 		Name:        name,
 		Fiat:        "USD",
 		Currencies:  bepusdtNativeCurrencies,
-		Timeout:     900,
+		Timeout:     bepusdtOrderTimeoutSeconds,
 	}
 	reqBody.Signature = bepusdtSign(payload, operation_setting.EpaySecondaryKey)
 
