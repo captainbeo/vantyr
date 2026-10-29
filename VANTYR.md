@@ -6286,3 +6286,86 @@ with a new owner-created `ASTRA 6 | 5151` key.
 Pool now: 5703 (ch32) and 5942 (ch56) active, 4848 (ch57) standby. The live
 monitor (eecc69b28) targets 3 active pins for A6-only models; astra stays at
 2/3 until a standby passes (4848 returned `attr_uncertain` at 04:25).
+
+## 2026-10-29 — crypto payments: 20-minute orders, Solana RPC nodes, exact-amount notice (LIVE)
+
+**Trigger (2026-10-28):** "funds arrive in the wallet but the user is not
+credited." One case was real: 10.00 USDT on BSC, tx `0x9498f19d…4e714b`,
+arrived at 15:42:53 UTC, 50 s after the only matching GM Pay order (10.00,
+BSC) expired at 15:42:03. GM Pay matches a transfer only to an open order with
+the exact offset amount (10.00 / 10.01 / 10.02 …); a late or wrong-amount
+transfer is dropped with no record in its dashboard. The sender was an
+exchange hot wallet that also paid another customer on 10-27, so the address
+does not identify the payer: credit such cases only against the customer's
+withdrawal tx hash.
+
+**GM Pay `rpc_nodes` (Postgres `epusdt`, config only):**
+- binance / ethereum / polygon had only `purpose=manual_verify` HTTP nodes, so
+  the EVM backfill logged "no enabled binance HTTP RPC node" and the BSC scan
+  cursor (`evm_scan_cursor` in `runtime/epusdt-runtime.db`) sat at a 10-06
+  block. Added `purpose=general` HTTP nodes 14/15/16 (bsc / ethereum / polygon
+  publicnode) and moved the BSC cursor to the head; all four EVM cursors now
+  track the head within 1-2 blocks.
+- Solana: node 13 `solana-rpc.publicnode.com` weight 1 → 10; added 17
+  `solana.api.pocket.network` (weight 8) and 18 `rpc.solanatracker.io/public`
+  (weight 6, free tier 5 rps); 3 `api.mainnet-beta.solana.com` stays weight 1,
+  last. Selection is status `ok` first, then weight desc. Each new node passed
+  `getSignaturesForAddress` on the wallet and its ATA, `getTransaction`, and a
+  1-s-old USDT transfer probe; mainnet-beta returned 429 under the same burst.
+  Solana errors: 13 earlier on 10-29, 0 in the first hour after the restart.
+  Rejected: Ankr/rpcpool 403, dRPC 400, OnFinality 429, Omniatech 521, Blast
+  DNS, Tatum (no `getSignaturesForAddress`), LeoRPC 429/-32603.
+- Known limit, not fixable by node choice: GM Pay v2.0.0 calls `getTransaction`
+  with `maxSupportedTransactionVersion: 0` (master too), so version-1 Solana
+  transactions are rejected (-32015). They were 10/39 and 5/60 of two samples of
+  recent USDT transactions. Such a payment reaches the wallet but is never
+  credited automatically; reconcile it by hand.
+- `SQLITE_BUSY` on the runtime SQLite is transient (the binary already sets
+  `busy_timeout=5000`; a `sqlite3` CLI PRAGMA is per-connection and does
+  nothing). ~5 per 20 min, retried, not a cause of missed credits.
+- `[bootstrap] ensure default admin err=… syntax error at or near "="` appears
+  on every GM Pay boot since the Postgres move; pre-existing, admin login works.
+
+**Order lifetime 15 → 20 min on both crypto rails:**
+- GM Pay: `order_expiration_time=20` in `data/gmpay/.env` (backup
+  `.env.bak-pre-expiry20-20261029-014957`), container restarted 01:50 UTC with
+  no open orders. Read at boot by viper (`config.GetOrderExpirationTime`); the
+  checkout API then reported `expiration_time - created_at = 1,200,000 ms`.
+- BEpusdt: the gateway sent a hardcoded `timeout: 900` on every native
+  create-order, overriding its admin `payment_timeout`. Now
+  `bepusdtOrderTimeoutSeconds = 1200` (commit 859ce2f99; BEpusdt accepts
+  180-3600, outside that it falls back to `payment_timeout`, still 900).
+  `TestCreateSecondaryNativeOrder` asserts the signed body carries 1200.
+
+**Exact-amount notice (commit c9cff1ef5):** the Confirm Payment dialog shows a
+warning for the two crypto types (`alipay` = GM Pay, `bepusdt`): "On the
+payment page, send the exact amount shown, after exchange fees, before the
+timer runs out." Stripe does not show it. New `isCryptoPayment()` helper; 12
+locales via the i18n script. Web: 18/18 in the affected test files; lint and
+format clean on changed files; `tsgo` reports 8 errors, all in untouched files.
+Go: `go test ./controller/ -run 'Bepusdt|Epay|Secondary'` ok, `go vet` ok
+(gofmt alignment drift in topup.go / topup_bepusdt_test.go predates this).
+
+**Deploy (owner-approved 2026-10-29):** `pack-build-context.sh` on 859ce2f99
+(2793 files, manifest md5 7860017a7aefc0964965bf798d2393ba, tarball md5
+100afaf323da040ccf058abd5100d402) + `bash build-gateway.sh` under nohup.
+Code diff from the live build source 14c98d6ab is exactly these two commits.
+Image `vantyr/new-api:vt-859ce2f99-20261029-0401`, sha256:a2ec092f31a1;
+BuildCommit stamp ok; ping_event_mode 1, cache_ttl_inject 2,
+mediaItemCacheControl 1, chat completions trace 1, no_untried_channel 1,
+affinity_fallback_tier 1, client_content_sent 1; notice string 2 (0 in vt-27d,
+as a control). No 503 overload during the build (load peaked ~2.4).
+Swap 04:11:19 UTC (compose backup `compose-pre-vt859ce2f99-20261029-041119.yaml`,
+`up -d gateway`), healthy at 04:12:00. Cost: three 502s on `/v1/messages`
+within ~2 s of the swap; relay 200s right after. `/`, `/wallet`, `/pricing`,
+`/docs/`, `/api/status` 200; served bundle `index.25ae4a77ec.js` carries the
+notice. Rollback: point compose at `vantyr/new-api:vt-27d-20261028-0132`
+(d276eabb6839) and `docker compose up -d gateway`.
+
+**AGPL:** public `main` → 859ce2f99, tag `deploy/2026-10-29-crypto-notice`
+(origin + public); archive `static/source/vantyr-source-2026-10-29-crypto-notice.tar.gz`
+(sha256 2e54f7e9…db34ec8, serves 200, hash matches), `source-notice.txt`
+rewritten for this image (the old one still said the repo was private; it is
+public), Footer option → new tag + archive (backup
+`footer-pre-vt859ce2f99-20261029T041518Z.txt`), live in `/api/status` after the
+60-s options sync.
