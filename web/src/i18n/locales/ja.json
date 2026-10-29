@@ -7107,6 +7107,7 @@
     "${{price}}/1M in": "${{price}}/1M in",
     "A6: not currently eligible": "A6: not currently eligible",
     "Pinned merchant keys kept disabled. Verify a merchant, then use it to swap the active pin. A failed verification benches it for the cooldown.": "Pinned merchant keys kept disabled. Verify a merchant, then use it to swap the active pin. A failed verification benches it for the cooldown.",
-    "Passes re-check but stays quarantined — click \"Verify this merchant\" to release it (a passing check lifts the quarantine).": "Passes re-check but stays quarantined — click \"Verify this merchant\" to release it (a passing check lifts the quarantine)."
+    "Passes re-check but stays quarantined — click \"Verify this merchant\" to release it (a passing check lifts the quarantine).": "Passes re-check but stays quarantined — click \"Verify this merchant\" to release it (a passing check lifts the quarantine).",
+    "On the payment page, send the exact amount shown, after exchange fees, before the timer runs out.": "支払いページに表示された正確な金額を、取引所の手数料差し引き後の着金額で、タイマー終了前に送金してください。"
   }
 }

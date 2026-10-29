@@ -76,6 +76,16 @@ export function isStripePayment(paymentType: string): boolean {
 }
 
 /**
+ * Check if payment method is an on-chain crypto rail (GM Pay or BEpusdt)
+ */
+export function isCryptoPayment(paymentType: string | undefined): boolean {
+  return (
+    paymentType === PAYMENT_TYPES.ALIPAY ||
+    paymentType === PAYMENT_TYPES.BEPUSDT
+  )
+}
+
+/**
  * Check if payment method is Waffo
  */
 export function isWaffoPayment(paymentType: string): boolean {

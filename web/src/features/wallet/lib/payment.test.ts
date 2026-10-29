@@ -21,6 +21,7 @@ import { describe, expect, test } from 'vitest'
 import { PAYMENT_TYPES } from '../constants'
 import {
   dispatchSelectedPayment,
+  isCryptoPayment,
   isStripePayment,
   isWaffoPayment,
   isWaffoPancakePayment,
@@ -33,6 +34,14 @@ describe('payment type classification', () => {
     expect(isWaffoPancakePayment(PAYMENT_TYPES.WAFFO_PANCAKE)).toBe(true)
     expect(isWaffoPancakePayment(PAYMENT_TYPES.WAFFO)).toBe(false)
     expect(isStripePayment(PAYMENT_TYPES.STRIPE)).toBe(true)
+  })
+
+  test('treats only the GM Pay and BEpusdt rails as crypto', () => {
+    expect(isCryptoPayment(PAYMENT_TYPES.ALIPAY)).toBe(true)
+    expect(isCryptoPayment(PAYMENT_TYPES.BEPUSDT)).toBe(true)
+    expect(isCryptoPayment(PAYMENT_TYPES.STRIPE)).toBe(false)
+    expect(isCryptoPayment(PAYMENT_TYPES.WAFFO)).toBe(false)
+    expect(isCryptoPayment(undefined)).toBe(false)
   })
 })
 

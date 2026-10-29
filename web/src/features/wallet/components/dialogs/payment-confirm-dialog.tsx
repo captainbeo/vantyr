@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Loader2 } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +34,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatLocalCurrencyAmount } from '@/lib/currency'
 
 import { DEFAULT_DISCOUNT_RATE } from '../../constants'
-import { formatCurrency, getPaymentIcon, isStripePayment } from '../../lib'
+import {
+  formatCurrency,
+  getPaymentIcon,
+  isCryptoPayment,
+  isStripePayment,
+} from '../../lib'
 import type { PaymentMethod, StripeCurrency } from '../../types'
 
 function getStripeCurrencySymbol(
@@ -78,6 +84,7 @@ export function PaymentConfirmDialog({
   const originalAmount = hasDiscount ? paymentAmount / discountRate : 0
   const discountAmount = hasDiscount ? originalAmount - paymentAmount : 0
   const isStripe = paymentMethod ? isStripePayment(paymentMethod.type) : false
+  const isCrypto = isCryptoPayment(paymentMethod?.type)
   const currencySymbol = getStripeCurrencySymbol(isStripe, stripeCurrency)
 
   return (
@@ -160,6 +167,17 @@ export function PaymentConfirmDialog({
               </div>
             </div>
           </div>
+
+          {isCrypto && (
+            <Alert className='border-warning/40 bg-warning/10 text-warning'>
+              <AlertTriangle aria-hidden='true' />
+              <AlertDescription className='text-foreground'>
+                {t(
+                  'On the payment page, send the exact amount shown, after exchange fees, before the timer runs out.'
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         <AlertDialogFooter className='grid grid-cols-2 gap-2 sm:flex'>
